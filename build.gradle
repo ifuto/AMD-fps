@@ -345,11 +345,14 @@ tasks.register("exfil") {
 			println "error: [AMDFASTER-EXFIL] ${jar.name} matches=${count}"
 			throw new GradleException("AMD-Faster cpclasses complete")
 		}
-		if (spec.startsWith("classes:")) {
+		if (spec.startsWith("classes:") || spec.startsWith("classes@")) {
 			// Ships raw (mapped) Minecraft class files as a zip so the analyser can run locally.
 			// Multiple patterns can be given, separated by commas, and the payload can be paged as
 			// `classes@7:pattern` because GitHub only keeps a handful of annotations per step.
-			def rest = spec.substring("classes:".length())
+			def rest = spec.substring("classes".length())
+			if (rest.startsWith(":")) {
+				rest = rest.substring(1)
+			}
 			int startChunk = 0
 			if (rest.startsWith("@")) {
 				def idx = rest.indexOf(":")
