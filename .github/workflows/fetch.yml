@@ -1,0 +1,194 @@
+# ============================================================
+#  Fetch.yml
+#  fetch-web.md に記載された URL の中身を取得し、
+#  GitHub リポジトリへ自動コミットする。
+#  ファイルサイズが閾値を超える場合は自動分割する。
+# ============================================================
+name: Fetch Web Content
+
+# ────────────────────────────────────────────
+# トリガー: fetch-web.md が push されたとき
+# ────────────────────────────────────────────
+on:
+  push:
+    paths:
+      - "fetch-web.md"
+
+# ────────────────────────────────────────────
+# 環境変数（必要に応じて調整）
+# ────────────────────────────────────────────
+env:
+  OUTPUT_DIR: fetched_content          # 出力ディレクトリ
+  MAX_FILE_SIZE: 50                    # 分割閾値 (MB)
+  CURL_TIMEOUT: 300                    # ダウンロードタイムアウト (秒)
+  CURL_RETRIES: 3                      # リトライ回数
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+
+    # リポジトリへの書き込み権限
+    permissions:
+      contents: write
+
+    steps:
+      # ================================================
+      # 1. チェックアウト
+      # ================================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ================================================
+      # 2. URL を抽出してダウンロード & 分割
+      # ================================================
+      - name: Extract URLs / Download / Split
+        id: fetch
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$OUTPUT_DIR"
+
+          # ---------- URL 抽出 ----------
+          # Markdown 中の http:// または https:// で始まる URL をすべて抽出
+          mapfile -t URLS < <(
+            grep -oP 'https?://[^\s\)\]>",]+' fetch-web.md || true
+          )
+
+          if [ "${#URLS[@]}" -eq 0 ]; then
+            echo "::warning::fetch-web.md に URL が見つかりませんでした。"
+            echo "fetched=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "📋 検出された URL 数: ${#URLS[@]}"
+
+          THRESHOLD=$(( MAX_FILE_SIZE * 1024 * 1024 ))   # MB → bytes
+          FAILED=()
+          SUCCESS=0
+
+          for url in "${URLS[@]}"; do
+            echo ""
+            echo "============================================"
+            echo "⬇  ${url}"
+            echo "============================================"
+
+            # ---------- ファイル名の生成 ----------
+            # URL からスキームを除去し、記号をアンダースコアに変換
+            safe_name=$(
+              echo "$url" \
+              | sed 's|https\?://||' \
+              | sed 's|[/:?&=#%]|_|g' \
+              | cut -c1-200
+            )
+
+            # 拡張子を保持（もしあれば）
+            ext="${url##*.}"
+            ext=$(echo "$ext" | grep -oP '^[A-Za-z0-9]{1,10}$' || echo "")
+
+            dest="${OUTPUT_DIR}/${safe_name}"
+
+            # ---------- ダウンロード ----------
+            http_code=$(
+              curl -fSL \
+                   --max-time "$CURL_TIMEOUT" \
+                   --retry "$CURL_RETRIES" \
+                   --retry-delay 5 \
+                   -w "%{http_code}" \
+                   -o "$dest" \
+                   "$url" 2>/dev/null
+            ) || {
+              echo "::error::❌ ダウンロード失敗: ${url}"
+              FAILED+=("$url")
+              rm -f "$dest"
+              continue
+            }
+
+            echo "  HTTP ${http_code}"
+
+            if [ ! -f "$dest" ]; then
+              echo "::error::❌ ファイルが生成されませんでした: ${url}"
+              FAILED+=("$url")
+              continue
+            fi
+
+            file_size=$(stat -c%s "$dest")
+            echo "  サイズ: $(numfmt --to=iec "$file_size")"
+
+            # ---------- 分割処理 ----------
+            if [ "$file_size" -gt "$THRESHOLD" ]; then
+              echo "  ⚠  閾値 (${MAX_FILE_SIZE}MB) 超過 → 分割開始"
+
+              split_dir="${OUTPUT_DIR}/${safe_name}_parts"
+              mkdir -p "$split_dir"
+
+              split \
+                --bytes="${MAX_FILE_SIZE}m" \
+                --numeric-suffixes=1 \
+                --suffix-length=3 \
+                --additional-suffix=".part" \
+                "$dest" \
+                "${split_dir}/${safe_name}_"
+
+              rm -f "$dest"
+
+              echo "  📦 分割完了:"
+              ls -lh "$split_dir"
+
+              # 結合用スクリプトを生成
+              cat > "${split_dir}/README_MERGE.md" <<'MERGE_EOF'
+          # 結合方法
+          ## Linux / macOS
+          ```bash
+          cat *.part > merged_output
+          ```
+          ## Windows (PowerShell)
+          ```powershell
+          Get-Content *.part -Raw | Set-Content merged_output
+          ```
+          MERGE_EOF
+            fi
+
+            SUCCESS=$((SUCCESS + 1))
+          done
+
+          # ---------- 結果サマリ ----------
+          echo ""
+          echo "============================================"
+          echo "✅ 成功: ${SUCCESS}  /  ❌ 失敗: ${#FAILED[@]}"
+          echo "============================================"
+
+          # 失敗ログ書き出し
+          if [ "${#FAILED[@]}" -gt 0 ]; then
+            printf '%s\n' "${FAILED[@]}" > "${OUTPUT_DIR}/_failed_urls.log"
+            echo "失敗 URL を ${OUTPUT_DIR}/_failed_urls.log に記録しました。"
+          fi
+
+          if [ "$SUCCESS" -gt 0 ]; then
+            echo "fetched=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "fetched=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ================================================
+      # 3. 取得したファイルをコミット & プッシュ
+      # ================================================
+      - name: Commit & Push fetched content
+        if: steps.fetch.outputs.fetched == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add "${OUTPUT_DIR}/"
+
+          if git diff --cached --quiet; then
+            echo "変更なし — コミットをスキップします。"
+            exit 0
+          fi
+
+          TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
+
+          git commit -m "📥 Fetched web content — ${TIMESTAMP}" \
+                     -m "[skip ci] Auto-fetched from fetch-web.md"
+          git push
