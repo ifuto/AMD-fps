@@ -20,6 +20,7 @@
 | 08 | [`08_jvm_lwjgl_fabric.md`](08_jvm_lwjgl_fabric.md) | **JVM/LWJGL/Fabric**。Java 21 では FFM が使えない、Sodium の `Unsafe.copyMemory` と ASM 実行時生成、LWJGL 版本、GC ルール | GitHub clone（実ソース）＋ JEP 確認 |
 | 09 | [`09_research_papers_forums.md`](09_research_papers_forums.md) | **海外論文・フォーラム調査**。Aokana（GPU 駆動ボクセル）、Ubisoft GPU-driven pipeline、two-pass occlusion culling、meshlet 研究3本、RE Engine 実測、voxel エンジン実務、GPU ソート、JVM/GC。各項に AMD-Faster への適用つき | arXiv / ACM / JCGT / CGF / REAC / 個人技術記事 |
 | 10 | [`10_primary_source_verifications.md`](10_primary_source_verifications.md) | **一次ソース再検証**。`fetched_content/` に落ちた RDNA Performance Guide 全文と突き合わせ、**自分のメモの誤り1件（workgroup size）を訂正**し、HOST_VISIBLE 書き込み制約など実装直結の事実を追加 | `fetched_content/`（fetch.yml が取得） |
+| 11 | [`11_stage2_meshing.md`](11_stage2_meshing.md) | **Stage 2 実装記録**。`net.amdfaster.mesh` の設計と確定数値（meshlet 62 quad / 8bit index / 4 バイト packed AABB / 6 バケット分割）、**CI が捕まえた実バグ 2 件**（axis に ordinal を入れていた、巻き順テーブルの行入替）、そしてテストで判明した「頂点 dedup は効かない」事実 | 実装＋ CI |
 
 ## 2. 最重要の発見（3つだけ挙げるなら）
 
@@ -76,10 +77,20 @@
 - **独立レンダラ方式**（VulkanMod 方式。Sodium に依存しない。Sodium は PolyForm Shield なので
   ソースの派生は不可 — `07` §7.1）。
 
-実装は **Stage 1（計測基盤）が完了**。`net.amdfaster.platform.GpuReport` が起動時に
-`VkInstance` を作ってアダプタを列挙し、`AmdArchitecture`/`GpuIdentity` が世代を判定、
-`/amdfaster` と `config/amdfaster/gpu-report.json` で報告する。CI（`./gradlew build`）が
-コンパイルと単体テスト（分類表・UMA/ReBAR 閾値・レポート整形）を検証している。
+実装は **Stage 1（計測基盤）と Stage 2（セクションメッシング）が完了**。
+
+- **Stage 1**: `net.amdfaster.platform.GpuReport` が起動時に `VkInstance` を作ってアダプタを列挙し、
+  `AmdArchitecture`/`GpuIdentity` が世代を判定、`/amdfaster` と
+  `config/amdfaster/gpu-report.json` で報告する。
+- **Stage 2**: `net.amdfaster.mesh` がセクションを **6 朝向バケット × meshlet（62 quad / 124 三角形 /
+  8bit ローカルインデックス / 4 バイト packed AABB）** に分割する。詳細は `11`。
+
+CI（`./gradlew build`）が `compileJava` → `test` → `verifyJar` を回す。
+`verifyJar` は「テストが 10 件以上走って全通過」「jar にエントリポイント・probe クラス・アイコンが
+入っている」「`fabric.mod.json` の version が project version と一致」「`lwjgl-vulkan` が
+jar-in-jar されている」を **assert** し、1 つでも外せばビルドを落とす
+（レポートを print しても CI ワークフローが stdout をファイルにリダイレクトしていて見えないため）。
+**意図的に壊して失敗が annotation として届くことも確認済み**。
 
 残りの未取得資料: **RDNA3/4 ISA 参照ガイド**（`docs.amd.com` のサインイン要求）、
 **GCN Performance Guide**。ただし **RDNA Performance Guide 全文は

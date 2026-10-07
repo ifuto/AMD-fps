@@ -34,27 +34,43 @@ nice-to-have but the only sensible one.
 
 ## What is in the mod today
 
+**Measurement** (`net.amdfaster.platform`)
+
 * `GpuReport` — creates a throw-away `VkInstance`, enumerates every adapter, reads properties,
   limits, memory heaps/types, driver identity and the extension list, then destroys the instance.
 * `AmdArchitecture` / `GpuIdentity` — maps what the driver says (`AMD Radeon RX 7900 XTX (RADV
   NAVI31)`, `AMD Radeon(TM) RX 6800 XT`, `gfx1103`, …) onto a generation, and records *which*
   token matched so a wrong guess is always explainable. An unrecognised part is a supported
-  outcome: the driver-reported numbers still drive everything.
+  outcome: the driver-reported numbers still drive everything. Also carries the tuning constants
+  quoted from AMD's RDNA Performance Guide: 64-thread work-groups, 32 LDS banks, a 13-DWORD
+  root-signature budget, 10 draws minimum per command buffer, D32 + reversed-Z.
 * `/amdfaster` — `summary`, `report`, `extensions`, `json`.
 * `config/amdfaster/gpu-report.json` — the same data as a file, written at startup.
 
+**Section meshing** (`net.amdfaster.mesh`)
+
+* `Orientation` — six axis-aligned buckets. `visibleMask()` decides which of them a camera can
+  possibly see, so a section the camera is not inside draws 3 of 6: roughly half the triangles
+  never reach the vertex stage, with no second pass and no per-triangle test.
+* `Meshlet` / `MeshletBuilder` — clusters of 62 quads (124 triangles) with 8-bit local indices and
+  a 4-byte packed AABB, the unit the GPU will cull. Index data is a triangle list rather than a
+  strip, because closing strips needs a primitive restart index and AMD's guide says to avoid
+  those.
+* `SectionMesh` / `SectionMeshBuilder` — one 16³ section, split into the six buckets while it is
+  meshed. Splitting an already-built mesh would multiply driver overhead six-fold.
+
+Nothing is drawn by this mod yet; Minecraft still renders through its own pipeline.
+
 ## Roadmap
 
-1. **Measurement** ← this is here.
-2. **Vulkan bring-up** — instance, device, swapchain, render graph; the renderer takes over.
-3. **GPU-driven culling** — two-pass occlusion culling against the previous frame's Hi-Z, with the
+1. **Measurement** — done.
+2. **Section meshing** — done, CPU side.
+3. **Greedy mesher** — block states to quads. This is where Minecraft's `BlockRenderManager` and
+   `ChunkSection` come in.
+4. **Vulkan bring-up** — instance, device, swapchain, render graph; the renderer takes over.
+5. **GPU-driven culling** — two-pass occlusion culling against the previous frame's Hi-Z, with the
    visible set living in a GPU buffer so the CPU never rebuilds it. Culling dispatches 16
    sections per wave, not one.
-4. **Meshlet chunk meshes** — sections split into ≤64-vertex / ≤124-triangle clusters carrying
-   3 bytes of culling data (sphere radius, backface cone) each. Minecraft's axis-aligned faces make
-   the cone test near-exact, so backface rejection is nearly free.
-5. **Six orientation buckets** — chunk geometry split by face direction and masked by camera
-   orientation, which removes roughly half the triangles without a second pass.
 6. **Transparent sorting on the GPU** — radix sort with on-chip local sort. Not bitonic: bitonic
    is O(n log²n), needs a power of two, and scatters to global memory.
 7. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
@@ -75,7 +91,11 @@ renderer.
 ./gradlew build
 ```
 
-The jar lands in `build/libs/`. CI runs the same command on every push.
+The jar lands in `build/libs/`. CI runs the same command on every push and then `verifyJar`
+asserts the result: that the tests ran and passed, that the jar holds the entrypoint and the probe
+classes, that `fabric.mod.json`'s version matches the project version, and that `lwjgl-vulkan` is
+actually jar-in-jar'd (Minecraft ships lwjgl, lwjgl-glfw and lwjgl-opengl but not the Vulkan
+bindings).
 
 ## Design notes
 
