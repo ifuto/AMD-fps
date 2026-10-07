@@ -25,7 +25,7 @@ buildscript {
 		mavenCentral()
 	}
 	dependencies {
-		classpath "net.fabricmc:fabric-loom:${project.loom_version}"
+		classpath "net.fabricmc:fabric-loom:${gradle.ext.has('amdFasterLoomVersion') ? gradle.ext.amdFasterLoomVersion : project.loom_version}"
 	}
 }
 
@@ -46,7 +46,7 @@ for (String pluginId : ['fabric-loom', 'net.fabricmc.fabric-loom-remap']) {
 }
 
 if (!loomApplied) {
-	throw new GradleException("AMD-Faster needs fabric-loom ${project.loom_version} to build against Minecraft; see the diagnostics above")
+	throw new GradleException("AMD-Faster needs fabric-loom ${gradle.ext.has('amdFasterLoomVersion') ? gradle.ext.amdFasterLoomVersion : project.loom_version} to build against Minecraft; see the diagnostics above")
 }
 
 version = project.version

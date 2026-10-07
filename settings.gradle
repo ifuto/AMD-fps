@@ -10,3 +10,99 @@ pluginManagement {
 }
 
 rootProject.name = 'amd-faster'
+
+// ---------------------------------------------------------------------------
+// Loom version selection.
+//
+// Loom releases declare the minimum JVM they run on through Gradle module
+// metadata (org.gradle.jvm.version). Recent Loom versions require a Java 25
+// runtime to execute the plugin itself, while Minecraft 1.21.11 and this project
+// target Java 21. Rather than pinning a version that breaks on whichever JDK the
+// build happens to run on, the newest Loom release that still runs on the current
+// JVM is selected here.
+//
+// Set loom_version in gradle.properties to a concrete version to opt out.
+// ---------------------------------------------------------------------------
+def requestedLoom = "auto"
+try {
+	File props = new File(rootDir, "gradle.properties")
+	if (props.exists()) {
+		props.eachLine { line ->
+			def matcher = line =~ /^\s*loom_version\s*=\s*(\S+)\s*$/
+			if (matcher.matches()) {
+				requestedLoom = matcher.group(1)
+			}
+		}
+	}
+} catch (Throwable ignored) {
+}
+
+def currentJvm = 21
+try {
+	currentJvm = Integer.parseInt(System.getProperty("java.specification.version", "21").split("\\.")[0])
+} catch (Throwable ignored) {
+}
+
+def selectedLoom = null
+def selectionReason = ""
+
+if (requestedLoom != null && requestedLoom != "auto" && !requestedLoom.isBlank()) {
+	selectedLoom = requestedLoom
+	selectionReason = "pinned in gradle.properties"
+} else {
+	try {
+		def metadata = new URL("https://maven.fabricmc.net/net/fabricmc/fabric-loom/maven-metadata.xml")
+				.getText(connectTimeout: 10000, readTimeout: 20000)
+		def versions = (metadata =~ /<version>([^<]+)<\/version>/).collect { it[1] }
+				.findAll { !it.contains("-alpha") && !it.contains("-beta") && !it.contains("SNAPSHOT") }
+		def byNumber = versions.sort { a, b ->
+			def pa = a.tokenize(".").collect { it.replaceAll(/[^0-9].*/, "").isEmpty() ? 0 : it.replaceAll(/[^0-9].*/, "").toInteger() }
+			def pb = b.tokenize(".").collect { it.replaceAll(/[^0-9].*/, "").isEmpty() ? 0 : it.replaceAll(/[^0-9].*/, "").toInteger() }
+			int cmp = 0
+			for (int i = 0; i < Math.max(pa.size(), pb.size()); i++) {
+				cmp = (i < pa.size() ? pa[i] : 0) <=> (i < pb.size() ? pb[i] : 0)
+				if (cmp != 0) break
+			}
+			cmp
+		}.reverse()
+
+		int attempts = 0
+		for (String candidate : byNumber) {
+			if (attempts++ > 15) {
+				break
+			}
+			// Mojang-mappings/1.21.x support starts at the 1.14 line.
+			def parts = candidate.tokenize(".")
+			int minor = parts.length > 1 ? parts[1].replaceAll(/[^0-9].*/, "").toInteger() : 0
+			if (minor < 14) {
+				continue
+			}
+			try {
+				def module = new URL("https://maven.fabricmc.net/net/fabricmc/fabric-loom/${candidate}/fabric-loom-${candidate}.module")
+						.getText(connectTimeout: 10000, readTimeout: 20000)
+				def jvmMatch = (module =~ /"org\.gradle\.jvm\.version"\s*:\s*(\d+)/)
+				int requiredJvm = jvmMatch.find() ? jvmMatch.group(1).toInteger() : 21
+				if (requiredJvm <= currentJvm) {
+					selectedLoom = candidate
+					selectionReason = "newest release that runs on Java ${currentJvm} (declares JVM ${requiredJvm})"
+					break
+				}
+			} catch (Throwable ignored) {
+				// try the next candidate
+			}
+		}
+		if (selectedLoom == null) {
+			println "error: [AMD-FASTER] no fabric-loom release found for Java ${currentJvm}; candidates were: ${byNumber.take(10)}"
+		}
+	} catch (Throwable t) {
+		println "error: [AMD-FASTER] fabric-loom version discovery failed: ${t.message}"
+	}
+	if (selectedLoom == null) {
+		selectedLoom = "1.14"
+		selectionReason = "fallback (discovery unavailable)"
+	}
+}
+
+gradle.ext.amdFasterLoomVersion = selectedLoom
+gradle.ext.amdFasterLoomReason = selectionReason
+println "AMD-Faster: using fabric-loom ${selectedLoom} (${selectionReason})"
