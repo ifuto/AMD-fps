@@ -288,6 +288,32 @@ tasks.register("exfil") {
 			println "error: [AMDFASTER-EXFIL] compileClasspath entries=${names.size()} shown=${shown}"
 			throw new GradleException("AMD-Faster classpath probe complete")
 		}
+		if (spec.startsWith("cpclasses:")) {
+			// Lists entries of a jar on the compile classpath: `cpclasses:lwjgl-opengl:GL`
+			def rest = spec.substring("cpclasses:".length())
+			def idx = rest.indexOf(":")
+			def jarFilter = idx < 0 ? rest : rest.substring(0, idx)
+			def entryFilter = idx < 0 ? "" : rest.substring(idx + 1)
+			def jar = project.configurations.getByName("compileClasspath").files
+					.find { it.name.toLowerCase().contains(jarFilter.toLowerCase()) }
+			if (jar == null) {
+				println "error: [AMDFASTER-EXFIL] no classpath jar matching '${jarFilter}'"
+				throw new GradleException("exfil: jar not found")
+			}
+			int count = 0
+			new java.util.zip.ZipFile(jar).withCloseable { zip ->
+				zip.entries().findAll { !it.directory && it.name.endsWith(".class") }
+						.findAll { entryFilter.isEmpty() || it.name.contains(entryFilter) }
+						.sort { it.name }.each {
+					if (count < 14) {
+						println "error: [AMDFASTER-EXFIL] ${jar.name} :: ${it.name}"
+					}
+					count++
+				}
+			}
+			println "error: [AMDFASTER-EXFIL] ${jar.name} matches=${count}"
+			throw new GradleException("AMD-Faster cpclasses complete")
+		}
 		if (spec.startsWith("classes:")) {
 			// Ships raw (mapped) Minecraft class files as a zip so the analyser can run locally.
 			def pattern = spec.substring("classes:".length())
