@@ -21,6 +21,7 @@ import org.lwjgl.vulkan.VkQueueFamilyProperties;
 
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
+import java.nio.LongBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -156,9 +157,11 @@ public final class VkContext implements AutoCloseable {
             long surface = 0L;
             VkDevice device = null;
             try {
-                PointerBuffer pSurface = stack.mallocPointer(1);
-                // GLFWVulkan is outside the dispatchable-handle family, so it wants the raw
-                // instance handle rather than the VkInstance wrapper.
+                // GLFWVulkan is outside the dispatchable-handle family: it wants the raw instance
+                // handle rather than the VkInstance wrapper, and a LongBuffer for the surface out
+                // parameter rather than a PointerBuffer. lwjgl3's own sample keeps a long for the
+                // instance and a LongBuffer for the surface for the same reason.
+                LongBuffer pSurface = stack.mallocLong(1);
                 if (glfwCreateWindowSurface(instance.address(), glfwWindow, null, pSurface) != VK_SUCCESS) {
                     return failed("glfwCreateWindowSurface failed");
                 }

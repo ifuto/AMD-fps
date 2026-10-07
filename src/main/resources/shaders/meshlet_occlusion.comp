@@ -1,0 +1,137 @@
+// Second pass of the two-pass occlusion cull: retest the meshlets the first pass kept against the
+// previous frame's hierarchical depth buffer.
+//
+// The first pass redraws everything visible last frame and builds the Hi-Z pyramid on the way.
+// This pass then rejects whatever is behind it, which is the large majority of a typical scene.
+// Doing it in two passes is what keeps the first pass cheap: it only ever draws what was visible
+// before, so its cost tracks the visible set rather than the whole world.
+//
+// Depth is reversed-Z, so "closer" is a larger value. A meshlet is occluded when its nearest
+// depth is still farther than the pyramid's maximum over the pixels it covers.
+
+#version 450
+
+layout(local_size_x = 64) in;
+
+layout(std140, binding = 0) uniform Frame {
+    mat4  viewProjection;
+    vec4  frustumPlanes[6];
+    vec4  cameraOrigin;
+    uint  meshletCount;
+    uint  hizWidth;
+    uint  hizHeight;
+    uint  _pad0;
+};
+
+layout(std430, binding = 1) readonly buffer MeshletData {
+    uvec4 meshlets[];
+};
+
+layout(std430, binding = 2) buffer DrawCommands {
+    uint draws[];
+};
+
+layout(std430, binding = 3) buffer Counters {
+    uint visibleCount;    // in: count from the frustum pass, out: count after occlusion
+    uint testedCount;
+};
+
+layout(binding = 4) uniform texture2D hiZDepth;
+
+layout(push_constant) uniform Push {
+    uint baseMeshlet;
+    uint flags;
+};
+
+// The coarsest level whose texels are at least as large as the box. Sampling anything finer means
+// a gather over pixels the pyramid has already reduced, which is both slower and no more correct.
+int selectLevel(vec2 boxPixels) {
+    float longest = max(boxPixels.x, boxPixels.y);
+    if (longest <= 1.0) {
+        return 0;
+    }
+    int level = int(ceil(log2(longest)));
+    int smallest = int(min(hizWidth, hizHeight));
+    int maxLevel = 0;
+    while (smallest > 1) {
+        smallest >>= 1;
+        ++maxLevel;
+    }
+    return min(level, maxLevel);
+}
+
+// Projects the eight corners and takes the hull. Not the tightest bound, but cheap and
+// conservative. Returns false when any corner lands behind the camera, in which case the caller
+// must treat the meshlet as visible: culling on a degenerate projection is how geometry
+// disappears while the player is looking straight at it.
+bool projectToPixels(vec3 boxMin, vec3 boxMax, out vec4 pixels) {
+    vec2 lo = vec2(1e30);
+    vec2 hi = vec2(-1e30);
+    for (int corner = 0; corner < 8; ++corner) {
+        vec3 p = mix(boxMin, boxMax, notEqual(bvec3(corner & 1, corner & 2, corner & 4), bvec3(false)));
+        vec4 clip = viewProjection * vec4(p, 1.0);
+        if (clip.w <= 0.0) {
+            return false;
+        }
+        vec2 ndc = clip.xy / clip.w;
+        // Vulkan's framebuffer has Y growing downwards; NDC has it growing upwards.
+        vec2 pixel = vec2((ndc.x * 0.5 + 0.5) * float(hizWidth),
+                          (0.5 - ndc.y * 0.5) * float(hizHeight));
+        lo = min(lo, pixel);
+        hi = max(hi, pixel);
+    }
+    pixels = vec4(lo, hi);
+    return true;
+}
+
+void main() {
+    // This pass walks the *compacted* array the frustum pass produced, not the meshlet list: the
+    // draw command at slot s carries its meshlet index in firstIndex, which is what recovers the
+    // bounds. Walking the original list here would test meshlets that are already gone.
+    uint slot = baseMeshlet + gl_GlobalInvocationID.x;
+    if (slot >= visibleCount) {
+        return;
+    }
+
+    uint base = slot * 5u;
+    uint index = draws[base + 2u] / 372u;
+    uvec4 record = meshlets[index];
+    vec3 origin = vec3(record.yzw) - cameraOrigin.xyz;
+    vec3 boxMin = origin + vec3(float(record.x & 0x1Fu),
+                                float((record.x >> 5u) & 0x1Fu),
+                                float((record.x >> 10u) & 0x1Fu));
+    vec3 boxMax = origin + vec3(float((record.x >> 15u) & 0x1Fu),
+                                float((record.x >> 20u) & 0x1Fu),
+                                float((record.x >> 25u) & 0x1Fu));
+
+    vec4 pixels;
+    if (!projectToPixels(boxMin, boxMax, pixels)) {
+        return;   // keep it
+    }
+    if (pixels.z <= 0.0 || pixels.x >= float(hizWidth)
+            || pixels.w <= 0.0 || pixels.y >= float(hizHeight)) {
+        return;   // fully off screen; the frustum pass should have caught this, but be safe
+    }
+
+    int level = selectLevel(pixels.zw - pixels.xy);
+    // The pyramid is a max-reduction, so one fetch at the right level answers the question.
+    ivec2 texel = ivec2((pixels.xy + pixels.zw) * 0.5) >> level;
+    ivec2 limit = textureSize(hiZDepth, level) - ivec2(1);
+    float pyramidMax = texelFetch(hiZDepth, clamp(texel, ivec2(0), limit), level).r;
+
+    // Nearest depth of the box in reversed-Z is its largest clip z over clip w.
+    float nearest = 0.0;
+    for (int corner = 0; corner < 8; ++corner) {
+        vec3 p = mix(boxMin, boxMax,
+                     notEqual(bvec3(corner & 1, corner & 2, corner & 4), bvec3(false)));
+        vec4 clip = viewProjection * vec4(p, 1.0);
+        nearest = max(nearest, clip.z / clip.w);
+    }
+
+    if (nearest < pyramidMax) {
+        // Even the closest point is behind the pyramid's farthest: fully occluded. Zeroing the
+        // instance count drops the draw without a second compaction pass.
+        draws[base + 1u] = 0u;
+        atomicAdd(testedCount, 1u);
+    }
+}
