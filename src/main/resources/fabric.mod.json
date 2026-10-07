@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "amdfaster",
+  "version": "${version}",
+  "name": "AMD-Faster",
+  "description": "An AMD-first, Vulkan-based rendering backend for Minecraft. Measures the attached GPU at startup and schedules everything — wave size, work-group granularity, LDS budget, meshlet culling — against what the hardware actually reports instead of assuming it.",
+  "authors": [
+    "ifuto"
+  ],
+  "contact": {
+    "homepage": "https://github.com/ifuto/AMD-fps",
+    "sources": "https://github.com/ifuto/AMD-fps",
+    "issues": "https://github.com/ifuto/AMD-fps/issues"
+  },
+  "license": "LGPL-3.0-only",
+  "icon": "assets/amdfaster/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "net.amdfaster.AmdFasterClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "fabric-api": "*",
+    "minecraft": "1.21.11",
+    "java": ">=21"
+  }
+}

@@ -1,0 +1,57 @@
+plugins {
+    id 'fabric-loom' version '1.16.1'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    // Fabric API is a *runtime* requirement declared in fabric.mod.json, not a
+    // jar-in-jar. The Modrinth app resolves it automatically, so AMD-Faster stays
+    // a single-file download while never shipping a half-assembled Fabric API.
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    // Minecraft ships lwjgl / lwjgl-glfw / lwjgl-opengl but NOT lwjgl-vulkan,
+    // so the Vulkan bindings have to be bundled with the mod.
+    include(implementation("org.lwjgl:lwjgl-vulkan:${project.lwjgl_version}"))
+}
+
+processResources {
+    def modVersion = project.version
+
+    inputs.property "version", modVersion
+
+    filesMatching("fabric.mod.json") {
+        expand "version": modVersion
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 21
+    it.options.encoding = "UTF-8"
+}
+
+java {
+    withSourcesJar()
+
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
