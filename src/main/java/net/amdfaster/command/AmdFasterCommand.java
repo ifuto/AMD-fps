@@ -7,9 +7,11 @@ import net.amdfaster.platform.AmdArchitecture;
 import net.amdfaster.platform.GpuIdentity;
 import net.amdfaster.platform.GpuInfo;
 import net.amdfaster.platform.GpuReport;
+import net.amdfaster.vk.VkContext;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.client.Minecraft;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -33,7 +35,8 @@ public final class AmdFasterCommand {
                     .then(Commands.literal("summary").executes(ctx -> summary(ctx.getSource())))
                     .then(Commands.literal("report").executes(ctx -> report(ctx.getSource())))
                     .then(Commands.literal("extensions").executes(ctx -> extensions(ctx.getSource())))
-                    .then(Commands.literal("json").executes(ctx -> jsonPath(ctx.getSource())));
+                    .then(Commands.literal("json").executes(ctx -> jsonPath(ctx.getSource())))
+                    .then(Commands.literal("vk").executes(ctx -> vkProbe(ctx.getSource())));
 
             dispatcher.register(root);
         });
@@ -149,6 +152,29 @@ public final class AmdFasterCommand {
         send(source, text("Written to ", ChatFormatting.GRAY)
                 .append(text(path.toString(), ChatFormatting.AQUA)));
         return 1;
+    }
+
+    /**
+     * Creates a real {@code VkDevice} against Minecraft's window, prints what the decision layer
+     * chose, and tears it down again.
+     *
+     * <p>A probe, like the Stage 1 report: the renderer is not live yet, and two APIs presenting to
+     * one window is undefined behaviour, so the context must not outlive this call. What it proves
+     * is that an instance, a device and three queues can be created on this machine and that the
+     * adapter, queue-family and memory-type decisions land where they should.
+     */
+    private static int vkProbe(CommandSourceStack source) {
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        VkContext context = VkContext.create(window);
+        try {
+            ChatFormatting colour = context.isAvailable() ? ChatFormatting.GREEN : ChatFormatting.RED;
+            for (String line : context.describe().split("\\n")) {
+                send(source, text(line, colour));
+            }
+            return context.isAvailable() ? 1 : 0;
+        } finally {
+            context.close();
+        }
     }
 
     // ---------------------------------------------------------------------------------------
