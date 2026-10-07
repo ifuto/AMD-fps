@@ -157,12 +157,12 @@ public final class VkContext implements AutoCloseable {
             long surface = 0L;
             VkDevice device = null;
             try {
-                // GLFWVulkan is outside the dispatchable-handle family: it wants the raw instance
-                // handle rather than the VkInstance wrapper, and a LongBuffer for the surface out
-                // parameter rather than a PointerBuffer. lwjgl3's own sample keeps a long for the
-                // instance and a LongBuffer for the surface for the same reason.
+                // Signature per lwjgl3's generated source, modules/lwjgl/glfw/.../GLFWVulkan.java:
+                // the instance is the VkInstance wrapper, and the surface out parameter is a
+                // LongBuffer. Both halves of this were guessed wrong before, and the only compiler
+                // available is CI, so it is now written down rather than remembered.
                 LongBuffer pSurface = stack.mallocLong(1);
-                if (glfwCreateWindowSurface(instance.address(), glfwWindow, null, pSurface) != VK_SUCCESS) {
+                if (glfwCreateWindowSurface(instance, glfwWindow, null, pSurface) != VK_SUCCESS) {
                     return failed("glfwCreateWindowSurface failed");
                 }
                 surface = pSurface.get(0);

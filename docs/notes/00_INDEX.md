@@ -21,6 +21,7 @@
 | 09 | [`09_research_papers_forums.md`](09_research_papers_forums.md) | **海外論文・フォーラム調査**。Aokana（GPU 駆動ボクセル）、Ubisoft GPU-driven pipeline、two-pass occlusion culling、meshlet 研究3本、RE Engine 実測、voxel エンジン実務、GPU ソート、JVM/GC。各項に AMD-Faster への適用つき | arXiv / ACM / JCGT / CGF / REAC / 個人技術記事 |
 | 10 | [`10_primary_source_verifications.md`](10_primary_source_verifications.md) | **一次ソース再検証**。`fetched_content/` に落ちた RDNA Performance Guide 全文と突き合わせ、**自分のメモの誤り1件（workgroup size）を訂正**し、HOST_VISIBLE 書き込み制約など実装直結の事実を追加 | `fetched_content/`（fetch.yml が取得） |
 | 11 | [`11_stage2_meshing.md`](11_stage2_meshing.md) | **Stage 2 実装記録**。`net.amdfaster.mesh` の設計と確定数値（meshlet 62 quad / 8bit index / 4 バイト packed AABB / 6 バケット分割）、**CI が捕まえた実バグ 2 件**（axis に ordinal を入れていた、巻き順テーブルの行入替）、そしてテストで判明した「頂点 dedup は効かない」事実 | 実装＋ CI |
+| 12 | [`12_stage4_5_vk_and_culling.md`](12_stage4_5_vk_and_culling.md) | **Stage 4–5 実装記録**。Vulkan の「判断」を LWJGL 型なしに分離した理由、テストが直した実装バグ 2 件（large BAR カードでメッシュが 256 MiB の不可視ヒープに行く、ReBAR 判定がシステム RAM を数えて false になる）、LWJGL の呼び出し形で CI に落ちた 3 件、**root signature 13 DWORD 予算がシェーダ設計を変えた話**、2 パスカリング、そしてシェーダと Java のバインディング整合テスト | 実装＋ CI |
 
 ## 2. 最重要の発見（3つだけ挙げるなら）
 
@@ -84,6 +85,10 @@
   `config/amdfaster/gpu-report.json` で報告する。
 - **Stage 2**: `net.amdfaster.mesh` がセクションを **6 朝向バケット × meshlet（62 quad / 124 三角形 /
   8bit ローカルインデックス / 4 バイト packed AABB）** に分割する。詳細は `11`。
+- **Stage 4–5**: `net.amdfaster.vk` が Vulkan の**判断**を LWJGL 型なしで持つ（メモリタイプ、
+  キューファミリ、アダプタ選択、root signature 予算、per-frame リング）ので、GPU なしで
+  4 種の実在トポロジをテストできる。`VkContext` は呼ぶだけ。カリングは 2 パス
+  （frustum で詰める → 前フレーム Hi-Z で落とす）。詳細は `12`。
 - **Stage 3**: `net.amdfaster.mesh.voxel` の greedy mesher。`VoxelView` 抽象（Minecraft 型を含まない
   ので単体テスト可能）→ 矩形結合 → `Quad`。**16³ の中身が詰まったセクションが 1536 面 → 6 quad になる**
   ことをテストで固定。詳細は `11` §7。
