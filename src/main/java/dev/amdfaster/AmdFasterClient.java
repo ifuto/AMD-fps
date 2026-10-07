@@ -1,31 +1,33 @@
 package dev.amdfaster;
 
+import dev.amdfaster.client.GlDeviceProbe;
+import dev.amdfaster.core.TuningSession;
+import dev.amdfaster.core.backend.ActiveFeatures;
+import dev.amdfaster.core.plan.AmdTuner;
+import dev.amdfaster.core.plan.TuningPlan;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+
 /**
  * Client entry point.
  *
- * <p>AMD-Faster is a client-side renderer mod: it has no server component, registers no blocks or
- * items, and never touches world data. Everything it does happens between the CPU and the GPU.
- *
- * <p>Startup order matters and is deliberate:
- * <ol>
- *   <li>Load the config (cheap, no graphics).</li>
- *   <li>Wait for the GL/Vulkan device to exist, then probe capabilities and identify the GPU
- *       ({@code dev.amdfaster.core.arch} and {@code dev.amdfaster.core.backend}).</li>
- *   <li>Build the {@link dev.amdfaster.core.plan.TuningPlan} from the identification and the
- *       capabilities - pure data, unit testable, no rendering side effects.</li>
- *   <li>Hand the plan to the renderer modules, which decide at runtime what they can actually
- *       engage and report it back as {@link dev.amdfaster.core.backend.ActiveFeatures}.</li>
- * </ol>
+ * <p>The device has to exist before anything can be tuned, and Fabric's initialisers run before the
+ * window is created, so the probe is deferred to {@code CLIENT_STARTED}: by then the render device
+ * and its capabilities are real. Everything the probe learns goes into a {@link TuningSession},
+ * which is the single source of truth the rendering code reads later.</p>
  */
 public class AmdFasterClient implements ClientModInitializer {
 
     public static final String MOD_ID = "amdfaster";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+
+    private static final AtomicReference<TuningSession> SESSION = new AtomicReference<>();
 
     @Override
     public void onInitializeClient() {
@@ -34,6 +36,41 @@ public class AmdFasterClient implements ClientModInitializer {
                 .map(container -> container.getMetadata().getVersion().getFriendlyString())
                 .orElse("unknown");
         LOGGER.info("AMD-Faster {} starting (client side, Minecraft 1.21.11)", version);
-        LOGGER.info("AMD-Faster: GPU detection and tuning plan are built after the render device is created");
+
+        ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
+            try {
+                Optional<GlDeviceProbe.Result> probed = GlDeviceProbe.probe();
+                if (probed.isEmpty()) {
+                    LOGGER.warn("AMD-Faster: no OpenGL context on this thread; device tuning is skipped "
+                            + "and the vanilla renderer stays active");
+                    return;
+                }
+                tune(probed.get().identity(), probed.get().capabilities());
+            } catch (Throwable failure) {
+                // A tuning mod that prevents the game from starting is worse than no tuning mod.
+                LOGGER.error("AMD-Faster: device probe failed, staying vanilla", failure);
+            }
+        });
+
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
+            TuningSession session = SESSION.get();
+            if (session != null) {
+                LOGGER.info("AMD-Faster: session ended ({})", session.plan().summary());
+            }
+        });
+    }
+
+    private static void tune(dev.amdfaster.core.arch.GpuIdentity identity,
+                             dev.amdfaster.core.backend.GpuCapabilities capabilities) {
+        TuningPlan plan = AmdTuner.plan(identity, capabilities, AmdTuner.Options.defaults());
+        TuningSession session = new TuningSession(identity, capabilities, plan, ActiveFeatures.inactive());
+        SESSION.set(session);
+        LOGGER.info("AMD-Faster: {}", plan.summary());
+        LOGGER.info("AMD-Faster session report:\n{}", session.report());
+    }
+
+    /** The session built at startup, or {@code null} before the render device exists. */
+    public static TuningSession session() {
+        return SESSION.get();
     }
 }
