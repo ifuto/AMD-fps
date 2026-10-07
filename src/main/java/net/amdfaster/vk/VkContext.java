@@ -500,6 +500,11 @@ public final class VkContext implements AutoCloseable {
         return this.enabledExtensions;
     }
 
+    /** Every memory type the chosen adapter exposes, for callers that need the driver's mask. */
+    public List<MemoryTypeSelector.MemoryType> memoryTypes() {
+        return this.memoryTypes;
+    }
+
     public MemoryTypeSelector.Selection memoryTypeFor(MemoryTypeSelector.Usage usage) {
         return MemoryTypeSelector.select(this.memoryTypes, usage);
     }
