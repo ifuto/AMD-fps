@@ -21,6 +21,13 @@ import java.util.List;
  */
 public final class SurfacePreferences {
 
+    // Mirrors VkFormat, so this class stays testable without a device.
+    public static final int VK_FORMAT_B8G8R8A8_SRGB = 50;
+    public static final int VK_FORMAT_R8G8B8A8_SRGB = 43;
+    public static final int VK_FORMAT_B8G8R8A8_UNORM = 44;
+    public static final int VK_FORMAT_R8G8B8A8_UNORM = 37;
+    public static final int VK_FORMAT_A2B10G10R10_UNORM_PACK32 = 64;
+
     /** Swapchain image formats in preference order; the colour space is assumed sRGB-nonlinear. */
     public static final List<Integer> PREFERRED_FORMATS = List.of(
             VK_FORMAT_B8G8R8A8_SRGB,
@@ -28,13 +35,6 @@ public final class SurfacePreferences {
             VK_FORMAT_B8G8R8A8_UNORM,
             VK_FORMAT_R8G8B8A8_UNORM,
             VK_FORMAT_A2B10G10R10_UNORM_PACK32);
-
-    // Mirrors VkFormat, so this class stays testable without a device.
-    public static final int VK_FORMAT_B8G8R8A8_SRGB = 50;
-    public static final int VK_FORMAT_R8G8B8A8_SRGB = 43;
-    public static final int VK_FORMAT_B8G8R8A8_UNORM = 44;
-    public static final int VK_FORMAT_R8G8B8A8_UNORM = 37;
-    public static final int VK_FORMAT_A2B10G10R10_UNORM_PACK32 = 64;
 
     // Mirrors VkPresentModeKHR.
     public static final int PRESENT_MODE_IMMEDIATE = 0;
