@@ -354,6 +354,9 @@ tasks.register("exfil") {
 					"https://github.com/llvm/llvm-project/releases",
 					"https://raw.githubusercontent.com/FabricMC/fabric-example-mod/refs/heads/1.21.11/gradle.properties",
 					"https://cdn.jsdelivr.net/gh/FabricMC/fabric-example-mod@1.21.11/gradle.properties",
+					"https://repo1.maven.org/maven2/org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3.pom",
+					"https://maven.fabricmc.net/net/fabricmc/fabric-loom/maven-metadata.xml",
+					"https://api.adoptium.net/v3/info/available_releases",
 			]
 			urls.each { u ->
 				def line
