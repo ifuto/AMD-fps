@@ -347,7 +347,9 @@ tasks.register("exfil") {
 		}
 		if (spec.startsWith("classes:")) {
 			// Ships raw (mapped) Minecraft class files as a zip so the analyser can run locally.
-			def pattern = spec.substring("classes:".length())
+			// Multiple patterns can be given, separated by commas.
+			def patterns = spec.substring("classes:".length()).split(",").collect { it.trim() }
+					.findAll { !it.isEmpty() }
 			def jar = amdFasterFindJar("**/*.jar", false)
 			if (jar == null) {
 				println "error: [AMDFASTER-EXFIL] no mapped Minecraft jar in the loom cache"
@@ -358,7 +360,8 @@ tasks.register("exfil") {
 			new java.util.zip.ZipOutputStream(out).withCloseable { zip ->
 				new java.util.zip.ZipFile(jar).withCloseable { source ->
 					def entries = source.entries().findAll { !it.directory && it.name.endsWith(".class") }
-							.findAll { pattern.isEmpty() || it.name.contains(pattern) }
+							.findAll { entry -> patterns.isEmpty()
+									|| patterns.any { entry.name.contains(it) } }
 							.sort { it.name }
 					entries.each { entry ->
 						zip.putNextEntry(new java.util.zip.ZipEntry(entry.name))
@@ -368,7 +371,7 @@ tasks.register("exfil") {
 					}
 				}
 			}
-			println "error: [AMDFASTER-EXFIL] jar=${jar.name} pattern='${pattern}' classes=${n}"
+			println "error: [AMDFASTER-EXFIL] jar=${jar.name} patterns=${patterns} classes=${n}"
 			amdFasterEmit(Base64.encoder.encodeToString(out.toByteArray()), 0)
 			throw new GradleException("AMD-Faster exfil classes: ${n}")
 		}
