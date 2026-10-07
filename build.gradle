@@ -276,6 +276,19 @@ tasks.register("exfil") {
 	}
 
 	doLast {
+		if (spec.startsWith("classpath")) {
+			def names = project.configurations.getByName("compileClasspath").files.collect { it.name }.sort()
+			int shown = 0
+			names.each { n ->
+				if (shown < 12 && (n.toLowerCase().contains("lwjgl") || n.toLowerCase().contains("minecraft")
+						|| n.toLowerCase().contains("fabric") || n.toLowerCase().contains("joml"))) {
+					println "error: [AMDFASTER-EXFIL] cp ${n}"
+					shown++
+				}
+			}
+			println "error: [AMDFASTER-EXFIL] compileClasspath entries=${names.size()} shown=${shown}"
+			throw new GradleException("AMD-Faster classpath probe complete")
+		}
 		if (spec.startsWith("classes:")) {
 			// Ships raw (mapped) Minecraft class files as a zip so the analyser can run locally.
 			def pattern = spec.substring("classes:".length())
@@ -429,7 +442,8 @@ tasks.register("exfil") {
 // The CI log scraper keeps only the first matching lines, so when exfil is active it has to run
 // before anything else writes to the log.
 tasks.matching { it.name == "compileJava" }.configureEach {
-	if (spec != "none") {
+	// `spec` above is local to the task registration closure, so read the property again here.
+	if ((project.findProperty("exfil")?.toString() ?: "none") != "none") {
 		dependsOn "exfil"
 	}
 }
