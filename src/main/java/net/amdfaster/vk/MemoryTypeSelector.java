@@ -102,6 +102,35 @@ public final class MemoryTypeSelector {
     }
 
     /**
+     * The same choice, restricted to the types a specific buffer is allowed to use.
+     *
+     * <p>{@code VkMemoryRequirements.memoryTypeBits} can rule out the type the usage would
+     * otherwise pick -- a buffer created with a flag the ideal heap does not support, or an
+     * allocation the driver wants in a particular heap. Binding to a type outside that mask is a
+     * validation error and, on some drivers, a hang, so the mask wins and the reason says what was
+     * given up.
+     */
+    public static Selection selectForBits(List<MemoryType> types, Usage usage, int memoryTypeBits) {
+        List<MemoryType> allowed = new ArrayList<>();
+        for (MemoryType t : types) {
+            if ((memoryTypeBits & (1 << t.index())) != 0) {
+                allowed.add(t);
+            }
+        }
+        if (allowed.isEmpty()) {
+            throw new IllegalStateException("memoryTypeBits 0x" + Integer.toHexString(memoryTypeBits)
+                    + " allows none of the " + types.size() + " types");
+        }
+        try {
+            return select(allowed, usage);
+        } catch (IllegalStateException e) {
+            throw new IllegalStateException(e.getMessage() + "; memoryTypeBits 0x"
+                    + Integer.toHexString(memoryTypeBits) + " allowed types "
+                    + allowed.stream().map(t -> String.valueOf(t.index())).toList(), e);
+        }
+    }
+
+    /**
      * True when one heap is both device-local and host-visible and holds most of the device's
      * memory -- the signature of an APU, or of a discrete card with Resizable BAR / Smart Access
      * Memory enabled. Both get the copy-free path, which is the whole reason the APU target exists.
