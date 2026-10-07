@@ -73,6 +73,35 @@ dependencies {
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
+	// LWJGL's Vulkan bindings. Minecraft ships LWJGL itself but only the OpenGL/GLFW/OpenAL
+	// modules, so AMD-Faster bundles the Vulkan ones as nested jars - the same approach every
+	// Vulkan-based Minecraft mod has to take. The version is pinned to the one Minecraft 1.21.11
+	// uses so that there is exactly one LWJGL in the process.
+	//
+	//   lwjgl-vulkan  bindings only; the platform's Vulkan loader (vulkan-1.dll / libvulkan.so)
+	//                 is used at runtime, which is the driver the user already has.
+	//   lwjgl-vma     Vulkan Memory Allocator; born at AMD, which is why the heap flags it exposes
+	//                 (DEVICE_LOCAL | HOST_VISIBLE for BAR heaps) are the vocabulary this mod uses.
+	def lwjglVersion = project.lwjgl_version
+	def nativesClassifiers = [
+			"natives-windows", "natives-windows-arm64", "natives-linux",
+			"natives-macos", "natives-macos-arm64"]
+	include(implementation("org.lwjgl:lwjgl-vulkan:${lwjglVersion}"))
+	include(implementation("org.lwjgl:lwjgl-vma:${lwjglVersion}"))
+	nativesClassifiers.each { classifier ->
+		include(runtimeOnly("org.lwjgl:lwjgl-vma:${lwjglVersion}:${classifier}"))
+	}
+	if (project.findProperty("includeShaderCompiler")?.toString() == "true") {
+		// GLSL/HLSL -> SPIR-V at build time is offline; the shader compiler is only needed to
+		// compile shaders generated at runtime, so it stays optional to keep the jar small.
+		include(implementation("org.lwjgl:lwjgl-shaderc:${lwjglVersion}"))
+		include(implementation("org.lwjgl:lwjgl-spvc:${lwjglVersion}"))
+		nativesClassifiers.each { classifier ->
+			include(runtimeOnly("org.lwjgl:lwjgl-shaderc:${lwjglVersion}:${classifier}"))
+			include(runtimeOnly("org.lwjgl:lwjgl-spvc:${lwjglVersion}:${classifier}"))
+		}
+	}
+
 	// Pure-Java unit tests for the backend-agnostic AMD tuning core
 	// (dev.amdfaster.core.*), which never touches Minecraft classes.
 	testImplementation "org.junit.jupiter:junit-jupiter:${project.junit_version}"
