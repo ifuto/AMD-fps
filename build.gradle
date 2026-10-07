@@ -271,11 +271,38 @@ tasks.register("exfil") {
 
 	def spec = project.findProperty("exfil")?.toString() ?: "none"
 	onlyIf { spec != "none" }
-	if (spec.startsWith("sources") || spec.startsWith("list")) {
+	if (spec.startsWith("sources")) {
 		dependsOn "genSources"
 	}
 
 	doLast {
+		if (spec.startsWith("classes:")) {
+			// Ships raw (mapped) Minecraft class files as a zip so the analyser can run locally.
+			def pattern = spec.substring("classes:".length())
+			def jar = amdFasterFindJar("**/*.jar", false)
+			if (jar == null) {
+				println "error: [AMDFASTER-EXFIL] no mapped Minecraft jar in the loom cache"
+				throw new GradleException("exfil: mapped jar missing")
+			}
+			def out = new java.io.ByteArrayOutputStream()
+			int n = 0
+			new java.util.zip.ZipOutputStream(out).withCloseable { zip ->
+				new java.util.zip.ZipFile(jar).withCloseable { source ->
+					def entries = source.entries().findAll { !it.directory && it.name.endsWith(".class") }
+							.findAll { pattern.isEmpty() || it.name.contains(pattern) }
+							.sort { it.name }
+					entries.each { entry ->
+						zip.putNextEntry(new java.util.zip.ZipEntry(entry.name))
+						zip.write(source.getInputStream(entry).bytes)
+						zip.closeEntry()
+						n++
+					}
+				}
+			}
+			println "error: [AMDFASTER-EXFIL] jar=${jar.name} pattern='${pattern}' classes=${n}"
+			amdFasterEmit(Base64.encoder.encodeToString(out.toByteArray()), 0)
+			throw new GradleException("AMD-Faster exfil classes: ${n}")
+		}
 		if (spec.startsWith("probe")) {
 			// Reports which hosts/dependencies the build environment can reach. Used to plan
 			// optional features (bundled AMD toolchain, LWJGL Vulkan modules) reliably.
@@ -452,22 +479,49 @@ gradle.buildFinished { result ->
 			return
 		}
 		def failure = result.failure
-		println "Gradle build failed: ${failure.getClass().name}"
+		// Configuration problems (Loom/buildscript/task validation) carry their detail in a
+		// dedicated `problems` collection, not in the cause chain - print those first because
+		// the CI log scraper only keeps the first lines.
+		def visited = new HashSet()
+		def queue = [failure]
+		int lines = 0
+		while (!queue.isEmpty() && lines < 24) {
+			def current = queue.remove(0)
+			if (current == null || !visited.add(current)) {
+				continue
+			}
+			try {
+				def problems = current.hasProperty("problems") ? current.problems : null
+				if (problems != null && !problems.isEmpty()) {
+					problems.each { problem ->
+						if (lines++ < 24) {
+							println "error: PROBLEM " + (problem.message ?: problem.toString()).replace('\n', ' | ')
+						}
+					}
+				}
+			} catch (Throwable ignored) {
+			}
+			queue.add(current.cause)
+			if (current instanceof org.gradle.api.GradleException || current.class.name.startsWith("org.gradle.")) {
+				queue.addAll(current.suppressed as List)
+			}
+		}
+		println "error: FAILURE ${failure.getClass().name}: " + (failure.message ?: "").replace('\n', ' | ')
 		def throwable = failure
 		int depth = 0
-		while (throwable != null && depth < 6) {
+		while (throwable != null && depth < 6 && lines < 30) {
 			String message = throwable.message ?: (throwable.class.simpleName)
 			message = message.replace('\t', ' ').replace('\r', ' ')
 			for (String part : message.split('\n')) {
 				String trimmed = part.trim()
-				if (!trimmed.isEmpty()) {
+				if (!trimmed.isEmpty() && lines++ < 30) {
 					println ((depth == 0 ? "error: " : "Caused by: ") + trimmed)
 				}
 			}
 			throwable = throwable.cause
 			depth++
 		}
-	} catch (Throwable ignored) {
+		} catch (Throwable ignored) {
 		// never let diagnostics hide the real failure
 	}
 }
