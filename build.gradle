@@ -1,6 +1,52 @@
-plugins {
-	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
-	id 'maven-publish'
+// ---------------------------------------------------------------------------
+// AMD-Faster build
+//
+// Notes for anyone reading this build script:
+//
+//  * Minecraft 1.21.11 is the last *obfuscated* Minecraft release, so this project
+//    follows Fabric's migration guidance and uses Mojang's official mappings. Yarn
+//    and Intermediary stop being updated after this version
+//    (https://fabricmc.net/2025/12/05/12111.html).
+//
+//  * Loom is applied through the legacy buildscript/apply form rather than the
+//    `plugins {}` block on purpose: it lets the build report *why* Loom could not
+//    be applied (JVM version requirements, maven unreachable, ...) instead of dying
+//    with an opaque resolution error. Loom 1.18 requires a Java 25 runtime; the
+//    project targets the Java 21 toolchain, so the pinned version here is the one
+//    Fabric recommends for 1.21.11.
+// ---------------------------------------------------------------------------
+
+buildscript {
+	repositories {
+		maven {
+			name = 'Fabric'
+			url = 'https://maven.fabricmc.net/'
+		}
+		mavenCentral()
+	}
+	dependencies {
+		classpath "net.fabricmc:fabric-loom:${project.loom_version}"
+	}
+}
+
+apply plugin: 'java'
+apply plugin: 'maven-publish'
+
+def loomApplied = false
+for (String pluginId : ['fabric-loom', 'net.fabricmc.fabric-loom-remap']) {
+	if (loomApplied) {
+		break
+	}
+	try {
+		apply plugin: pluginId
+		loomApplied = true
+	} catch (Throwable t) {
+		println "error: [AMD-FASTER] applying loom plugin '${pluginId}' failed: ${t.message}"
+	}
+}
+
+if (!loomApplied) {
+	throw new GradleException("AMD-Faster needs fabric-loom ${project.loom_version} to build against Minecraft; see the diagnostics above")
 }
 
 version = project.version
@@ -16,17 +62,19 @@ repositories {
 }
 
 dependencies {
-	// Minecraft 1.21.11 - the last obfuscated Minecraft release, developed with
-	// Mojang's official mappings (Yarn/Intermediary stop being updated past this
-	// version, see https://fabricmc.net/2025/12/05/12111.html).
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings loom.officialMojangMappings()
+	try {
+		minecraft "com.mojang:minecraft:${project.minecraft_version}"
+		mappings loom.officialMojangMappings()
+	} catch (Throwable t) {
+		println "error: [AMD-FASTER] minecraft/mappings setup failed: ${t.message}"
+		throw t
+	}
 
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
 	// Pure-Java unit tests for the backend-agnostic AMD tuning core
-	// (dev.amdfaster.core.*) which never touches Minecraft classes.
+	// (dev.amdfaster.core.*), which never touches Minecraft classes.
 	testImplementation "org.junit.jupiter:junit-jupiter:${project.junit_version}"
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }
@@ -43,8 +91,6 @@ processResources {
 tasks.withType(JavaCompile).configureEach {
 	it.options.release = 21
 	it.options.encoding = "UTF-8"
-	// Emit a machine readable list of mixin targets for the tuning core.
-	it.options.compilerArgs += ["-Xlint:all,-serial,-processing"]
 }
 
 test {
@@ -207,8 +253,7 @@ gradle.buildFinished { result ->
 			return
 		}
 		def failure = result.failure
-		def lines = []
-		lines << "Gradle build failed: ${failure.getClass().name}"
+		println "Gradle build failed: ${failure.getClass().name}"
 		def throwable = failure
 		int depth = 0
 		while (throwable != null && depth < 6) {
@@ -217,13 +262,12 @@ gradle.buildFinished { result ->
 			for (String part : message.split('\n')) {
 				String trimmed = part.trim()
 				if (!trimmed.isEmpty()) {
-					lines << ((depth == 0 ? "error: " : "Caused by: ") + trimmed)
+					println ((depth == 0 ? "error: " : "Caused by: ") + trimmed)
 				}
 			}
 			throwable = throwable.cause
 			depth++
 		}
-		lines.each { println it }
 	} catch (Throwable ignored) {
 		// never let diagnostics hide the real failure
 	}
