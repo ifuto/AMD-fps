@@ -121,7 +121,7 @@ public final class AmdTuner {
         if (mesh) {
             plan.reason("task/mesh shader terrain enabled (VK_EXT_mesh_shader on " + arch.gfxIp()
                     + "): meshlet culling happens in the task shader");
-        } else if (caps.vkAvailable && caps.vkMeshShader() && arch.supportsMeshShader()) {
+        } else if (caps.vkAvailable() && caps.vkMeshShader() && arch.supportsMeshShader()) {
             plan.reason("mesh shaders are available but disabled in config; the indirect path is used instead");
         }
 
