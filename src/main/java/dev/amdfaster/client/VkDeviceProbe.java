@@ -20,6 +20,7 @@ import static org.lwjgl.vulkan.EXTMeshShader.VK_EXT_MESH_SHADER_EXTENSION_NAME;
 import static org.lwjgl.vulkan.EXTSubgroupSizeControl.VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME;
 import static org.lwjgl.vulkan.KHRDrawIndirectCount.VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME;
 import static org.lwjgl.vulkan.KHRDynamicRendering.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME;
+import static org.lwjgl.vulkan.KHRSynchronization2.VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME;
 import static org.lwjgl.vulkan.KHRTimelineSemaphore.VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME;
 import static org.lwjgl.vulkan.VK10.VK_API_VERSION_MAJOR;
 import static org.lwjgl.vulkan.VK10.VK_API_VERSION_MINOR;
@@ -71,12 +72,13 @@ public final class VkDeviceProbe {
      * @param drawIndirectCount       {@code VK_KHR_draw_indirect_count}
      * @param subgroupSizeControl     {@code VK_EXT_subgroup_size_control}
      * @param timelineSemaphore       {@code VK_KHR_timeline_semaphore}
+     * @param synchronization2        {@code VK_KHR_synchronization2}
      */
     public record Facts(String deviceName, int deviceId, String driverVersion, int apiVersionMajor,
                         int apiVersionMinor, boolean integrated, int dedicatedVideoMemoryMiB,
                         int hostVisibleDeviceMiB, boolean meshShader, boolean descriptorIndexing,
                         boolean dynamicRendering, boolean drawIndirectCount, boolean subgroupSizeControl,
-                        boolean timelineSemaphore) {
+                        boolean timelineSemaphore, boolean synchronization2) {
     }
 
     /** Surveys the physical devices and returns the first AMD one. */
@@ -181,7 +183,8 @@ public final class VkDeviceProbe {
                     extensions.contains(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME),
                     extensions.contains(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME),
                     extensions.contains(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME),
-                    extensions.contains(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME)));
+                    extensions.contains(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME),
+                    extensions.contains(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)));
         }
         return Optional.empty();
     }

@@ -37,13 +37,18 @@ public final class GlDeviceProbe {
     }
 
     /**
-     * Probes the current OpenGL context.
+     * Probes the current OpenGL context, enriched with whatever Vulkan reported.
      *
+     * <p>OpenGL is the authoritative source for the extensions the GL path can use; Vulkan is the
+     * authoritative source for the PCI identity and the real memory sizes. Whichever is available
+     * contributes its half, and neither is required.</p>
+     *
+     * @param vkFacts what {@link VkDeviceProbe} learned, or an empty optional when Vulkan is absent
      * @return the device description, or empty when there is no current context on this thread
      *         (Minecraft creates and owns its context, and in recent versions it may live on a
      *         different thread)
      */
-    public static Optional<Result> probe() {
+    public static Optional<Result> probe(Optional<VkDeviceProbe.Facts> vkFacts) {
         GLCapabilities caps;
         try {
             // LWJGL 3 exposes the capabilities of the *current* context through GL; there is no
@@ -68,13 +73,26 @@ public final class GlDeviceProbe {
                 + versionString, false, onWindows);
         GpuVendor vendor = GpuVendor.classify(vendorString, rendererString, -1);
 
-        AmdGpuIdentifier.Match match = AmdGpuIdentifier.classifyAmd(rendererString, -1);
-        int vramMiB = probeVideoMemoryMiB(caps);
+        // Vulkan knows the PCI identity even for the driver names OpenGL reports as a bare
+        // "AMD Radeon(TM) Graphics", so it takes precedence when present.
+        VkDeviceProbe.Facts vk = vkFacts.orElse(null);
+        String name = vk != null ? vk.deviceName() : rendererString;
+        int deviceId = vk != null ? vk.deviceId() : -1;
+        AmdGpuIdentifier.Match match = AmdGpuIdentifier.classifyAmd(name, deviceId);
+        int vramMiB = vk != null && vk.dedicatedVideoMemoryMiB() > 0
+                ? vk.dedicatedVideoMemoryMiB() : probeVideoMemoryMiB(caps);
+        int barMiB = vk != null && vk.hostVisibleDeviceMiB() > 0 ? vk.hostVisibleDeviceMiB() : -1;
+        boolean integrated = vk != null ? vk.integrated() : match.arch().isIntegrated();
 
-        GpuIdentity identity = new GpuIdentity(vendor, rendererString, match.arch(), match.confidence(),
-                -1, driver.label() + " / GL " + versionString, match.arch().isIntegrated(), vramMiB, -1);
+        String driverDescription = vk != null
+                ? driver.label() + " / GL " + versionString + " / Vulkan " + vk.apiVersionMajor() + '.'
+                        + vk.apiVersionMinor() + " driver " + vk.driverVersion()
+                : driver.label() + " / GL " + versionString;
 
-        GpuCapabilities capabilities = GpuCapabilities.builder(driver)
+        GpuIdentity identity = new GpuIdentity(vendor, name, match.arch(), match.confidence(),
+                deviceId, driverDescription, integrated, vramMiB, barMiB);
+
+        GpuCapabilities.Builder builder = GpuCapabilities.builder(driver)
                 .glBufferStorage(caps.GL_ARB_buffer_storage)
                 .glMultiDrawIndirect(caps.GL_ARB_multi_draw_indirect)
                 .glIndirectParameters(caps.GL_ARB_indirect_parameters)
@@ -85,11 +103,20 @@ public final class GlDeviceProbe {
                 .glAmdPinnedMemory(caps.GL_AMD_pinned_memory)
                 .glDirectStateAccess(caps.GL_ARB_direct_state_access)
                 .dedicatedVideoMemoryMiB(vramMiB)
+                .barSizeMiB(barMiB)
                 .systemRamMiB(systemMemoryMiB())
                 .apiVersion("OpenGL " + versionString)
-                .build();
+                .vkAvailable(vk != null);
+        if (vk != null) {
+            builder.vkMeshShader(vk.meshShader())
+                    .vkDescriptorIndexing(vk.descriptorIndexing())
+                    .vkDynamicRendering(vk.dynamicRendering())
+                    .vkDrawIndirectCount(vk.drawIndirectCount())
+                    .vkSubgroupSizeControl(vk.subgroupSizeControl())
+                    .vkSynchronization2(vk.synchronization2());
+        }
 
-        return Optional.of(new Result(identity, capabilities));
+        return Optional.of(new Result(identity, builder.build()));
     }
 
     private static String safeString(int name) {

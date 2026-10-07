@@ -1,6 +1,7 @@
 package dev.amdfaster;
 
 import dev.amdfaster.client.GlDeviceProbe;
+import dev.amdfaster.client.VkDeviceProbe;
 import dev.amdfaster.core.TuningSession;
 import dev.amdfaster.core.backend.ActiveFeatures;
 import dev.amdfaster.core.plan.AmdTuner;
@@ -39,7 +40,18 @@ public class AmdFasterClient implements ClientModInitializer {
 
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
             try {
-                Optional<GlDeviceProbe.Result> probed = GlDeviceProbe.probe();
+                // Vulkan first: it can answer "which PCI device is this" and "how much memory is
+                // visible" even when the OpenGL strings are generic. It creates and destroys an
+                // instance without ever creating a device, so it is safe to run next to Minecraft's
+                // own GL context.
+                Optional<VkDeviceProbe.Facts> vk = VkDeviceProbe.probe();
+                vk.ifPresent(facts -> LOGGER.info(
+                        "AMD-Faster: Vulkan device {} (id 0x{}, Vulkan {}.{}, driver {}, {} MiB device local, "
+                                + "{} MiB host visible)",
+                        facts.deviceName(), Integer.toHexString(facts.deviceId()), facts.apiVersionMajor(),
+                        facts.apiVersionMinor(), facts.driverVersion(), facts.dedicatedVideoMemoryMiB(),
+                        facts.hostVisibleDeviceMiB()));
+                Optional<GlDeviceProbe.Result> probed = GlDeviceProbe.probe(vk);
                 if (probed.isEmpty()) {
                     LOGGER.warn("AMD-Faster: no OpenGL context on this thread; device tuning is skipped "
                             + "and the vanilla renderer stays active");
