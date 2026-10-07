@@ -336,6 +336,8 @@ tasks.register("exfil") {
 			throw new GradleException("AMD-Faster probe complete")
 		}
 		if (spec.startsWith("list")) {
+			// Optional filter: `list:client/renderer` lists only the matching classes.
+			def listFilter = spec.contains(":") ? spec.substring(spec.indexOf(":") + 1) : ""
 			def listing = new StringBuilder()
 			int srcCount = 0
 			int classCount = 0
@@ -343,7 +345,9 @@ tasks.register("exfil") {
 			def mapJar = amdFasterFindJar("**/*.jar", false)
 			if (srcJar != null) {
 				new java.util.zip.ZipFile(srcJar).withCloseable { zip ->
-					zip.entries().findAll { it.name.endsWith(".java") }.sort { it.name }.each {
+					zip.entries().findAll { it.name.endsWith(".java") }
+							.findAll { listFilter.isEmpty() || it.name.contains(listFilter) }
+							.sort { it.name }.each {
 						listing.append("SRC ").append(it.name).append("\n")
 						srcCount++
 					}
@@ -351,8 +355,10 @@ tasks.register("exfil") {
 			}
 			if (mapJar != null) {
 				new java.util.zip.ZipFile(mapJar).withCloseable { zip ->
-					zip.entries().findAll { it.name.endsWith(".class") }.sort { it.name }.each {
-						listing.append("CLASS ").append(it.name).append("\n")
+					zip.entries().findAll { it.name.endsWith(".class") }
+							.findAll { listFilter.isEmpty() || it.name.contains(listFilter) }
+							.sort { it.name }.each {
+						listing.append(it.name).append("\n")
 						classCount++
 					}
 				}
@@ -417,6 +423,14 @@ tasks.register("exfil") {
 		println "error: [AMDFASTER-EXFIL] pattern='${pattern}' files=${fileCount} from ${sourcesJar.name}"
 		amdFasterEmit(builder.toString(), startChunk)
 		throw new GradleException("AMD-Faster exfil: ${fileCount} file(s) emitted")
+	}
+}
+
+// The CI log scraper keeps only the first matching lines, so when exfil is active it has to run
+// before anything else writes to the log.
+tasks.matching { it.name == "compileJava" }.configureEach {
+	if (spec != "none") {
+		dependsOn "exfil"
 	}
 }
 
