@@ -11,13 +11,14 @@ import net.amdfaster.vk.VkContext;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.client.Minecraft;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
 import java.nio.file.Path;
 import java.util.List;
+
+import static org.lwjgl.glfw.GLFW.glfwGetCurrentContext;
 
 /**
  * {@code /amdfaster} — surfaces the startup probe in chat so it can be read without digging
@@ -164,7 +165,14 @@ public final class AmdFasterCommand {
      * adapter, queue-family and memory-type decisions land where they should.
      */
     private static int vkProbe(CommandSourceStack source) {
-        long window = Minecraft.getInstance().getWindow().getWindow();
+        // From GLFW rather than from Minecraft: glfwGetCurrentContext returns the window the
+        // render thread already has current, which is Minecraft's, and it keeps this file free of
+        // a version-specific mapping.
+        long window = glfwGetCurrentContext();
+        if (window == 0L) {
+            send(source, text("No GLFW window is current on this thread.", ChatFormatting.RED));
+            return 0;
+        }
         VkContext context = VkContext.create(window);
         try {
             ChatFormatting colour = context.isAvailable() ? ChatFormatting.GREEN : ChatFormatting.RED;

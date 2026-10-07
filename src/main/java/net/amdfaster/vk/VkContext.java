@@ -27,9 +27,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-import static org.lwjgl.glfw.GLFW.glfwCreateWindowSurface;
-import static org.lwjgl.glfw.GLFW.glfwGetRequiredInstanceExtensions;
+import static org.lwjgl.glfw.GLFWVulkan.glfwCreateWindowSurface;
+import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryStack.stackPush;
+import static org.lwjgl.system.MemoryUtil.memUTF8;
 import static org.lwjgl.vulkan.KHRSurface.VK_KHR_SURFACE_EXTENSION_NAME;
 import static org.lwjgl.vulkan.KHRSurface.vkDestroySurfaceKHR;
 import static org.lwjgl.vulkan.KHRSurface.vkGetPhysicalDeviceSurfaceSupportKHR;
@@ -145,7 +146,7 @@ public final class VkContext implements AutoCloseable {
             }
             List<String> wantedInstance = new ArrayList<>(instanceExtensions.capacity() + 1);
             for (int i = 0; i < instanceExtensions.capacity(); i++) {
-                wantedInstance.add(instanceExtensions.getString(i));
+                wantedInstance.add(memUTF8(instanceExtensions.get(i)));
             }
             if (!wantedInstance.contains(VK_KHR_SURFACE_EXTENSION_NAME)) {
                 wantedInstance.add(VK_KHR_SURFACE_EXTENSION_NAME);
@@ -405,9 +406,6 @@ public final class VkContext implements AutoCloseable {
         }
         if (available.shaderInt16()) {
             features.shaderInt16(true);
-        }
-        if (available.shaderInt8()) {
-            features.shaderInt8(true);
         }
         if (available.textureCompressionBC()) {
             features.textureCompressionBC(true);
