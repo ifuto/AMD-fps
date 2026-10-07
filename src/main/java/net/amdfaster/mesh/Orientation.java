@@ -14,49 +14,35 @@ package net.amdfaster.mesh;
  */
 public enum Orientation {
 
-    NEG_X(0, -1, 0, 0),
-    POS_X(0, 1, 0, 0),
-    NEG_Y(1, 0, -1, 0),
-    POS_Y(1, 0, 1, 0),
-    NEG_Z(2, 0, 0, -1),
-    POS_Z(2, 0, 0, 1);
+    // The two corner tables live in the constant declaration rather than in an ordinal-indexed
+    // array next to it: the first version of this file had the POS_Y and NEG_Y rows swapped, which
+    // silently reversed the winding of every Y-facing quad. Keeping the table on the same line as
+    // the constant makes that impossible to do by accident.
+    //
+    // cornerA/cornerB say which end (0 = min, 1 = max) of each varying axis each of the four
+    // vertices takes, in winding order. The varying axes are (Y,Z) for X-facing, (X,Z) for
+    // Y-facing and (X,Y) for Z-facing. The order is chosen so the geometric normal of the emitted
+    // polygon equals the declared normal, which WindingTest asserts for all six.
+    NEG_X(0, -1, 0, 0, new int[]{0, 0, 1, 1}, new int[]{0, 1, 1, 0}),
+    POS_X(0, 1, 0, 0, new int[]{1, 1, 0, 0}, new int[]{0, 1, 1, 0}),
+    NEG_Y(1, 0, -1, 0, new int[]{1, 1, 0, 0}, new int[]{0, 1, 1, 0}),
+    POS_Y(1, 0, 1, 0, new int[]{0, 0, 1, 1}, new int[]{0, 1, 1, 0}),
+    NEG_Z(2, 0, 0, -1, new int[]{0, 1, 1, 0}, new int[]{1, 1, 0, 0}),
+    POS_Z(2, 0, 0, 1, new int[]{0, 1, 1, 0}, new int[]{0, 0, 1, 1});
 
     public static final int COUNT = 6;
 
-    /**
-     * Which end of the first varying axis each of the four vertices takes, in winding order.
-     *
-     * <p>The varying axes per orientation are (Y,Z) for X-facing, (X,Z) for Y-facing and (X,Y) for
-     * Z-facing. The order is chosen so the geometric normal of the resulting polygon equals the
-     * declared normal, which {@code WindingTest} checks for all six.
-     */
-    private static final int[][] CORNER_A = {
-            {0, 0, 1, 1},  // NEG_X
-            {1, 1, 0, 0},  // POS_X
-            {0, 0, 1, 1},  // POS_Y
-            {1, 1, 0, 0},  // NEG_Y
-            {0, 1, 1, 0},  // NEG_Z
-            {0, 1, 1, 0},  // POS_Z
-    };
-
-    /** Which end of the second varying axis each of the four vertices takes, in winding order. */
-    private static final int[][] CORNER_B = {
-            {0, 1, 1, 0},  // NEG_X
-            {0, 1, 1, 0},  // POS_X
-            {0, 1, 1, 0},  // NEG_Y
-            {0, 1, 1, 0},  // POS_Y
-            {1, 1, 0, 0},  // NEG_Z
-            {0, 0, 1, 1},  // POS_Z
-    };
+    private final int[] cornerA;
+    private final int[] cornerB;
 
     /** 0 or 1: which end of the first varying axis vertex {@code i} uses. */
     public int cornerA(int i) {
-        return CORNER_A[this.ordinal()][i];
+        return this.cornerA[i];
     }
 
     /** 0 or 1: which end of the second varying axis vertex {@code i} uses. */
     public int cornerB(int i) {
-        return CORNER_B[this.ordinal()][i];
+        return this.cornerB[i];
     }
 
 
@@ -65,11 +51,13 @@ public enum Orientation {
     private final int ny;
     private final int nz;
 
-    Orientation(int axis, int nx, int ny, int nz) {
+    Orientation(int axis, int nx, int ny, int nz, int[] cornerA, int[] cornerB) {
         this.axis = axis;
         this.nx = nx;
         this.ny = ny;
         this.nz = nz;
+        this.cornerA = cornerA;
+        this.cornerB = cornerB;
     }
 
     /**
