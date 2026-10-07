@@ -204,53 +204,96 @@ tasks.named("build") {
 //
 // Restricted build environments cannot always reach the workflow log host or the
 // artifact host, but they can read check annotations. This task compresses the
-// decompiled Minecraft sources that match a pattern, Base64s them and prints them
-// as error lines - the CI workflow turns error lines into annotations - and then
-// fails on purpose so that the workflow actually forwards them.
+// requested information, Base64s it and prints it as error lines - the CI workflow
+// turns error lines into annotations - and then fails on purpose so that the
+// workflow forwards them.
 //
-//   ./gradlew build -Pexfil=sources:LevelRenderer      (or set exfil= in gradle.properties)
-//   ./gradlew build -Pexfil=sources@3:renderer/chunk   (start at chunk 3, for paging)
+//   -Pexfil=list                       list the mapped jar and decompiled sources
+//   -Pexfil=sources:LevelRenderer      source files matching a path fragment
+//   -Pexfil=sources@15:client/renderer start at chunk 15 (paging)
 //
 // Decode with .research/tools/exfil.py.
 // ---------------------------------------------------------------------------
+
+// Locate a jar inside the Loom cache. Declared as a closure *before* the tasks that
+// use it, because a script local defined later is not visible to an earlier closure.
+def amdFasterFindJar = { String includePat, boolean wantSources ->
+	def cache = new File(project.gradle.gradleUserHomeDir, "caches/fabric-loom")
+	if (!cache.exists()) {
+		return null
+	}
+	def candidates = fileTree(cache) { include includePat }.files.findAll { f ->
+		def n = f.name.toLowerCase()
+		if (wantSources) {
+			return n.contains("sources")
+		}
+		if (n.contains("sources") || n.contains("linemapped") || n.contains("natives")
+				|| n.contains("bundler") || n.contains("client-extra") || n.contains("server-extra")) {
+			return false
+		}
+		return n.contains("minecraft")
+	}
+	return candidates ? candidates.max { it.length() } : null
+}
+
+// Compresses text, Base64s it and prints it as CI-diagnostic error lines.
+def amdFasterEmit = { String text, int startChunk ->
+	int chunkSize = 12000
+	def compressed = new java.io.ByteArrayOutputStream()
+	new java.util.zip.GZIPOutputStream(compressed).withCloseable { it.write(text.getBytes("UTF-8")) }
+	def encoded = Base64.encoder.encodeToString(compressed.toByteArray())
+	int total = (encoded.length() + chunkSize - 1) / chunkSize
+	int last = Math.min(total, startChunk + 14)
+	for (int i = startChunk; i < last; i++) {
+		def chunk = encoded.substring(i * chunkSize, Math.min(encoded.length(), (i + 1) * chunkSize))
+		println "error: [AMDFASTER-EXFIL v1 ${i}/${total}] ${chunk}"
+	}
+	println "error: [AMDFASTER-EXFIL v1] chunks=${startChunk}..${last - 1} of ${total} textChars=${text.length()}"
+	return total
+}
+
 tasks.register("exfil") {
 	group = "amd-faster"
-	description = "Emits requested Minecraft sources through the CI diagnostics channel."
+	description = "Emits Minecraft API/source information through the CI diagnostics channel."
 
 	def spec = project.findProperty("exfil")?.toString() ?: "none"
-	onlyIf { spec != "none" && !spec.startsWith("none") }
+	onlyIf { spec != "none" }
 	if (spec.startsWith("sources")) {
 		dependsOn "genSources"
 	}
 
 	doLast {
-		if (!spec.startsWith("sources") && !spec.startsWith("list")) {
-			println "error: [AMDFASTER-EXFIL] unsupported exfil spec '${spec}'"
-			throw new GradleException("exfil: unsupported spec")
-		}
 		if (spec.startsWith("list")) {
-			// Emit the full listing of the decompiled sources jar: the cheapest way to
-			// learn the exact package/class layout of a Minecraft version.
-			def cacheDir = new File(gradle.gradleUserHomeDir, "caches/fabric-loom")
-			def srcJar = fileTree(cacheDir) { include "**/*sources*.jar" }.files.max { it.length() }
-			def mapJar = fileTree(cacheDir) { include "**/*.jar"; exclude "**/*sources*.jar"; exclude "**/*-linemapped*" }
-					.files.findAll { it.name.toLowerCase().contains("minecraft") }.max { it.length() }
 			def listing = new StringBuilder()
+			int srcCount = 0
+			int classCount = 0
+			def srcJar = amdFasterFindJar("**/*.jar", true)
+			def mapJar = amdFasterFindJar("**/*.jar", false)
 			if (srcJar != null) {
 				new java.util.zip.ZipFile(srcJar).withCloseable { zip ->
-					zip.entries().findAll { it.name.endsWith(".java") }.sort { it.name }
-							.each { listing.append("SRC ").append(it.name).append("\n") }
+					zip.entries().findAll { it.name.endsWith(".java") }.sort { it.name }.each {
+						listing.append("SRC ").append(it.name).append("\n")
+						srcCount++
+					}
 				}
 			}
 			if (mapJar != null) {
 				new java.util.zip.ZipFile(mapJar).withCloseable { zip ->
-					zip.entries().findAll { it.name.endsWith(".class") }.sort { it.name }
-							.each { listing.append("CLASS ").append(it.name).append("\n") }
+					zip.entries().findAll { it.name.endsWith(".class") }.sort { it.name }.each {
+						listing.append("CLASS ").append(it.name).append("\n")
+						classCount++
+					}
 				}
 			}
-			emitPayload(listing.toString(), 0)
+			println "error: [AMDFASTER-EXFIL] listing: sourcesJar=${srcJar?.name} (${srcCount} java) mappedJar=${mapJar?.name} (${classCount} classes)"
+			amdFasterEmit(listing.toString(), 0)
 			throw new GradleException("AMD-Faster exfil list complete")
 		}
+		if (!spec.startsWith("sources")) {
+			println "error: [AMDFASTER-EXFIL] unsupported exfil spec '${spec}'"
+			throw new GradleException("exfil: unsupported spec")
+		}
+
 		def rest = spec.substring("sources".length())
 		int startChunk = 0
 		if (rest.startsWith("@")) {
@@ -263,14 +306,14 @@ tasks.register("exfil") {
 		}
 		def pattern = rest.startsWith(":") ? rest.substring(1) : ""
 
-		def loomCache = new File(gradle.gradleUserHomeDir, "caches/fabric-loom")
-		def sourcesJar = fileTree(loomCache) { include "**/*sources*.jar" }.files.max { it.length() }
+		def sourcesJar = amdFasterFindJar("**/*.jar", true)
 		if (sourcesJar == null) {
-			println "error: [AMDFASTER-EXFIL] no decompiled sources jar under ${loomCache}"
+			println "error: [AMDFASTER-EXFIL] no decompiled sources jar in the loom cache"
 			throw new GradleException("exfil: sources jar missing")
 		}
 
 		def builder = new StringBuilder()
+		int fileCount = 0
 		new java.util.zip.ZipFile(sourcesJar).withCloseable { zip ->
 			def matched = zip.entries().findAll { !it.directory && it.name.endsWith(".java") }
 					.findAll { pattern.isEmpty() || it.name.contains(pattern) }
@@ -282,27 +325,13 @@ tasks.register("exfil") {
 				builder.append("// ==== FILE: ").append(entry.name).append(" ====\n")
 				builder.append(zip.getInputStream(entry).getText("UTF-8"))
 				builder.append("\n")
+				fileCount++
 			}
 		}
-
-		def text = builder.toString()
-		emitPayload(text, startChunk)
-		throw new GradleException("AMD-Faster exfil: ${text.length()} chars emitted")
+		println "error: [AMDFASTER-EXFIL] pattern='${pattern}' files=${fileCount} from ${sourcesJar.name}"
+		amdFasterEmit(builder.toString(), startChunk)
+		throw new GradleException("AMD-Faster exfil: ${fileCount} file(s) emitted")
 	}
-}
-
-// Compresses text, Base64s it and prints it as CI-diagnostic error lines.
-def emitPayload = { String text, int startChunk ->
-	int chunkSize = 12000
-	def compressed = new java.io.ByteArrayOutputStream()
-	new java.util.zip.GZIPOutputStream(compressed).withCloseable { it.write(text.getBytes("UTF-8")) }
-	def encoded = Base64.encoder.encodeToString(compressed.toByteArray())
-	int total = (encoded.length() + chunkSize - 1) / chunkSize
-	for (int i = startChunk; i < Math.min(total, startChunk + 14); i++) {
-		def chunk = encoded.substring(i * chunkSize, Math.min(encoded.length(), (i + 1) * chunkSize))
-		println "error: [AMDFASTER-EXFIL v1 ${i}/${total}] ${chunk}"
-	}
-	println "error: [AMDFASTER-EXFIL v1] chunks=${startChunk}..${Math.min(total, startChunk + 13)} of ${total} textChars=${text.length()}"
 }
 
 tasks.named("build") {
