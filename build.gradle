@@ -225,15 +225,28 @@ def amdFasterFindJar = { String includePat, boolean wantSources ->
 	def candidates = fileTree(cache) { include includePat }.files.findAll { f ->
 		def n = f.name.toLowerCase()
 		if (wantSources) {
-			return n.contains("sources")
+			return n.contains("sources") && n.endsWith(".jar")
 		}
-		if (n.contains("sources") || n.contains("linemapped") || n.contains("natives")
-				|| n.contains("bundler") || n.contains("client-extra") || n.contains("server-extra")) {
+		if (n.contains("sources") || n.contains("linemapped") || n.contains("natives")) {
 			return false
 		}
-		return n.contains("minecraft")
+		return n.endsWith(".jar")
+	}.sort { -it.length() }
+	for (def f : candidates) {
+		try {
+			boolean good = false
+			new java.util.zip.ZipFile(f).withCloseable { zip ->
+				good = zip.getEntry("net/minecraft/client/Minecraft.class") != null
+						|| zip.getEntry("net/minecraft/client/main/Main.class") != null
+			}
+			if (good) {
+				return f
+			}
+		} catch (Exception ignored) {
+			// not a readable jar
+		}
 	}
-	return candidates ? candidates.max { it.length() } : null
+	return null
 }
 
 // Compresses text, Base64s it and prints it as CI-diagnostic error lines.
@@ -243,7 +256,7 @@ def amdFasterEmit = { String text, int startChunk ->
 	new java.util.zip.GZIPOutputStream(compressed).withCloseable { it.write(text.getBytes("UTF-8")) }
 	def encoded = Base64.encoder.encodeToString(compressed.toByteArray())
 	int total = (encoded.length() + chunkSize - 1) / chunkSize
-	int last = Math.min(total, startChunk + 14)
+	int last = Math.min(total, startChunk + 30)
 	for (int i = startChunk; i < last; i++) {
 		def chunk = encoded.substring(i * chunkSize, Math.min(encoded.length(), (i + 1) * chunkSize))
 		println "error: [AMDFASTER-EXFIL v1 ${i}/${total}] ${chunk}"
@@ -258,7 +271,7 @@ tasks.register("exfil") {
 
 	def spec = project.findProperty("exfil")?.toString() ?: "none"
 	onlyIf { spec != "none" }
-	if (spec.startsWith("sources")) {
+	if (spec.startsWith("sources") || spec.startsWith("list")) {
 		dependsOn "genSources"
 	}
 
@@ -285,6 +298,20 @@ tasks.register("exfil") {
 					}
 				}
 			}
+			def histogram = [:]
+			if (srcJar != null) {
+				new java.util.zip.ZipFile(srcJar).withCloseable { zip ->
+					zip.entries().findAll { it.name.endsWith(".java") }.each {
+						def parts = it.name.split("/")
+						if (parts.length > 3) {
+							def key = parts[0] + "/" + parts[1] + "/" + parts[2] + "/" + parts[3]
+							histogram[key] = (histogram[key] ?: 0) + 1
+						}
+					}
+				}
+			}
+			def top = histogram.sort { -it.value }.take(60).collect { "${it.value} ${it.key}" }.join("\n")
+			listing.insert(0, "### top packages\n" + top + "\n")
 			println "error: [AMDFASTER-EXFIL] listing: sourcesJar=${srcJar?.name} (${srcCount} java) mappedJar=${mapJar?.name} (${classCount} classes)"
 			amdFasterEmit(listing.toString(), 0)
 			throw new GradleException("AMD-Faster exfil list complete")
