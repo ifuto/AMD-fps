@@ -157,7 +157,9 @@ public final class VkContext implements AutoCloseable {
             VkDevice device = null;
             try {
                 PointerBuffer pSurface = stack.mallocPointer(1);
-                if (glfwCreateWindowSurface(instance, glfwWindow, null, pSurface) != VK_SUCCESS) {
+                // GLFWVulkan is outside the dispatchable-handle family, so it wants the raw
+                // instance handle rather than the VkInstance wrapper.
+                if (glfwCreateWindowSurface(instance.address(), glfwWindow, null, pSurface) != VK_SUCCESS) {
                     return failed("glfwCreateWindowSurface failed");
                 }
                 surface = pSurface.get(0);
