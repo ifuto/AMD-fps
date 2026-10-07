@@ -84,6 +84,9 @@
   `config/amdfaster/gpu-report.json` で報告する。
 - **Stage 2**: `net.amdfaster.mesh` がセクションを **6 朝向バケット × meshlet（62 quad / 124 三角形 /
   8bit ローカルインデックス / 4 バイト packed AABB）** に分割する。詳細は `11`。
+- **Stage 3**: `net.amdfaster.mesh.voxel` の greedy mesher。`VoxelView` 抽象（Minecraft 型を含まない
+  ので単体テスト可能）→ 矩形結合 → `Quad`。**16³ の中身が詰まったセクションが 1536 面 → 6 quad になる**
+  ことをテストで固定。詳細は `11` §7。
 
 CI（`./gradlew build`）が `compileJava` → `test` → `verifyJar` を回す。
 `verifyJar` は「テストが 10 件以上走って全通過」「jar にエントリポイント・probe クラス・アイコンが

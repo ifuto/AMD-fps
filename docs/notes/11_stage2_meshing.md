@@ -96,11 +96,51 @@ dedup のキーは **(position, uv)**。しかし **Minecraft の各ブロック
 **read-modify-write を 1 回でもやると write-combining が崩れる**。
 `positionsAreLittleEndianShorts` / `bigEndianBuffersAreRejected` でこの規約を固定している。
 
-## 7. 次にやること
+## 7. Stage 3 追記：greedy mesher（`net.amdfaster.mesh.voxel`）
 
-1. **greedy mesher 本体**（ブロック状態 → `Quad` 列）。これは Minecraft の
-   `BlockRenderManager` / `ChunkSection` への依存が入るので、Stage 3。
-2. **per-quad UV origin+scale 版の頂点フォーマット**を計測比較（§5）。
-3. **meshlet カルの compute shader**（GLSL 450、workgroup 64、
+§5 で「頂点数を減らすのは dedup ではなく greedy meshing」と判明したので、そこを実装した。
+
+| クラス | 役割 |
+| --- | --- |
+| `VoxelView` | メッシャが読むブロックデータの抽象。**Minecraft 型を一切含まない**ので、合成ボリュームで単体テストできる |
+| `ArrayVoxelView` | 平坦配列実装（テスト／オフラインツール用） |
+| `GreedyMesher` | 6 朝向 × 各平面で 2D マスクを作り、右→下へ拡張して矩形化する古典アルゴリズム |
+| `MergedFace` | 矩形 1 枚（orientation, plane, u0..u1, v0..v1, key） |
+| `SectionMesher` | `VoxelView` → `SectionMesh`。矩形 1 枚 = `Quad` 1 枚、UV は矩形全体を張る |
+
+### 設計上の要点
+
+- **merge key には必ず light と tint を含める**。含めないと 1 ブロックの lightmap 値が
+  結合された quad 全体に塗られる（greedy meshing の古典バグ）。`VoxelView.key()` の Javadoc に明記。
+- **key は朝向ごと**。上面/側面/下面で見た目が変わるブロック（草など）に対応。
+- **UV は origin + per-block scale**。4×3 に結合された面はスプライトを 4×3 回タイリングする。
+  §5 で「次の計測候補」と書いた per-quad UV origin+scale が、ここで自然に採用された。
+- **ボリューム外は air**。実装では隣接チャンクから 1 ブロックの縁を取る必要がある
+  （さもないとセクション境界に不要な面が出る）。`VoxelView` の Javadoc に明記。
+
+### テストが直した期待値 4 件
+
+テストの期待値を先に手で計算したら 4 件間違っていた（実装のバグではない）:
+
+1. 16×16 スラブの**側面は 1×16**であって 16×16 ではない。
+2. Z 方向に並んだ 2 ブロックは、**POS_Z/NEG_Z だけ 1 枚**（共有面は不透明な隣に隠される）。
+3. 同じ key で Z に並べると **Y 向きも結合される**（Y 向きでは v 軸が Z だから）。
+4. **ランダムな塊では削減率は 24% 程度**。平面マスクが短い run ばかりになるため。
+   「半減する」という期待は構造化ジオメトリ（スラブ・シェル）でしか成立しない。
+   → ランダムテストは「必ず減る」「10% は減る」に緩め、強い主張は
+   `aSolidSectionShellMergesToSixQuads`（**1536 面 → 6 quad**）に分離した。
+
+### 検証済みの不変条件
+
+`mergedFaceAreaAlwaysEqualsTheVisibleUnitFaceCount`:
+12 種のランダムボリュームで **結合後の面積合計 == 可視ユニット面数** を確認。
+greedy meshing は quad の枚数だけを変え、描画される表面積は変えない。
+
+## 8. 次にやること
+
+1. **Minecraft アダプタ**（`ChunkSection` / `BlockRenderManager` → `VoxelView`）。
+   隣接チャンクからの 1 ブロック縁を含む。
+2. **meshlet カルの compute shader**（GLSL 450、workgroup 64、
    packed AABB によるフラスタム＋背面コーンテスト、`InterlockedAdd` でコンパクション）。
-4. **two-pass occlusion culling**（前フレーム Hi-Z、`09` §3）。
+3. **two-pass occlusion culling**（前フレーム Hi-Z、`09` §3）。
+4. **Vulkan bring-up**（instance / device / swapchain / render graph）。

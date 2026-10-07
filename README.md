@@ -59,21 +59,34 @@ nice-to-have but the only sensible one.
 * `SectionMesh` / `SectionMeshBuilder` — one 16³ section, split into the six buckets while it is
   meshed. Splitting an already-built mesh would multiply driver overhead six-fold.
 
+**Greedy meshing** (`net.amdfaster.mesh.voxel`)
+
+* `VoxelView` — the block data the mesher reads, with no Minecraft type in it, so the algorithm
+  runs on synthetic volumes in a unit test. The merge key has to carry the sprite, the tint *and*
+  the light: leaving light out is the classic greedy-meshing bug, where one block's lightmap value
+  gets smeared across a whole merged quad.
+* `GreedyMesher` / `MergedFace` — coplanar runs of identically-keyed faces merged into rectangles.
+  This is what actually reduces the vertex count, because corner deduplication cannot (see above).
+  A solid 16³ section goes from 1536 visible unit faces to 6 quads.
+* `SectionMesher` — one merged rectangle becomes one quad whose texture tiles across it, so a 4x4
+  merged face repeats its sprite rather than stretching it.
+
 Nothing is drawn by this mod yet; Minecraft still renders through its own pipeline.
 
 ## Roadmap
 
 1. **Measurement** — done.
 2. **Section meshing** — done, CPU side.
-3. **Greedy mesher** — block states to quads. This is where Minecraft's `BlockRenderManager` and
-   `ChunkSection` come in.
-4. **Vulkan bring-up** — instance, device, swapchain, render graph; the renderer takes over.
-5. **GPU-driven culling** — two-pass occlusion culling against the previous frame's Hi-Z, with the
+3. **Greedy mesher** — done, against a Minecraft-free `VoxelView` abstraction.
+4. **Minecraft adapter** — `ChunkSection` and `BlockRenderManager` behind `VoxelView`, including
+   the one-block border from neighbouring sections that makes section boundaries correct.
+5. **Vulkan bring-up** — instance, device, swapchain, render graph; the renderer takes over.
+6. **GPU-driven culling** — two-pass occlusion culling against the previous frame's Hi-Z, with the
    visible set living in a GPU buffer so the CPU never rebuilds it. Culling dispatches 16
    sections per wave, not one.
-6. **Transparent sorting on the GPU** — radix sort with on-chip local sort. Not bitonic: bitonic
+7. **Transparent sorting on the GPU** — radix sort with on-chip local sort. Not bitonic: bitonic
    is O(n log²n), needs a power of two, and scatters to global memory.
-7. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
+8. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
 
 ## Requirements
 
