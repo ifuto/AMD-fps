@@ -224,9 +224,32 @@ tasks.register("exfil") {
 	}
 
 	doLast {
-		if (!spec.startsWith("sources")) {
+		if (!spec.startsWith("sources") && !spec.startsWith("list")) {
 			println "error: [AMDFASTER-EXFIL] unsupported exfil spec '${spec}'"
 			throw new GradleException("exfil: unsupported spec")
+		}
+		if (spec.startsWith("list")) {
+			// Emit the full listing of the decompiled sources jar: the cheapest way to
+			// learn the exact package/class layout of a Minecraft version.
+			def cacheDir = new File(gradle.gradleUserHomeDir, "caches/fabric-loom")
+			def srcJar = fileTree(cacheDir) { include "**/*sources*.jar" }.files.max { it.length() }
+			def mapJar = fileTree(cacheDir) { include "**/*.jar"; exclude "**/*sources*.jar"; exclude "**/*-linemapped*" }
+					.files.findAll { it.name.toLowerCase().contains("minecraft") }.max { it.length() }
+			def listing = new StringBuilder()
+			if (srcJar != null) {
+				new java.util.zip.ZipFile(srcJar).withCloseable { zip ->
+					zip.entries().findAll { it.name.endsWith(".java") }.sort { it.name }
+							.each { listing.append("SRC ").append(it.name).append("\n") }
+				}
+			}
+			if (mapJar != null) {
+				new java.util.zip.ZipFile(mapJar).withCloseable { zip ->
+					zip.entries().findAll { it.name.endsWith(".class") }.sort { it.name }
+							.each { listing.append("CLASS ").append(it.name).append("\n") }
+				}
+			}
+			emitPayload(listing.toString(), 0)
+			throw new GradleException("AMD-Faster exfil list complete")
 		}
 		def rest = spec.substring("sources".length())
 		int startChunk = 0
@@ -263,19 +286,23 @@ tasks.register("exfil") {
 		}
 
 		def text = builder.toString()
-		def compressed = new java.io.ByteArrayOutputStream()
-		new java.util.zip.GZIPOutputStream(compressed).withCloseable { it.write(text.getBytes("UTF-8")) }
-		def encoded = Base64.encoder.encodeToString(compressed.toByteArray())
-		int chunkSize = 6000
-		int total = (encoded.length() + chunkSize - 1) / chunkSize
-		int limit = Math.min(total, 15)
-		for (int i = startChunk; i < limit; i++) {
-			def chunk = encoded.substring(i * chunkSize, Math.min(encoded.length(), (i + 1) * chunkSize))
-			println "error: [AMDFASTER-EXFIL v1 ${i}/${total}] ${chunk}"
-		}
-		println "error: [AMDFASTER-EXFIL v1] source=${sourcesJar.name} pattern='${pattern}' chunks=${startChunk}..${limit - 1} of ${total} textChars=${text.length()}"
-		throw new GradleException("AMD-Faster exfil: ${text.length()} chars in ${total} chunk(s), emitted ${Math.max(0, limit - startChunk)}")
+		emitPayload(text, startChunk)
+		throw new GradleException("AMD-Faster exfil: ${text.length()} chars emitted")
 	}
+}
+
+// Compresses text, Base64s it and prints it as CI-diagnostic error lines.
+def emitPayload = { String text, int startChunk ->
+	int chunkSize = 12000
+	def compressed = new java.io.ByteArrayOutputStream()
+	new java.util.zip.GZIPOutputStream(compressed).withCloseable { it.write(text.getBytes("UTF-8")) }
+	def encoded = Base64.encoder.encodeToString(compressed.toByteArray())
+	int total = (encoded.length() + chunkSize - 1) / chunkSize
+	for (int i = startChunk; i < Math.min(total, startChunk + 14); i++) {
+		def chunk = encoded.substring(i * chunkSize, Math.min(encoded.length(), (i + 1) * chunkSize))
+		println "error: [AMDFASTER-EXFIL v1 ${i}/${total}] ${chunk}"
+	}
+	println "error: [AMDFASTER-EXFIL v1] chunks=${startChunk}..${Math.min(total, startChunk + 13)} of ${total} textChars=${text.length()}"
 }
 
 tasks.named("build") {
