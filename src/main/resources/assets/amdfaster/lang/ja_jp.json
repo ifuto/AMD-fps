@@ -1,0 +1,11 @@
+{
+  "amdfaster.name": "AMD-Faster",
+  "amdfaster.overlay.title": "AMD-Faster Vulkan 診断",
+  "amdfaster.overlay.active": "Vulkan ベンチマーク実行中 — F6 で停止",
+  "amdfaster.overlay.building": "セクションメッシュを構築中…",
+  "amdfaster.overlay.exit": "ESC でゲームに戻ります",
+  "amdfaster.log.initializing": "[AMD-Faster] Vulkan バックエンドを初期化しています…",
+  "amdfaster.log.device": "[AMD-Faster] GPU を選択しました: %s",
+  "amdfaster.log.disabled": "[AMD-Faster] Vulkan バックエンドを無効化しました: %s",
+  "amdfaster.config.backend.auto": "自動 (AMD GPU を優先)"
+}

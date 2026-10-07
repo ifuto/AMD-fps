@@ -1,0 +1,11 @@
+{
+  "amdfaster.name": "AMD-Faster",
+  "amdfaster.overlay.title": "AMD-Faster Vulkan Diagnostics",
+  "amdfaster.overlay.active": "Vulkan benchmark running — press F6 to stop",
+  "amdfaster.overlay.building": "Building section meshes…",
+  "amdfaster.overlay.exit": "Press ESC to return to the game",
+  "amdfaster.log.initializing": "[AMD-Faster] Initializing Vulkan backend…",
+  "amdfaster.log.device": "[AMD-Faster] Selected GPU: %s",
+  "amdfaster.log.disabled": "[AMD-Faster] Vulkan backend disabled: %s",
+  "amdfaster.config.backend.auto": "Auto (AMD GPUs preferred)"
+}

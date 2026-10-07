@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "amdfaster",
+  "version": "${version}",
+  "name": "AMD-Faster",
+  "description": "An AMD-first rendering backend for Minecraft. A self-contained Vulkan engine (bundled jar-in-jar, no manual installs) with RDNA/GCN/APU-aware memory, queue and draw-call tuning: persistent-mapped ReBAR uploads, region arenas, GPU-driven indirect draws. Includes a Vulkan diagnostics/benchmark overlay (F6).",
+  "authors": [
+    "ifuto"
+  ],
+  "contact": {
+    "homepage": "https://github.com/ifuto/AMD-fps",
+    "sources": "https://github.com/ifuto/AMD-fps",
+    "issues": "https://github.com/ifuto/AMD-fps/issues"
+  },
+  "license": "LGPL-3.0-only",
+  "icon": "assets/amdfaster/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.ifuto.amdfaster.AmdFasterClient"
+    ]
+  },
+  "mixins": [
+    "amdfaster.client.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21"
+  },
+  "suggests": {
+  },
+  "breaks": {
+  },
+  "custom": {
+    "modrinth": {
+      "backend": "vulkan",
+      "target-vendors": ["amd", "intel", "nvidia"]
+    }
+  }
+}

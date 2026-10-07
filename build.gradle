@@ -1,0 +1,62 @@
+plugins {
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+}
+
+repositories {
+	// lwjgl-vulkan comes from Maven Central.
+	mavenCentral()
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	// Official Mojang mappings: 1.21.11 is the last obfuscated Minecraft version and
+	// Yarn stops here (see https://fabricmc.net/2025/12/05/12111.html). Mojang mappings
+	// keep this project portable to 26.1+ where Yarn no longer exists.
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+	// No Fabric API dependency on purpose: AMD-Faster talks to Minecraft through Mixin
+	// (bundled with Fabric Loader) and to the GPU through LWJGL. Fewer moving parts,
+	// fewer conflicts with Sodium & friends.
+
+	// LWJGL Vulkan bindings. This jar is pure Java (the actual Vulkan loader,
+	// libvulkan.so.1 / vulkan-1.dll, is provided by the GPU driver installation),
+	// so it can be bundled jar-in-jar and the mod stays a single download in the
+	// Modrinth App / Prism / MultiMC.
+	include(implementation("org.lwjgl:lwjgl-vulkan:${project.lwjgl_version}"))
+}
+
+base {
+	archivesName = project.archives_base_name
+}
+
+version = project.mod_version
+group = project.maven_group
+
+processResources {
+	inputs.property "version", project.version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": project.version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+	it.options.encoding = "UTF-8"
+}
+
+java {
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+	inputs.property "projectName", project.base.archivesName.get()
+
+	from("LICENSE") {
+		rename { "${it}_${project.base.archivesName.get()}" }
+	}
+}
