@@ -55,16 +55,15 @@ if (requestedLoom != null && requestedLoom != "auto" && !requestedLoom.isBlank()
 				.getText(connectTimeout: 10000, readTimeout: 20000)
 		def versions = (metadata =~ /<version>([^<]+)<\/version>/).collect { it[1] }
 				.findAll { !it.contains("-alpha") && !it.contains("-beta") && !it.contains("SNAPSHOT") }
-		def byNumber = versions.sort { a, b ->
-			def pa = a.tokenize(".").collect { it.replaceAll(/[^0-9].*/, "").isEmpty() ? 0 : it.replaceAll(/[^0-9].*/, "").toInteger() }
-			def pb = b.tokenize(".").collect { it.replaceAll(/[^0-9].*/, "").isEmpty() ? 0 : it.replaceAll(/[^0-9].*/, "").toInteger() }
-			int cmp = 0
-			for (int i = 0; i < Math.max(pa.size(), pb.size()); i++) {
-				cmp = (i < pa.size() ? pa[i] : 0) <=> (i < pb.size() ? pb[i] : 0)
-				if (cmp != 0) break
-			}
-			cmp
-		}.reverse()
+
+		// Version sort key: zero padded numeric components, so 1.9 < 1.14 < 1.18.
+		def sortKey = { String version ->
+			version.tokenize(".").collect { String part ->
+				def digits = (part =~ /^(\d+)/)
+				digits.find() ? digits.group(1).padLeft(4, "0") : "0000"
+			}.join(".")
+		}
+		def byNumber = versions.sort { sortKey(it) }.reverse()
 
 		int attempts = 0
 		for (String candidate : byNumber) {
@@ -73,7 +72,8 @@ if (requestedLoom != null && requestedLoom != "auto" && !requestedLoom.isBlank()
 			}
 			// Mojang-mappings/1.21.x support starts at the 1.14 line.
 			def parts = candidate.tokenize(".")
-			int minor = parts.length > 1 ? parts[1].replaceAll(/[^0-9].*/, "").toInteger() : 0
+			def minorDigits = parts.size() > 1 ? (parts[1] =~ /^(\d+)/) : null
+			int minor = (minorDigits != null && minorDigits.find()) ? minorDigits.group(1).toInteger() : 0
 			if (minor < 14) {
 				continue
 			}
@@ -81,7 +81,7 @@ if (requestedLoom != null && requestedLoom != "auto" && !requestedLoom.isBlank()
 				def module = new URL("https://maven.fabricmc.net/net/fabricmc/fabric-loom/${candidate}/fabric-loom-${candidate}.module")
 						.getText(connectTimeout: 10000, readTimeout: 20000)
 				def jvmMatch = (module =~ /"org\.gradle\.jvm\.version"\s*:\s*(\d+)/)
-				int requiredJvm = jvmMatch.find() ? jvmMatch.group(1).toInteger() : 21
+				int requiredJvm = jvmMatch.find() ? jvmMatch.group(1).toInteger() : currentJvm
 				if (requiredJvm <= currentJvm) {
 					selectedLoom = candidate
 					selectionReason = "newest release that runs on Java ${currentJvm} (declares JVM ${requiredJvm})"
@@ -92,7 +92,7 @@ if (requestedLoom != null && requestedLoom != "auto" && !requestedLoom.isBlank()
 			}
 		}
 		if (selectedLoom == null) {
-			println "error: [AMD-FASTER] no fabric-loom release found for Java ${currentJvm}; candidates were: ${byNumber.take(10)}"
+			println "error: [AMD-FASTER] no fabric-loom release found for Java ${currentJvm}; newest candidates were: ${byNumber.take(12)}"
 		}
 	} catch (Throwable t) {
 		println "error: [AMD-FASTER] fabric-loom version discovery failed: ${t.message}"
