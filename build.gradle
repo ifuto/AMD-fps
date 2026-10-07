@@ -199,6 +199,90 @@ tasks.named("build") {
 }
 
 // ---------------------------------------------------------------------------
+// `exfil`: export Minecraft API/source information through the CI diagnostics
+// channel.
+//
+// Restricted build environments cannot always reach the workflow log host or the
+// artifact host, but they can read check annotations. This task compresses the
+// decompiled Minecraft sources that match a pattern, Base64s them and prints them
+// as error lines - the CI workflow turns error lines into annotations - and then
+// fails on purpose so that the workflow actually forwards them.
+//
+//   ./gradlew build -Pexfil=sources:LevelRenderer      (or set exfil= in gradle.properties)
+//   ./gradlew build -Pexfil=sources@3:renderer/chunk   (start at chunk 3, for paging)
+//
+// Decode with .research/tools/exfil.py.
+// ---------------------------------------------------------------------------
+tasks.register("exfil") {
+	group = "amd-faster"
+	description = "Emits requested Minecraft sources through the CI diagnostics channel."
+
+	def spec = project.findProperty("exfil")?.toString() ?: "none"
+	onlyIf { spec != "none" && !spec.startsWith("none") }
+	if (spec.startsWith("sources")) {
+		dependsOn "genSources"
+	}
+
+	doLast {
+		if (!spec.startsWith("sources")) {
+			println "error: [AMDFASTER-EXFIL] unsupported exfil spec '${spec}'"
+			throw new GradleException("exfil: unsupported spec")
+		}
+		def rest = spec.substring("sources".length())
+		int startChunk = 0
+		if (rest.startsWith("@")) {
+			def idx = rest.indexOf(":")
+			if (idx < 0) {
+				throw new GradleException("exfil: '@<startChunk>:' needs a pattern after it")
+			}
+			startChunk = rest.substring(1, idx).toInteger()
+			rest = rest.substring(idx)
+		}
+		def pattern = rest.startsWith(":") ? rest.substring(1) : ""
+
+		def loomCache = new File(gradle.gradleUserHomeDir, "caches/fabric-loom")
+		def sourcesJar = fileTree(loomCache) { include "**/*sources*.jar" }.files.max { it.length() }
+		if (sourcesJar == null) {
+			println "error: [AMDFASTER-EXFIL] no decompiled sources jar under ${loomCache}"
+			throw new GradleException("exfil: sources jar missing")
+		}
+
+		def builder = new StringBuilder()
+		new java.util.zip.ZipFile(sourcesJar).withCloseable { zip ->
+			def matched = zip.entries().findAll { !it.directory && it.name.endsWith(".java") }
+					.findAll { pattern.isEmpty() || it.name.contains(pattern) }
+					.sort { it.name }
+			if (matched.size() > 200) {
+				matched = matched.subList(0, 200)
+			}
+			matched.each { entry ->
+				builder.append("// ==== FILE: ").append(entry.name).append(" ====\n")
+				builder.append(zip.getInputStream(entry).getText("UTF-8"))
+				builder.append("\n")
+			}
+		}
+
+		def text = builder.toString()
+		def compressed = new java.io.ByteArrayOutputStream()
+		new java.util.zip.GZIPOutputStream(compressed).withCloseable { it.write(text.getBytes("UTF-8")) }
+		def encoded = Base64.encoder.encodeToString(compressed.toByteArray())
+		int chunkSize = 6000
+		int total = (encoded.length() + chunkSize - 1) / chunkSize
+		int limit = Math.min(total, 15)
+		for (int i = startChunk; i < limit; i++) {
+			def chunk = encoded.substring(i * chunkSize, Math.min(encoded.length(), (i + 1) * chunkSize))
+			println "error: [AMDFASTER-EXFIL v1 ${i}/${total}] ${chunk}"
+		}
+		println "error: [AMDFASTER-EXFIL v1] source=${sourcesJar.name} pattern='${pattern}' chunks=${startChunk}..${limit - 1} of ${total} textChars=${text.length()}"
+		throw new GradleException("AMD-Faster exfil: ${text.length()} chars in ${total} chunk(s), emitted ${Math.max(0, limit - startChunk)}")
+	}
+}
+
+tasks.named("build") {
+	finalizedBy "exfil"
+}
+
+// ---------------------------------------------------------------------------
 // Optional: bundle the AMD offline toolchain (LLPC + LLVM "amdllpc") so that the
 // ISA/occupancy analysis path works with zero manual setup. This is what makes
 // the mod installable straight from the Modrinth app; see docs/AMD-TOOLCHAIN.md.

@@ -152,10 +152,14 @@ class OccupancyModelTest {
         assertEquals(128, OccupancyModel.maxVgprsForWaves(AmdArch.RDNA2, 32, 8));
         assertEquals(1024, OccupancyModel.maxVgprsForWaves(AmdArch.RDNA2, 32, 1));
 
-        // The table must be strictly monotonic: fewer waves are always allowed more registers.
-        int previous = 0;
+        // The table is ordered by increasing wave target, so the register budget must be
+        // monotonically non-increasing: asking for more waves can never allow more registers.
+        assertEquals(1, table[0][0]);
+        assertEquals(16, table[table.length - 1][0]);
+        int previous = Integer.MAX_VALUE;
         for (int[] entry : table) {
-            assertTrue(entry[1] >= previous, "register budgets must not decrease with higher occupancy targets");
+            assertTrue(entry[1] <= previous,
+                    "register budget must not grow when the wave target grows (wave target " + entry[0] + ")");
             previous = entry[1];
         }
     }
