@@ -36,7 +36,11 @@ layout(std430, binding = 3) buffer Counters {
     uint testedCount;
 };
 
-layout(binding = 4) uniform texture2D hiZDepth;
+// A combined image sampler rather than a bare texture2D: textureSize and texelFetch on a
+// samplerless texture need GL_EXT_samplerless_texture_functions in GLSL 4.50, and the sampler
+// expresses what the fetch actually wants anyway -- nearest filtering, so no texel is averaged
+// across the reduction, and clamp-to-edge so a box hanging off the screen edge still reads.
+layout(binding = 4) uniform sampler2D hiZDepth;
 
 layout(push_constant) uniform Push {
     uint baseMeshlet;

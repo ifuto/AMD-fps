@@ -27,7 +27,12 @@ public final class CullBindings {
     /** Atomic counters: visible count, and the count the next dispatch reads. */
     public static final int COUNTER_BUFFER_BINDING = 3;
 
-    /** The hierarchical depth buffer, read by the occlusion pass only. */
+    /**
+     * The hierarchical depth pyramid, read by the occlusion pass only, as a combined image
+     * sampler. A bare {@code texture2D} would need GL_EXT_samplerless_texture_functions for
+     * {@code textureSize} and {@code texelFetch}, and the sampler states what the fetch wants
+     * anyway: nearest filtering, so no texel is averaged across the reduction.
+     */
     public static final int HIZ_IMAGE_BINDING = 4;
 
     /**
