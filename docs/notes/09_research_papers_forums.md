@@ -202,7 +202,7 @@ Minecraft では「可視セクション集合」を `visibilityBuffer` とし�
 - **Minecraft の半透明は「距離順の緩い順序」で十分**なので、
   **radix sort（キー = 量子化した距離）を LDS 局所ソート付きで実装**する。
   - **LDS は 32 bank**（`02` §9）→ **SoA 配置で bank conflict 回避**。
-  - **workgroup は RDNA=128 / GCN=256**（`02` §6）。
+  - **workgroup は 64 の倍数**（AMD RDNA Performance Guide の原文。64 = GCN で wave64×1、RDNA で wave32×2）。※当初「RDNA=128 / GCN=256」と書いていたが、`02` §6 の occupancy 議論との取り違えであり、`01` §11 の一次ソースに照らして訂正した。
 - **安定ソートであること**が重要（同じ距離の quad の順序がフレーム間で暴れない＝チラつかない）。
 
 ## 8. JVM / GC（Minecraft クライアント特有の結論）

@@ -88,15 +88,34 @@ class GpuIdentityTest {
     }
 
     @Test
-    void generationsAgreeOnWorkGroupGranularity() {
-        // AMD's guidance: four wavefronts per work group, so 128 on wave32 parts, 256 on wave64.
+    void workGroupSizesFollowTheRdnaPerformanceGuide() {
+        // "Make the workgroup size a multiple of 64 to obtain best performance across all GPU
+        // generations." 64 is one wave64 on GCN and two wave32s on RDNA.
+        assertEquals(0, AmdArchitecture.WORKGROUP_SIZE % 64);
         for (AmdArchitecture arch : AmdArchitecture.values()) {
             if (arch == AmdArchitecture.UNKNOWN) {
                 continue;
             }
-            int expected = arch == AmdArchitecture.GCN5_VEGA ? 256 : 128;
-            assertEquals(expected, arch.recommendedWorkgroupSize(), arch.name());
-            assertEquals(expected, 4 * arch.nativeWaveSize(), arch.name());
+            assertEquals(AmdArchitecture.WORKGROUP_SIZE, arch.recommendedWorkgroupSize(), arch.name());
+            assertEquals(0, arch.recommendedWorkgroupSize() % 64, arch.name());
+            assertEquals(0, arch.recommendedWorkgroupSize() % arch.nativeWaveSize(),
+                    arch.name() + " must not leave a partial wavefront");
         }
+        // An 8x8 tile group, as recommended for LDS/image work, is also a multiple of 64.
+        assertEquals(64, AmdArchitecture.WORKGROUP_TILED_8X8);
+        assertEquals(8 * 8, AmdArchitecture.WORKGROUP_TILED_8X8);
+    }
+
+    @Test
+    void ldsAndDescriptorBudgetsAreTheDocumentedOnes() {
+        assertEquals(32, AmdArchitecture.LDS_BANKS);
+        assertEquals(32, AmdArchitecture.LDS_BANK_BITS);
+        assertEquals(13, AmdArchitecture.ROOT_SIGNATURE_DWORD_BUDGET);
+        assertEquals(10, AmdArchitecture.MIN_WORK_PER_COMMAND_BUFFER);
+        // RDNA 1/2 doubled the LDS per CU relative to GCN; RDNA 3 went back to 64 KB.
+        assertEquals(64 * 1024, AmdArchitecture.GCN5_VEGA.ldsBytesPerCu());
+        assertEquals(128 * 1024, AmdArchitecture.RDNA1.ldsBytesPerCu());
+        assertEquals(128 * 1024, AmdArchitecture.RDNA2.ldsBytesPerCu());
+        assertEquals(64 * 1024, AmdArchitecture.RDNA3.ldsBytesPerCu());
     }
 }

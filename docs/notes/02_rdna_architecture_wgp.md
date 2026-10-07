@@ -221,7 +221,8 @@ subgroup size 系の拡張を使い、**subgroup 依存コードを wave32/64 �
 
 ## 13. この文書から得た AMD-Faster の設計ルール（追加分）
 
-1. **workgroup size**: RDNA=128 の倍数（理想 128）、GCN/Vega=256 の倍数。世代分岐。
+1. **workgroup size**: **64 の倍数**（AMD 公式 RDNA Performance Guide の原文: “Make the workgroup size a multiple of 64 to obtain best performance across all GPU generations.”）。64 = GCN で wave64×1、RDNA で wave32×2。
+   - ※当初この行には「RDNA=128 の倍数、GCN=256 の倍数」と書いていたが、**それは本 whitepaper の occupancy 議論（§6: WGP で 4×32=128 スレッドで ALU 飽和）を設計指針と取り違えた誤り**だった。Performance Guide の明示的な指針は 64 の倍数。`01` §11 と `fetched_content/gpuopen.com_learn_rdna-performance-guide_` が一次ソース。
 2. **VGPR ≤ 64** を目標に compute を書く（occupancy 16 wave）。RGA で検証。
 3. **LDS ≤ 64 KB**（できれば ≤32 KB）。SoA 配置で bank conflict 回避。ShuffleXor 優先。
 4. **命令順で ILP を作る**（同一出力への逐次依存を避ける）。

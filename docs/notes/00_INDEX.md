@@ -18,6 +18,8 @@
 | 06 | [`06_gpu_queues_preemption_barriers.md`](06_gpu_queues_preemption_barriers.md) | **Breaking Down Barriers / GPUOpen async queues / MES スケジューラ仕様**。split barrier、プリエンプション粒度、**AMD は複数 graphics queue が無意味**、**fence ≤9/frame**、**command buffer は 1〜2ms** | therealmjp.github.io（直接取得）＋ GPUOpen（抜粋） |
 | 07 | [`07_amdfaster_design.md`](07_amdfaster_design.md) | **設計メモ**: アーキテクチャ、世代別マトリクス、機能優先順位、Modrinth 配布、計測計画、リスク、マイルストーン | 01〜06 の統合 |
 | 08 | [`08_jvm_lwjgl_fabric.md`](08_jvm_lwjgl_fabric.md) | **JVM/LWJGL/Fabric**。Java 21 では FFM が使えない、Sodium の `Unsafe.copyMemory` と ASM 実行時生成、LWJGL 版本、GC ルール | GitHub clone（実ソース）＋ JEP 確認 |
+| 09 | [`09_research_papers_forums.md`](09_research_papers_forums.md) | **海外論文・フォーラム調査**。Aokana（GPU 駆動ボクセル）、Ubisoft GPU-driven pipeline、two-pass occlusion culling、meshlet 研究3本、RE Engine 実測、voxel エンジン実務、GPU ソート、JVM/GC。各項に AMD-Faster への適用つき | arXiv / ACM / JCGT / CGF / REAC / 個人技術記事 |
+| 10 | [`10_primary_source_verifications.md`](10_primary_source_verifications.md) | **一次ソース再検証**。`fetched_content/` に落ちた RDNA Performance Guide 全文と突き合わせ、**自分のメモの誤り1件（workgroup size）を訂正**し、HOST_VISIBLE 書き込み制約など実装直結の事実を追加 | `fetched_content/`（fetch.yml が取得） |
 
 ## 2. 最重要の発見（3つだけ挙げるなら）
 
@@ -66,9 +68,19 @@
 - **`CaffeineMC/Nvidium` / `FabricMC/Nvidium`**: **404**。現行は `MCRcortex/nvidium`（tag 無し、対象 MC 1.21）。
 - **GPUOpen Performance Guides の他ページ**（GCN3 guide, Vulkan barriers explained 等）: 未取得。
 
-## 4. 次にやること（提案）
+## 4. 現在の状況（2026-10-07 更新）
 
-1. **対象 MC バージョンの確定**（1.21.11 か 26.3 か）— ユーザー判断が必要。
-2. 未取得資料の回収: **RDNA3/4 ISA 参照ガイド**（サインイン不要のミラーを探す）、
-   **GCN Performance Guide**、**RDNA2/3/4 ホワイトペーパー**。
-3. **M0（計測基盤）の実装**に着手（`07` §8）。
+確定した前提:
+- **対象 MC = 1.21.11**（Java 21、Sodium 0.8.12 の系列）。
+- **バックエンド = Vulkan 優先**。
+- **独立レンダラ方式**（VulkanMod 方式。Sodium に依存しない。Sodium は PolyForm Shield なので
+  ソースの派生は不可 — `07` §7.1）。
+
+実装は **Stage 1（計測基盤）が完了**。`net.amdfaster.platform.GpuReport` が起動時に
+`VkInstance` を作ってアダプタを列挙し、`AmdArchitecture`/`GpuIdentity` が世代を判定、
+`/amdfaster` と `config/amdfaster/gpu-report.json` で報告する。CI（`./gradlew build`）が
+コンパイルと単体テスト（分類表・UMA/ReBAR 閾値・レポート整形）を検証している。
+
+残りの未取得資料: **RDNA3/4 ISA 参照ガイド**（`docs.amd.com` のサインイン要求）、
+**GCN Performance Guide**。ただし **RDNA Performance Guide 全文は
+`fetched_content/` に取得済み**で、`10` で照合済み。

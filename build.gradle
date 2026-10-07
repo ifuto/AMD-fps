@@ -94,27 +94,29 @@ tasks.register("reportResult") {
         int total = 0, failed = 0, errored = 0, skipped = 0
         suites.each { File f ->
             def root = new groovy.xml.XmlSlurper().parse(f)
-            def num = { String name ->
-                def t = root.attribute(name).toString()
-                t.isEmpty() ? 0 : t.toInteger()
+            // XmlSlurper exposes attributes as .@name, not .attribute(name).
+            def num = { node ->
+                def v = node.text().trim()
+                v.isEmpty() ? 0 : v.toInteger()
             }
-            int t = num("tests"), fl = num("failures"), er = num("errors"), sk = num("skipped")
+            int t = num(root.@tests), fl = num(root.@failures)
+            int er = num(root.@errors), sk = num(root.@skipped)
             total += t
             failed += fl
             errored += er
             skipped += sk
             if (fl > 0 || er > 0) {
-                fail("test suite " + root.attribute("name") + ": " + t + " run, " + fl + " failed, " + er + " errors")
+                fail("test suite " + root.@name.text() + ": " + t + " run, " + fl + " failed, " + er + " errors")
                 root.testcase.each { tc ->
                     def bads = []
                     tc.failure.each { bads << it }
                     tc.error.each { bads << it }
                     bads.each { bad ->
-                        fail("  " + tc.attribute("name") + ": " + bad.attribute("message").toString().take(220))
+                        fail("  " + tc.@name.text() + ": " + bad.@message.text().take(220))
                     }
                 }
             } else {
-                notice("test suite " + root.attribute("name") + ": " + t + " passed, " + sk + " skipped")
+                notice("test suite " + root.@name.text() + ": " + t + " passed, " + sk + " skipped")
             }
         }
         notice("tests: " + total + " run, " + failed + " failed, " + errored + " errors, " + skipped + " skipped")
