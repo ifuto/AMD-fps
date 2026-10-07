@@ -76,18 +76,29 @@ class RootSignatureBudgetTest {
                 new Parameter(Kind.PUSH_CONSTANT_DWORD, 6, "pushConstants"),
                 new Parameter(Kind.DESCRIPTOR_SET, 2, "textures+meshlets"),
                 new Parameter(Kind.PUSH_DESCRIPTOR, 1, "drawConstants")));
-        assertEquals(12, v.dwords(), "6 + 2 + 2");
+        assertEquals(10, v.dwords(), "6 push constants + 2 tables at 1 + 1 root descriptor at 2");
         assertTrue(v.fits());
     }
 
     @Test
-    void oneMorePushDescriptorPushesItOver() {
-        Verdict v = RootSignatureBudget.check(List.of(
+    void pushDescriptorsEatTheBudgetTwiceAsFast() {
+        // A push descriptor is a root descriptor, not a table pointer, so it costs 2 DWORDs. Two
+        // more of them take this layout from 10 to 14 and it stops fitting -- which is exactly the
+        // trap the budget check exists to catch.
+        Verdict two = RootSignatureBudget.check(List.of(
                 new Parameter(Kind.PUSH_CONSTANT_DWORD, 6, "pushConstants"),
                 new Parameter(Kind.DESCRIPTOR_SET, 2, "textures+meshlets"),
                 new Parameter(Kind.PUSH_DESCRIPTOR, 2, "drawConstants")));
-        assertEquals(14, v.dwords());
-        assertFalse(v.fits());
+        assertEquals(12, two.dwords());
+        assertTrue(two.fits());
+
+        Verdict three = RootSignatureBudget.check(List.of(
+                new Parameter(Kind.PUSH_CONSTANT_DWORD, 6, "pushConstants"),
+                new Parameter(Kind.DESCRIPTOR_SET, 2, "textures+meshlets"),
+                new Parameter(Kind.PUSH_DESCRIPTOR, 3, "drawConstants")));
+        assertEquals(14, three.dwords());
+        assertFalse(three.fits());
+        assertEquals(1, three.overBy());
     }
 
     @Test
