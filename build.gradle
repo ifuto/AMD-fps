@@ -30,6 +30,16 @@ dependencies {
     testImplementation platform("org.junit:junit-bom:5.11.4")
     testImplementation "org.junit.jupiter:junit-jupiter"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+
+    // shaderc compiles the .comp sources to SPIR-V in ShaderCompileTest. Test-only and not
+    // bundled: the mod ships pre-compiled SPIR-V, so a player never needs a GLSL compiler.
+    // Without this the shaders are text nobody has checked, and a typo in a compute shader
+    // surfaces as a driver error at runtime on someone else's machine.
+    testImplementation "org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}"
+    for (String nativesClassifier in ["natives-linux", "natives-windows", "natives-macos", "natives-macos-arm64"]) {
+        testRuntimeOnly "org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}:${nativesClassifier}"
+        testRuntimeOnly "org.lwjgl:lwjgl:${project.lwjgl_version}:${nativesClassifier}"
+    }
 }
 
 test {
