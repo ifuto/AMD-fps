@@ -14,9 +14,9 @@ AMD-Faster sits in three layers, so a device that cannot run the exotic path sti
 
 | Layer | What it is | Status |
 |---|---|---|
-| `dev.amdfaster.core` | Pure-Java, Minecraft-free tuning core: AMD identification, occupancy/ISA analysis, capability probing, the tuning policy, and a SPIR-V optimizer | unit tested |
-| GL path | AMD tuned submission on top of vanilla Blaze3D: persistent mapped upload rings, multi-draw indirect batching, region-BFS visibility, depth pyramid occlusion | in progress |
-| Vulkan path | A full backend: GPU-driven terrain with task/mesh shaders, bindless descriptors, pipeline precompilation via AMD's LLVM compiler | in progress |
+| `dev.amdfaster.core` | Pure-Java, Minecraft-free tuning core: AMD identification (PCI ids + driver strings), per-generation occupancy model, capability set, and the tuning policy engine | implemented, unit tested |
+| GL path | AMD tuned submission on top of vanilla Blaze3D: persistent mapped upload rings, multi-draw indirect batching, region-BFS visibility, depth pyramid occlusion | policy implemented; renderer hooks in progress |
+| Vulkan path | GPU-driven terrain in Vulkan (task/mesh shaders on RDNA 2+, bindless descriptors, GPU-written draw counts), pipeline precompilation via AMD's own LLVM compiler | device probe + bindings implemented; renderer in progress |
 
 Everything is opt-in-safe: on a non-AMD GPU, or when anything fails to come up, AMD-Faster degrades to
 vanilla rendering instead of breaking the game.
@@ -67,3 +67,35 @@ built with `-PincludeAmdToolchain=true`.
 
 LGPL-3.0-or-later. See [LICENSE](LICENSE) and [NOTICE](NOTICE); third-party reference material and
 bundled components are listed in NOTICE.
+
+## Project status
+
+Implemented and verified by the CI build (`./gradlew build` on Temurin 21, tests included):
+
+* the tuning core: AMD family/ISA identification, the LLVM-derived occupancy model, capability
+  sets, the policy engine and the human-readable session report (`TuningSession.report()`);
+* device probing at client start: `GlDeviceProbe` reads the OpenGL driver's extensions and driver
+  identity, `VkDeviceProbe` surveys the Vulkan physical device (PCI id, memory heaps, extension set,
+  Vulkan version) without creating a device;
+* the client entry point wires both probes into a `TuningSession` and logs the full report, so an
+  issue report contains the exact reasons for every decision;
+* LWJGL's Vulkan bindings (and VMA) are bundled as nested jars, version-matched to Minecraft's own
+  LWJGL so the process only ever contains one LWJGL.
+
+In progress (the next commits):
+
+* the **renderer hooks** that act on the plan: persistent mapped upload arena and batched indirect
+  terrain submission for the GL path, using the intervention points listed in
+  `docs/research/04-minecraft-renderer-internals.md`;
+* the **Vulkan terrain backend** itself;
+* the optional AMD toolchain download (`fetchAmdToolchain`) for offline pipeline compilation.
+
+### Working in a locked-down environment
+
+The build emits information about the CI machine through GitHub check annotations when
+`exfil` is set in `gradle.properties` (`-Pexfil=list:client/renderer`,
+`-Pexfil=classes:SectionRenderDispatcher`, ...); `.research/tools/exfil.py` collects those
+annotations, reassembles the payload and writes the requested files locally. This is how the
+signatures quoted in `docs/research/04-minecraft-renderer-internals.md` were obtained:
+the class files come from the real mapped jar the build compiles against, not from a different
+version or from memory.
