@@ -69,27 +69,29 @@ jar {
 }
 
 // ---------------------------------------------------------------------------
-// Result reporting
+// Self-verification
 //
-// CI logs and artifacts are served from blob storage that is not reachable from
-// every client, but GitHub Actions turns any "::notice::" / "::error::" line on
-// a step's stdout into an annotation, and annotations ARE served by the API.
-// So the build itself publishes what it produced.
+// The CI workflow redirects Gradle's stdout into a log file and only greps that
+// file when the build fails, so printed diagnostics are invisible on a green
+// build and logs/artifacts are served from blob storage that is not reachable
+// from every client. Printing a report is therefore worthless here: the build
+// has to *assert* what it produced and fail loudly instead.
 // ---------------------------------------------------------------------------
-tasks.register("reportResult") {
-    notCompatibleWithConfigurationCache("reads build outputs and prints CI annotations")
+tasks.register("verifyJar") {
+    notCompatibleWithConfigurationCache("reads build outputs and fails the build if they are wrong")
+    dependsOn(tasks.named("jar"))
+    dependsOn(tasks.named("test"))
 
     doLast {
-        def notice = { String m -> println("::notice::" + m) }
-        def fail = { String m -> println("::error::" + m) }
+        def problems = []
 
-        // --- unit tests -----------------------------------------------------
+        // --- unit tests actually ran, and passed ----------------------------
         def resultsDir = layout.buildDirectory.dir("test-results/test").get().asFile
         def suites = resultsDir.isDirectory()
                 ? (resultsDir.listFiles()?.findAll { it.name.endsWith(".xml") }?.sort() ?: [])
                 : []
         if (suites.isEmpty()) {
-            fail("no test results in build/test-results/test -- the test task did not run")
+            problems << "no test results in build/test-results/test: the test task did not run"
         }
         int total = 0, failed = 0, errored = 0, skipped = 0
         suites.each { File f ->
@@ -99,90 +101,83 @@ tasks.register("reportResult") {
                 def v = node.text().trim()
                 v.isEmpty() ? 0 : v.toInteger()
             }
-            int t = num(root.@tests), fl = num(root.@failures)
-            int er = num(root.@errors), sk = num(root.@skipped)
-            total += t
-            failed += fl
-            errored += er
-            skipped += sk
-            if (fl > 0 || er > 0) {
-                fail("test suite " + root.@name.text() + ": " + t + " run, " + fl + " failed, " + er + " errors")
-                root.testcase.each { tc ->
-                    def bads = []
-                    tc.failure.each { bads << it }
-                    tc.error.each { bads << it }
-                    bads.each { bad ->
-                        fail("  " + tc.@name.text() + ": " + bad.@message.text().take(220))
-                    }
-                }
-            } else {
-                notice("test suite " + root.@name.text() + ": " + t + " passed, " + sk + " skipped")
-            }
+            total += num(root.@tests)
+            failed += num(root.@failures)
+            errored += num(root.@errors)
+            skipped += num(root.@skipped)
+            println("test suite " + root.@name.text() + ": " + num(root.@tests) + " tests")
         }
-        notice("tests: " + total + " run, " + failed + " failed, " + errored + " errors, " + skipped + " skipped")
+        if (total < 10) {
+            problems << "only " + total + " tests ran across " + suites.size() + " suites; expected at least 10"
+        }
+        if (failed > 0 || errored > 0) {
+            problems << failed + " test failures and " + errored + " test errors"
+        }
+        println("tests: " + total + " run, " + failed + " failed, " + errored + " errors, " + skipped + " skipped")
 
-        // --- produced jars --------------------------------------------------
+        // --- the produced jar is a loadable mod -----------------------------
         def libs = layout.buildDirectory.dir("libs").get().asFile
-        def jars = libs.isDirectory()
-                ? (libs.listFiles()?.findAll { it.name.endsWith(".jar") }?.sort() ?: [])
+        def main = libs.isDirectory()
+                ? (libs.listFiles()?.findAll { it.name.endsWith(".jar") && !it.name.contains("sources") }?.sort() ?: [])
                 : []
-        if (jars.isEmpty()) {
-            fail("no jars in build/libs")
-            return
+        if (main.isEmpty()) {
+            problems << "no main jar in build/libs"
         }
-
-        def expected = [
-                "fabric.mod.json",
-                "net/amdfaster/AmdFasterClient.class",
-                "net/amdfaster/platform/GpuReport.class",
-                "net/amdfaster/platform/GpuIdentity.class",
-                "net/amdfaster/command/AmdFasterCommand.class",
-                "assets/amdfaster/icon.png"
-        ]
-
-        jars.each { File jar ->
-            def isSources = jar.name.contains("sources")
+        main.each { File jar ->
             def zip = new java.util.zip.ZipFile(jar)
             try {
                 def names = zip.entries().toList().collect { it.name }
-                notice("jar " + jar.name + ": " + jar.length() + " bytes, " + names.size() + " entries")
+                println("jar " + jar.name + ": " + jar.length() + " bytes, " + names.size() + " entries")
 
-                if (isSources) {
-                    return
-                }
+                def required = [
+                        "fabric.mod.json",
+                        "net/amdfaster/AmdFasterClient.class",
+                        "net/amdfaster/platform/GpuReport.class",
+                        "net/amdfaster/platform/GpuIdentity.class",
+                        "net/amdfaster/platform/AmdArchitecture.class",
+                        "net/amdfaster/command/AmdFasterCommand.class",
+                        "assets/amdfaster/icon.png"
+                ]
+                required.findAll { !names.contains(it) }.each { problems << jar.name + " is missing " + it }
 
+                // Minecraft ships lwjgl, lwjgl-glfw and lwjgl-opengl but not lwjgl-vulkan, so the
+                // Vulkan bindings have to be jar-in-jar'd or the mod cannot load them at runtime.
                 def nested = names.findAll { it.startsWith("META-INF/jars/") && it.endsWith(".jar") }
-                        .collect { it.substring(it.lastIndexOf("/") + 1) }.sort()
-                notice("jar " + jar.name + " jar-in-jar (" + nested.size() + "): "
-                        + (nested.isEmpty() ? "none" : nested.join(", ")))
-
-                def missing = expected.findAll { !names.contains(it) }
-                if (missing.isEmpty()) {
-                    notice("jar " + jar.name + ": all " + expected.size() + " expected entries present")
-                } else {
-                    fail("jar " + jar.name + " is missing: " + missing.join(", "))
+                        .collect { it.substring(it.lastIndexOf("/") + 1) }
+                if (!nested.any { it.startsWith("lwjgl-vulkan-") }) {
+                    problems << jar.name + " does not bundle lwjgl-vulkan (found: " + nested + ")"
                 }
 
                 def entry = zip.getEntry("fabric.mod.json")
                 if (entry == null) {
-                    fail("jar " + jar.name + ": no fabric.mod.json")
-                    return
-                }
-                def text = zip.getInputStream(entry).getText("UTF-8")
-                def version = (text =~ /"version"\s*:\s*"([^"]*)"/)
-                def id = (text =~ /"id"\s*:\s*"([^"]*)"/)
-                def ver = version ? version[0][1].toString() : "MISSING"
-                notice("jar " + jar.name + ": mod id " + (id ? id[0][1].toString() : "?") + ", version " + ver)
-                if (ver.contains('${')) {
-                    fail("jar " + jar.name + ": fabric.mod.json version placeholder was not expanded")
+                    problems << jar.name + " has no fabric.mod.json"
+                } else {
+                    def text = zip.getInputStream(entry).getText("UTF-8")
+                    def version = (text =~ /"version"\s*:\s*"([^"]*)"/)
+                    def ver = version ? version[0][1].toString() : null
+                    println("jar " + jar.name + ": version " + ver + ", jar-in-jar " + nested.sort())
+                    if (ver == null) {
+                        problems << jar.name + ": fabric.mod.json has no version field"
+                    } else if (ver.contains('$') || ver != project.version.toString()) {
+                        problems << jar.name + ": fabric.mod.json version is '" + ver
+                                + "' but the project version is '" + project.version + "'"
+                    }
+                    def entrypoint = (text =~ /"client"\s*:\s*\[\s*"([^"]*)"/)
+                    if (!entrypoint || entrypoint[0][1].toString() != "net.amdfaster.AmdFasterClient") {
+                        problems << jar.name + ": fabric.mod.json client entrypoint is wrong"
+                    }
                 }
             } finally {
                 zip.close()
             }
         }
+
+        if (!problems.isEmpty()) {
+            throw new GradleException("build output verification failed:\n  - " + problems.join("\n  - "))
+        }
     }
 }
 
-tasks.named("build") {
-    finalizedBy(tasks.named("reportResult"))
+tasks.named("check") {
+    dependsOn(tasks.named("verifyJar"))
 }
