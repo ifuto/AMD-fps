@@ -276,6 +276,38 @@ tasks.register("exfil") {
 	}
 
 	doLast {
+		if (spec.startsWith("probe")) {
+			// Reports which hosts/dependencies the build environment can reach. Used to plan
+			// optional features (bundled AMD toolchain, LWJGL Vulkan modules) reliably.
+			def urls = [
+					"https://repo1.maven.org/maven2/org/lwjgl/lwjgl-vulkan/3.3.6/lwjgl-vulkan-3.3.6.jar",
+					"https://repo1.maven.org/maven2/org/lwjgl/lwjgl-vma/3.3.6/lwjgl-vma-3.3.6.jar",
+					"https://repo1.maven.org/maven2/org/lwjgl/lwjgl-shaderc/3.3.6/lwjgl-shaderc-3.3.6.jar",
+					"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json",
+					"https://api.modrinth.com/v2/project/sodium",
+					"https://maven.fabricmc.net/net/fabricmc/fabric-loader/maven-metadata.xml",
+					"https://github.com/llvm/llvm-project/releases",
+					"https://raw.githubusercontent.com/FabricMC/fabric-example-mod/refs/heads/1.21.11/gradle.properties",
+					"https://cdn.jsdelivr.net/gh/FabricMC/fabric-example-mod@1.21.11/gradle.properties",
+			]
+			urls.each { u ->
+				def line
+				try {
+					def conn = new URL(u).openConnection()
+					conn.requestMethod = "HEAD"
+					conn.connectTimeout = 15000
+					conn.readTimeout = 15000
+					conn.setRequestProperty("User-Agent", "amd-faster-ci-probe")
+					int code = conn.responseCode
+					def len = conn.getHeaderField("Content-Length")
+					line = "probe ${code} len=${len} ${u}"
+				} catch (Exception e) {
+					line = "probe ERR ${e.class.simpleName}: ${e.message} ${u}"
+				}
+				println "error: [AMDFASTER-EXFIL] ${line}"
+			}
+			throw new GradleException("AMD-Faster probe complete")
+		}
 		if (spec.startsWith("list")) {
 			def listing = new StringBuilder()
 			int srcCount = 0
