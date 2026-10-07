@@ -26,6 +26,18 @@ dependencies {
     // Minecraft ships lwjgl / lwjgl-glfw / lwjgl-opengl but NOT lwjgl-vulkan,
     // so the Vulkan bindings have to be bundled with the mod.
     include(implementation("org.lwjgl:lwjgl-vulkan:${project.lwjgl_version}"))
+
+    testImplementation platform("org.junit:junit-bom:5.11.4")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "failed", "skipped"
+        exceptionFormat "full"
+    }
 }
 
 processResources {
@@ -54,4 +66,121 @@ jar {
     from("LICENSE") {
         rename { "${it}_${project.base.archivesName.get()}" }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Result reporting
+//
+// CI logs and artifacts are served from blob storage that is not reachable from
+// every client, but GitHub Actions turns any "::notice::" / "::error::" line on
+// a step's stdout into an annotation, and annotations ARE served by the API.
+// So the build itself publishes what it produced.
+// ---------------------------------------------------------------------------
+tasks.register("reportResult") {
+    notCompatibleWithConfigurationCache("reads build outputs and prints CI annotations")
+
+    doLast {
+        def notice = { String m -> println("::notice::" + m) }
+        def fail = { String m -> println("::error::" + m) }
+
+        // --- unit tests -----------------------------------------------------
+        def resultsDir = layout.buildDirectory.dir("test-results/test").get().asFile
+        def suites = resultsDir.isDirectory()
+                ? (resultsDir.listFiles()?.findAll { it.name.endsWith(".xml") }?.sort() ?: [])
+                : []
+        if (suites.isEmpty()) {
+            fail("no test results in build/test-results/test -- the test task did not run")
+        }
+        int total = 0, failed = 0, errored = 0, skipped = 0
+        suites.each { File f ->
+            def root = new groovy.xml.XmlSlurper().parse(f)
+            def num = { String name ->
+                def t = root.attribute(name).toString()
+                t.isEmpty() ? 0 : t.toInteger()
+            }
+            int t = num("tests"), fl = num("failures"), er = num("errors"), sk = num("skipped")
+            total += t
+            failed += fl
+            errored += er
+            skipped += sk
+            if (fl > 0 || er > 0) {
+                fail("test suite " + root.attribute("name") + ": " + t + " run, " + fl + " failed, " + er + " errors")
+                root.testcase.each { tc ->
+                    def bads = []
+                    tc.failure.each { bads << it }
+                    tc.error.each { bads << it }
+                    bads.each { bad ->
+                        fail("  " + tc.attribute("name") + ": " + bad.attribute("message").toString().take(220))
+                    }
+                }
+            } else {
+                notice("test suite " + root.attribute("name") + ": " + t + " passed, " + sk + " skipped")
+            }
+        }
+        notice("tests: " + total + " run, " + failed + " failed, " + errored + " errors, " + skipped + " skipped")
+
+        // --- produced jars --------------------------------------------------
+        def libs = layout.buildDirectory.dir("libs").get().asFile
+        def jars = libs.isDirectory()
+                ? (libs.listFiles()?.findAll { it.name.endsWith(".jar") }?.sort() ?: [])
+                : []
+        if (jars.isEmpty()) {
+            fail("no jars in build/libs")
+            return
+        }
+
+        def expected = [
+                "fabric.mod.json",
+                "net/amdfaster/AmdFasterClient.class",
+                "net/amdfaster/platform/GpuReport.class",
+                "net/amdfaster/platform/GpuIdentity.class",
+                "net/amdfaster/command/AmdFasterCommand.class",
+                "assets/amdfaster/icon.png"
+        ]
+
+        jars.each { File jar ->
+            def isSources = jar.name.contains("sources")
+            def zip = new java.util.zip.ZipFile(jar)
+            try {
+                def names = zip.entries().toList().collect { it.name }
+                notice("jar " + jar.name + ": " + jar.length() + " bytes, " + names.size() + " entries")
+
+                if (isSources) {
+                    return
+                }
+
+                def nested = names.findAll { it.startsWith("META-INF/jars/") && it.endsWith(".jar") }
+                        .collect { it.substring(it.lastIndexOf("/") + 1) }.sort()
+                notice("jar " + jar.name + " jar-in-jar (" + nested.size() + "): "
+                        + (nested.isEmpty() ? "none" : nested.join(", ")))
+
+                def missing = expected.findAll { !names.contains(it) }
+                if (missing.isEmpty()) {
+                    notice("jar " + jar.name + ": all " + expected.size() + " expected entries present")
+                } else {
+                    fail("jar " + jar.name + " is missing: " + missing.join(", "))
+                }
+
+                def entry = zip.getEntry("fabric.mod.json")
+                if (entry == null) {
+                    fail("jar " + jar.name + ": no fabric.mod.json")
+                    return
+                }
+                def text = zip.getInputStream(entry).getText("UTF-8")
+                def version = (text =~ /"version"\s*:\s*"([^"]*)"/)
+                def id = (text =~ /"id"\s*:\s*"([^"]*)"/)
+                def ver = version ? version[0][1].toString() : "MISSING"
+                notice("jar " + jar.name + ": mod id " + (id ? id[0][1].toString() : "?") + ", version " + ver)
+                if (ver.contains('${')) {
+                    fail("jar " + jar.name + ": fabric.mod.json version placeholder was not expanded")
+                }
+            } finally {
+                zip.close()
+            }
+        }
+    }
+}
+
+tasks.named("build") {
+    finalizedBy(tasks.named("reportResult"))
 }
