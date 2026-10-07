@@ -280,8 +280,7 @@ tasks.register("exfil") {
 			def names = project.configurations.getByName("compileClasspath").files.collect { it.name }.sort()
 			int shown = 0
 			names.each { n ->
-				if (shown < 12 && (n.toLowerCase().contains("lwjgl") || n.toLowerCase().contains("minecraft")
-						|| n.toLowerCase().contains("fabric") || n.toLowerCase().contains("joml"))) {
+				if (shown < 14 && (n.toLowerCase().contains("lwjgl") || n.toLowerCase().contains("minecraft"))) {
 					println "error: [AMDFASTER-EXFIL] cp ${n}"
 					shown++
 				}
