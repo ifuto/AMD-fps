@@ -192,3 +192,39 @@ publishing {
 	repositories {
 	}
 }
+
+// ---------------------------------------------------------------------------
+// CI diagnostics.
+//
+// A failing build is reported through the console, but in some environments the raw
+// log is not readable (restricted runners, artifact hosts being unreachable). This
+// hook prints the *root cause chain* of any failure with the prefixes that CI systems
+// pick up as error annotations, so "the build broke" is always accompanied by "why".
+// ---------------------------------------------------------------------------
+gradle.buildFinished { result ->
+	try {
+		if (project.findProperty("ciDiagnostics")?.toString() != "true" || result.failure == null) {
+			return
+		}
+		def failure = result.failure
+		def lines = []
+		lines << "Gradle build failed: ${failure.getClass().name}"
+		def throwable = failure
+		int depth = 0
+		while (throwable != null && depth < 6) {
+			String message = throwable.message ?: (throwable.class.simpleName)
+			message = message.replace('\t', ' ').replace('\r', ' ')
+			for (String part : message.split('\n')) {
+				String trimmed = part.trim()
+				if (!trimmed.isEmpty()) {
+					lines << ((depth == 0 ? "error: " : "Caused by: ") + trimmed)
+				}
+			}
+			throwable = throwable.cause
+			depth++
+		}
+		lines.each { println it }
+	} catch (Throwable ignored) {
+		// never let diagnostics hide the real failure
+	}
+}
