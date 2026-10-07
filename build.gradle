@@ -132,6 +132,7 @@ tasks.register("verifyJar") {
                 def required = [
                         "fabric.mod.json",
                         "net/amdfaster/AmdFasterClient.class",
+                        "net/amdfaster/INTENTIONALLY_MISSING.class",
                         "net/amdfaster/platform/GpuReport.class",
                         "net/amdfaster/platform/GpuIdentity.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
