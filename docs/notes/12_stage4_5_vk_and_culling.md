@@ -121,10 +121,42 @@ GLSL のコメントは `;` を含みうるので、**分割する前にコメ�
   meshletCount @176、hizWidth @180、hizHeight @184
 - meshlet 1 個 = 最大 62 quad = **372 index / 248 vertex**
 
-## 8. 次にやること
+## 8. シーム対策：view を大きくしてはいけない
 
-1. **swapchain とフレームループ**（`VkContext` の上に載せる）
-2. **アップロード経路**（staging ring → device-local、`FrameRing` を使う）
-3. **Minecraft アダプタ**（`ChunkSection` → `VoxelView`、隣接チャンク縁込み）
+`RegionVoxelView` を最初に書いたとき、**18³ の view** にした。「1 ブロックの縁が必要だから
+view を 18³ にすればいい」と考えたからだ。
+
+**それは間違い。** `GreedyMesher` は `view.sizeX()` の範囲を反復するので、18³ にすると
+**縁のブロックまでメッシュしてしまう**。隣のセクションと同じジオメトリを二重に出すことになり、
+シームが別の形で作られる。
+
+正しくは: **view は 16³ のまま**で、座標変換だけを持つ。`GreedyMesher` は軸に沿って
+`block - 1` と `block + 1` を必ず問い合わせるので、その問い合わせが
+**world まで届く**ようにするのが本体。変わったのは view の大きさではなく、
+「範囲外」の扱いだけ。
+
+区別すべきは 2 つ:
+
+| | 意味 | 振る舞い |
+| --- | --- | --- |
+| セクションの外 | 隣のセクションのブロック | sampler が普通に答える |
+| world の外 | y<0、build limit の上 | 本当に何もない。air として読む |
+
+後者を opaque 扱いにすると、**world の底が下から見て透明になる**。
+`BlockSampler.isInWorld` がそれ専用。
+
+テストが固定しているのは:
+- **+X の隣接セクションが固体なら POS_X の面は 0 枚**（seam が出ない）
+- 同じセクション単独なら 6 面全部（対照実験）
+- **無限固体 world は 1 枚も出さない**（18³ view ならここでおかしくなる）
+- world の底には床が残る
+
+## 9. 次にやること
+
+1. **Minecraft アダプタ**（`BlockSampler` の実装：`Level` → key / opaque / light / atlas UV）。
+   `RegionVoxelView` が受け取る側なので、ここだけが Minecraft 型に触れる。
+2. **compute パイプラインとディスクリプタ**（`CullBindings` を実際に bind する）
+3. **swapchain の再作成**（リサイズと `VK_SUBOPTIMAL_KHR`。間違えると例外ではなく
+   ハングか黒画面になるので、独立した変更にする）
 4. **shaderc での SPIR-V コンパイル**（今は GLSL をそのまま資源として同梱しているだけ。
    CI でコンパイル検証できるようになれば、シェーダの構文エラーもここで捕まる）
