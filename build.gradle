@@ -441,15 +441,21 @@ tasks.register("exfil") {
 
 // The CI log scraper keeps only the first matching lines, so when exfil is active it has to run
 // before anything else writes to the log.
+// When exfil is active it must run before anything else writes to the log, but it also fails the
+// build on purpose - so it becomes a dependency of compilation instead of a finalizer of `build`
+// (having both edges at once would create a dependency cycle).
+def amdFasterExfilActive = (project.findProperty("exfil")?.toString() ?: "none") != "none"
+
 tasks.matching { it.name == "compileJava" }.configureEach {
-	// `spec` above is local to the task registration closure, so read the property again here.
-	if ((project.findProperty("exfil")?.toString() ?: "none") != "none") {
+	if (amdFasterExfilActive) {
 		dependsOn "exfil"
 	}
 }
 
 tasks.named("build") {
-	finalizedBy "exfil"
+	if (!amdFasterExfilActive) {
+		finalizedBy "exfil"
+	}
 }
 
 // ---------------------------------------------------------------------------
