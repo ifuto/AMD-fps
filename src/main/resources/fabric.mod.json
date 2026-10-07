@@ -1,0 +1,37 @@
+{
+	"schemaVersion": 1,
+	"id": "amdfaster",
+	"version": "${version}",
+	"name": "AMD-Faster",
+	"description": "An AMD tuned rendering backend for Minecraft. Ships a GPU driven terrain pipeline (region BFS visibility, indirect batching, and task/mesh shaders on RDNA 2+), persistent mapped upload rings tuned for the AMD driver behaviour, and an offline shader/ISA analysis path built on AMD's own LLVM based compiler. The AMD answer to vendor specific renderers.",
+	"authors": [
+		"ifuto"
+	],
+	"contact": {
+		"homepage": "https://github.com/ifuto/AMD-fps",
+		"sources": "https://github.com/ifuto/AMD-fps",
+		"issues": "https://github.com/ifuto/AMD-fps/issues"
+	},
+	"license": "LGPL-3.0-or-later",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"dev.amdfaster.AmdFasterClient"
+		]
+	},
+	"mixins": [
+		{
+			"config": "amdfaster.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.17.0",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"modmenu": "*"
+	}
+}

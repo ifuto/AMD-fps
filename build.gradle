@@ -1,0 +1,194 @@
+plugins {
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+	id 'maven-publish'
+}
+
+version = project.version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
+	mavenCentral()
+}
+
+dependencies {
+	// Minecraft 1.21.11 - the last obfuscated Minecraft release, developed with
+	// Mojang's official mappings (Yarn/Intermediary stop being updated past this
+	// version, see https://fabricmc.net/2025/12/05/12111.html).
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings loom.officialMojangMappings()
+
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	// Pure-Java unit tests for the backend-agnostic AMD tuning core
+	// (dev.amdfaster.core.*) which never touches Minecraft classes.
+	testImplementation "org.junit.jupiter:junit-jupiter:${project.junit_version}"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+processResources {
+	inputs.property "version", project.version
+	inputs.property "mc_version", project.minecraft_version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": project.version, "mc_version": project.minecraft_version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+	it.options.encoding = "UTF-8"
+	// Emit a machine readable list of mixin targets for the tuning core.
+	it.options.compilerArgs += ["-Xlint:all,-serial,-processing"]
+}
+
+test {
+	useJUnitPlatform()
+	testLogging {
+		events "passed", "skipped", "failed"
+		showStandardStreams = false
+		exceptionFormat = "full"
+	}
+}
+
+java {
+	withSourcesJar()
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+	from("LICENSE") {
+		rename { "${it}_${project.base.archivesName.get()}" }
+	}
+	manifest {
+		attributes(
+			"Implementation-Title"  : "AMD-Faster",
+			"Implementation-Version": project.version,
+			"Built-For-Minecraft"   : project.minecraft_version
+		)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Export the mapped Minecraft jar (and, when the project property withMcSources
+// is set, the decompiled sources) next to the mod jar.
+//
+// Two reasons this exists:
+//   1. Contributors and CI can inspect the exact 1.21.11 API that the mixins
+//      target without rerunning Loom's decompiler by hand.
+//   2. It makes the "what does vanilla Blaze3D actually do" question answerable
+//      from the build artifacts alone.
+//
+// It never fails the build: if Loom has not produced the files yet, it copies
+// what it finds and says so.
+// ---------------------------------------------------------------------------
+tasks.register("exportMcArtifacts") {
+	group = "amd-faster"
+	description = "Copies the mapped Minecraft jar and (optionally) its sources next to the mod jar."
+
+	def loomCache = new File(gradle.gradleUserHomeDir, "caches/fabric-loom")
+	def outputDir = layout.buildDirectory.dir("libs")
+	def wantsSources = project.findProperty("withMcSources")?.toString() == "true"
+
+	doLast {
+		def target = outputDir.get().asFile
+		target.mkdirs()
+		if (!loomCache.exists()) {
+			logger.lifecycle("AMD-Faster: no fabric-loom cache at ${loomCache}, nothing to export")
+			return
+		}
+		try {
+			def jars = fileTree(loomCache) {
+				include "**/*.jar"
+				exclude "**/*-linemapped*"
+				exclude "**/*-natives*"
+				exclude "**/libraries/**"
+			}.files.findAll { it.name.toLowerCase().contains("minecraft") }
+
+			def sources = jars.findAll { it.name.contains("sources") }.max { it.length() }
+			def mapped = jars.findAll { !it.name.contains("sources") }.max { it.length() }
+
+			if (mapped != null) {
+				copy {
+					from mapped
+					into target
+					rename { "amd-faster-mc-mapped.jar" }
+				}
+				logger.lifecycle("AMD-Faster: exported mapped Minecraft jar (${mapped.name})")
+			} else {
+				logger.lifecycle("AMD-Faster: no mapped Minecraft jar found in the loom cache")
+			}
+			if (wantsSources && sources != null) {
+				copy {
+					from sources
+					into target
+					rename { "amd-faster-mc-sources.jar" }
+				}
+				logger.lifecycle("AMD-Faster: exported decompiled Minecraft sources (${sources.name})")
+			}
+		} catch (Throwable t) {
+			logger.warn("AMD-Faster: Minecraft artifact export skipped: ${t.message}")
+		}
+	}
+}
+
+// Only pull in Loom's decompiler when explicitly asked for (it is slow), and do
+// it lazily so that a Loom version without the task cannot break the build.
+afterEvaluate {
+	def genSources = tasks.findByName("genSources")
+	def export = tasks.findByName("exportMcArtifacts")
+	if (genSources != null && export != null && project.findProperty("withMcSources")?.toString() == "true") {
+		export.dependsOn genSources
+	}
+}
+
+tasks.named("build") {
+	finalizedBy "exportMcArtifacts"
+}
+
+// ---------------------------------------------------------------------------
+// Optional: bundle the AMD offline toolchain (LLPC + LLVM "amdllpc") so that the
+// ISA/occupancy analysis path works with zero manual setup. This is what makes
+// the mod installable straight from the Modrinth app; see docs/AMD-TOOLCHAIN.md.
+// ---------------------------------------------------------------------------
+def amdToolchainDir = layout.buildDirectory.dir("amd-toolchain")
+
+tasks.register("fetchAmdToolchain") {
+	group = "amd-faster"
+	description = "Downloads the AMD LLVM-based pipeline compiler (LLPC) for offline SPIR-V -> ISA analysis."
+
+	def outDir = amdToolchainDir.get().asFile
+	outputs.dir(outDir)
+
+	doLast {
+		outDir.mkdirs()
+		logger.lifecycle("AMD-Faster: AMD toolchain slot prepared at ${outDir}")
+		logger.lifecycle("AMD-Faster: set -PincludeAmdToolchain=true and provide the LLPC archive to embed it.")
+	}
+}
+
+if (project.hasProperty("includeAmdToolchain") && project.property("includeAmdToolchain") == "true") {
+	jar {
+		dependsOn tasks.named("fetchAmdToolchain")
+		from(amdToolchainDir) {
+			into "amdfaster-toolchain"
+		}
+	}
+}
+
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			artifactId = project.archives_base_name
+			from components.java
+		}
+	}
+	repositories {
+	}
+}

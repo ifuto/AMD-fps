@@ -1,0 +1,34 @@
+AMD-Faster - third party notices
+================================
+
+AMD-Faster is an independent, clean-room implementation. No source code was copied from Sodium,
+Nvidium, Iris, VulkanMod, Mesa, LLVM or any AMD driver; those projects were studied for their public
+design and their published behaviour, and the resulting ideas are re-implemented here from the
+hardware documentation.
+
+Ideas and constants that AMD-Faster does derive from published third party material:
+
+* AMD RDNA / RDNA2 / RDNA3 / RDNA4 ISA Reference Guides, the RDNA Architecture Whitepaper and the
+  GPUOpen performance guides: register file sizes, LDS sizes, wave32/wave64 rules, allocation
+  granularities, occupancy behaviour, and the architecture/family classification in
+  dev.amdfaster.core.arch.
+* LLVM's AMDGPU backend (Apache-2.0 with LLVM exceptions) is used as the cross-check for the
+  occupancy model: the formulas in dev.amdfaster.core.occupancy.OccupancyModel mirror
+  AMDGPUBaseInfo.cpp::getNumWavesPerEUWithNumVGPRs() and the maxima in AMDGPU.td
+  (FeatureMaxWavesPerEU*, Feature1536VGPRs).
+* Mesa 3D (MIT) radeonsi/RADV/ACO sources were consulted for driver behaviour such as
+  lds_size_per_workgroup and num_simd_per_compute_unit.
+* PCI device ids in AmdGpuIdentifier are public hardware identifiers.
+
+Bundled / optional components
+-----------------------------
+* LWJGL 3 (BSD-3-Clause) provides the Vulkan, VMA (Vulkan Memory Allocator), shaderc and SPIRV-Cross
+  bindings used by the Vulkan backend. They are pulled from Maven Central and, when the mod is built
+  with the natives embedded, redistributed unmodified inside the jar exactly as the LWJGL project
+  ships them.
+* AMD's LLVM based pipeline compiler (LLPC, MIT, GPUOpen-Drivers/llpc) is downloaded only when the
+  optional offline ISA analysis is enabled (-PincludeAmdToolchain=true) and is redistributed
+  unmodified with its own licence text in amdfaster-toolchain/. AMD-Faster works without it; the
+  toolchain only adds offline shader/ISA analysis and pipeline precompilation.
+
+Licence of AMD-Faster itself: LGPL-3.0-or-later (see LICENSE).
