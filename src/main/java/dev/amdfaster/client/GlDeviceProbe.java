@@ -7,7 +7,6 @@ import dev.amdfaster.core.backend.DriverKind;
 import dev.amdfaster.core.backend.GpuCapabilities;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GLContext;
 import org.lwjgl.opengl.GLCapabilities;
 import org.lwjgl.system.Platform;
 
@@ -47,8 +46,13 @@ public final class GlDeviceProbe {
     public static Optional<Result> probe() {
         GLCapabilities caps;
         try {
-            caps = GLContext.getCapabilities();
-        } catch (IllegalStateException noContext) {
+            // LWJGL 3 exposes the capabilities of the *current* context through GL; there is no
+            // GLContext class. Without a current context this throws, which is exactly the case the
+            // caller has to handle (Minecraft may create its device on a different thread).
+            caps = GL.getCapabilities();
+        } catch (IllegalStateException | NullPointerException noContext) {
+            return Optional.empty();
+        } catch (LinkageError missingNatives) {
             return Optional.empty();
         }
         if (caps == null) {
