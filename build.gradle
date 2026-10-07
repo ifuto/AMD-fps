@@ -132,7 +132,6 @@ tasks.register("verifyJar") {
                 def required = [
                         "fabric.mod.json",
                         "net/amdfaster/AmdFasterClient.class",
-                        "net/amdfaster/INTENTIONALLY_MISSING.class",
                         "net/amdfaster/platform/GpuReport.class",
                         "net/amdfaster/platform/GpuIdentity.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
@@ -174,7 +173,10 @@ tasks.register("verifyJar") {
         }
 
         if (!problems.isEmpty()) {
-            throw new GradleException("build output verification failed:\n  - " + problems.join("\n  - "))
+            // One line: the CI workflow only echoes log lines that match a fixed error
+            // pattern, and "Caused by:" is one of them. A multi-line message would put the
+            // actual problems on lines that never reach the annotation.
+            throw new GradleException("build output verification failed -> " + problems.join(" | "))
         }
     }
 }
