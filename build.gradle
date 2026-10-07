@@ -280,7 +280,9 @@ def amdFasterFindJar = { String includePat, boolean wantSources ->
 
 // Compresses text, Base64s it and prints it as CI-diagnostic error lines.
 def amdFasterEmit = { String text, int startChunk ->
-	int chunkSize = 12000
+	// GitHub truncates a check annotation message at about 4 KiB, so a chunk has to stay under
+	// that (the line number and prefix the workflow adds eat into the same budget).
+	int chunkSize = 3600
 	def compressed = new java.io.ByteArrayOutputStream()
 	new java.util.zip.GZIPOutputStream(compressed).withCloseable { it.write(text.getBytes("UTF-8")) }
 	def encoded = Base64.encoder.encodeToString(compressed.toByteArray())
