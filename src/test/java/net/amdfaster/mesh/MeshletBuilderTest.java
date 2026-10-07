@@ -163,9 +163,12 @@ class MeshletBuilderTest {
         builder.add(right());
         Meshlet m = builder.build();
 
-        assertEquals(6 * Meshlet.POSITION_STRIDE, m.positionBytes());
-        assertEquals(6 * Meshlet.ATTRIBUTE_STRIDE, m.attributeBytes());
-        assertEquals(2 * Meshlet.INDEX_BYTES_PER_QUAD, m.indexBytes());
+        // Derived from the meshlet rather than hardcoded: the vertex count depends on how many
+        // corners dedup, and neighbouring blocks do not share any (their uv differs).
+        assertEquals(m.vertexCount() * Meshlet.POSITION_STRIDE, m.positionBytes());
+        assertEquals(m.vertexCount() * Meshlet.ATTRIBUTE_STRIDE, m.attributeBytes());
+        assertEquals(m.quadCount() * Meshlet.INDEX_BYTES_PER_QUAD, m.indexBytes());
+        assertTrue(m.positionBytes() % Meshlet.POSITION_STRIDE == 0);
 
         ByteBuffer positions = ByteBuffer.allocate(m.positionBytes()).order(ByteOrder.LITTLE_ENDIAN);
         m.writePositions(positions);

@@ -15,11 +15,11 @@ package net.amdfaster.mesh;
 public enum Orientation {
 
     NEG_X(0, -1, 0, 0),
-    POS_X(1, 1, 0, 0),
-    NEG_Y(2, 0, -1, 0),
-    POS_Y(3, 0, 1, 0),
-    NEG_Z(4, 0, 0, -1),
-    POS_Z(5, 0, 0, 1);
+    POS_X(0, 1, 0, 0),
+    NEG_Y(1, 0, -1, 0),
+    POS_Y(1, 0, 1, 0),
+    NEG_Z(2, 0, 0, -1),
+    POS_Z(2, 0, 0, 1);
 
     public static final int COUNT = 6;
 
@@ -72,7 +72,13 @@ public enum Orientation {
         this.nz = nz;
     }
 
-    /** 0 = X, 1 = Y, 2 = Z. */
+    /**
+     * 0 = X, 1 = Y, 2 = Z: the axis this orientation's normal lies along.
+     *
+     * <p>Not the same as {@link #ordinal()}, which distinguishes the two directions. Getting the
+     * two confused silently makes a quad degenerate, because the plane coordinate is then taken
+     * from an axis the quad actually varies along.
+     */
     public int axis() {
         return this.axis;
     }

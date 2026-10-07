@@ -57,6 +57,21 @@ class OrientationTest {
     }
 
     @Test
+    void axisIsTheAxisTheNormalLiesAlong() {
+        for (Orientation o : Orientation.values()) {
+            int[] n = {o.normalX(), o.normalY(), o.normalZ()};
+            for (int axis = 0; axis < 3; axis++) {
+                if (axis == o.axis()) {
+                    assertEquals(o.isPositive() ? 1 : -1, n[axis], o + ": normal on its own axis");
+                } else {
+                    assertEquals(0, n[axis], o + ": normal must be zero off its axis");
+                }
+            }
+            assertTrue(o.axis() >= 0 && o.axis() < 3, o + ": axis out of range");
+        }
+    }
+
+    @Test
     void bitsAreDistinct() {
         int all = 0;
         for (Orientation o : Orientation.values()) {
