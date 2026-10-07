@@ -365,24 +365,32 @@ tasks.register("exfil") {
 				println "error: [AMDFASTER-EXFIL] no mapped Minecraft jar in the loom cache"
 				throw new GradleException("exfil: mapped jar missing")
 			}
-			def out = new java.io.ByteArrayOutputStream()
+			// A deterministic container: magic, count, then name/data pairs. Determinism matters
+			// because a payload larger than one CI run is paged across runs, and the chunk
+			// boundaries are computed from the Base64 of the compressed bytes.
+			def body = new java.io.ByteArrayOutputStream()
+			def header = java.nio.ByteBuffer.allocate(8).put("AFZ1".getBytes("US-ASCII"))
+					.putInt(0).array()
+			body.write(header)
 			int n = 0
-			new java.util.zip.ZipOutputStream(out).withCloseable { zip ->
-				new java.util.zip.ZipFile(jar).withCloseable { source ->
-					def entries = source.entries().findAll { !it.directory && it.name.endsWith(".class") }
-							.findAll { entry -> patterns.isEmpty()
-									|| patterns.any { entry.name.contains(it) } }
-							.sort { it.name }
-					entries.each { entry ->
-						zip.putNextEntry(new java.util.zip.ZipEntry(entry.name))
-						zip.write(source.getInputStream(entry).bytes)
-						zip.closeEntry()
-						n++
-					}
+			new java.util.zip.ZipFile(jar).withCloseable { source ->
+				def entries = source.entries().findAll { !it.directory && it.name.endsWith(".class") }
+						.findAll { entry -> patterns.isEmpty() || patterns.any { entry.name.contains(it) } }
+						.sort { it.name }
+				entries.each { entry ->
+					byte[] nameBytes = entry.name.getBytes("UTF-8")
+					byte[] data = source.getInputStream(entry).bytes
+					body.write(java.nio.ByteBuffer.allocate(4).putInt(nameBytes.length).array())
+					body.write(nameBytes)
+					body.write(java.nio.ByteBuffer.allocate(4).putInt(data.length).array())
+					body.write(data)
+					n++
 				}
 			}
+			byte[] container = body.toByteArray()
+			java.nio.ByteBuffer.wrap(container).putInt(4, n)
 			println "error: [AMDFASTER-EXFIL] jar=${jar.name} patterns=${patterns} classes=${n} from=${startChunk}"
-			amdFasterEmit(Base64.encoder.encodeToString(out.toByteArray()), startChunk)
+			amdFasterEmit(Base64.encoder.encodeToString(container), startChunk)
 			throw new GradleException("AMD-Faster exfil classes: ${n}")
 		}
 		if (spec.startsWith("probe")) {
