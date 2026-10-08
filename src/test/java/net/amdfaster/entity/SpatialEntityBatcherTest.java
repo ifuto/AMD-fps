@@ -138,7 +138,9 @@ class SpatialEntityBatcherTest {
         assertEquals(3.75f, batch.minX(), 0f);
         assertEquals(6.5f, batch.maxX(), 0f);
         assertEquals(64f, batch.minY(), 0f);
-        assertEquals(66.8f, batch.maxY(), 1e-5f);
+        // 65.8, from the first entity: its feet are at 64 and it is 1.8 tall. The second entity's
+        // top is at 65.5, so it does not reach as high even though it stands a block higher.
+        assertEquals(65.8f, batch.maxY(), 1e-5f);
         assertEquals(3.75f, batch.minZ(), 0f);
         assertEquals(5.5f, batch.maxZ(), 0f);
     }
