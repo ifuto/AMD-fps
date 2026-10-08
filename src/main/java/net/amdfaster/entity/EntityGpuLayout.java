@@ -109,8 +109,9 @@ public final class EntityGpuLayout {
      * would allocate a record per instance, which is exactly what {@link EntityBuffer} avoids.
      */
     public static void write(ByteBuffer buffer, int index, EntityBuffer source, int sourceIndex) {
+        // offsetOf already rejects a negative index, so only the upper bound is checked here.
         int base = offsetOf(index);
-        if (base < 0 || base + INSTANCE_BYTES > buffer.capacity()) {
+        if (base + INSTANCE_BYTES > buffer.capacity()) {
             throw new IndexOutOfBoundsException("buffer holds "
                     + (buffer.capacity() / INSTANCE_BYTES) + " instances, cannot write index " + index);
         }

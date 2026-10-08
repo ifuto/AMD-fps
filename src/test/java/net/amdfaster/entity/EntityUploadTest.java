@@ -124,7 +124,10 @@ class EntityUploadTest {
         EntityGpuLayout.write(oneSlot, 0, source, 0);   // the one slot it has is fine
         assertThrows(IndexOutOfBoundsException.class,
                 () -> EntityGpuLayout.write(oneSlot, 1, source, 1));
-        assertThrows(IndexOutOfBoundsException.class,
+        // A negative index is rejected by offsetOf, before the capacity check, and as an
+        // IllegalArgumentException because it is a nonsense argument rather than a buffer that ran
+        // out of room. Asserting the type pins which of the two it is.
+        assertThrows(IllegalArgumentException.class,
                 () -> EntityGpuLayout.write(oneSlot, -1, source, 0));
         ByteBuffer nothing = ByteBuffer.allocate(0).order(ByteOrder.LITTLE_ENDIAN);
         assertThrows(IndexOutOfBoundsException.class,
