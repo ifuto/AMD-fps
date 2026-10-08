@@ -87,11 +87,11 @@ public final class ArrayVoxelView implements VoxelView {
     }
 
     @Override
-    @Override
     public boolean isSingleSided(int key) {
         return this.singleSidedKeys.contains(key);
     }
 
+    @Override
     public int color(int key) {
         return key;
     }
