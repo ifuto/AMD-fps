@@ -183,6 +183,45 @@ class EntityOcclusionCullerTest {
     }
 
     @Test
+    void anEntityWhoseBoxContainsTheCameraIsNeverCulled() {
+        // The case that breaks conservative depth culling, and the reason a chunk renderer has to
+        // treat its own chunk differently.
+        //
+        // For every box except the one containing the camera, the nearest point of the AABB
+        // underestimates how close the real geometry is: the box is a superset, so its near face is
+        // in front of or level with the nearest surface. Underestimating the depth makes the test
+        // more likely to keep the box, which is the safe direction.
+        //
+        // The box that contains the camera is the exception. Its nearest point is the camera
+        // itself, so the computed depth is the closest anything can be, while the geometry the box
+        // stands for is all around the player. The comparison then reads "this box is nearer than
+        // the wall" against a footprint that is entirely wall, and culls geometry the player is
+        // standing inside.
+        //
+        // Here the entity is at the origin with the camera at the origin, so the box spans z from
+        // -0.5 to +0.5 and a corner sits behind the camera plane. That makes the projection
+        // unprojectable, which this pass keeps -- so the failure mode is closed by the same guard
+        // that handles a box behind the camera, rather than needing a special case for the
+        // containing section.
+        EntityBuffer entities = one(0f, 0f, 0f);
+        EntityCuller frustumPass = new EntityCuller();
+        EntityOcclusionCuller culler = new EntityOcclusionCuller();
+        PyramidGeometry pyramid = new PyramidGeometry(SCREEN, SCREEN);
+
+        frustumPass.cull(entities, null, 0f, 0f, 0f);
+        culler.cull(entities, frustumPass, projection(), pyramid,
+                EntityOcclusionCuller.flatWall(0.9f), settled());
+
+        assertEquals(1, culler.survivorCount(), "the section the camera is inside must be kept");
+        assertEquals(0, culler.culled());
+        assertEquals(1, culler.keptUnreliableProjection(),
+                "it has to be kept because the projection is unreliable, not because the depth "
+                        + "comparison happened to pass -- a projection that produced numbers here "
+                        + "would cull it");
+        assertEquals(0, culler.tested());
+    }
+
+    @Test
     void everyCandidateIsAccountedFor() {
         // survivors + culled + keptOffScreen + keptUnreliableProjection must equal the input, or the
         // pass is losing entities somewhere the counters do not describe.
