@@ -115,17 +115,24 @@ Nothing is drawn by this mod yet; Minecraft still renders through its own pipeli
 3. **Greedy mesher** — done, against a Minecraft-free `VoxelView` abstraction.
 4. **Minecraft adapter** — `ChunkSection` and `BlockRenderManager` behind `VoxelView`, including
    the one-block border from neighbouring sections that makes section boundaries correct.
-5. **Vulkan bring-up** — instance, device and queues are done; swapchain, pipeline and render graph
-   are next.
-6. **GPU-driven culling** — the two-pass shaders and their CPU mirrors are done. What is left is
-   the descriptor sets, the compute pipelines and the barrier between the passes. Culling should
-   dispatch 16 sections per wave, not one.
-7. **SPIR-V in the jar** — `shaderc` now compiles the GLSL in a test, which found two real errors
-   on the first run. The next step is moving it into the build so the mod ships pre-compiled
-   SPIR-V instead of source.
-8. **Transparent sorting on the GPU** — radix sort with on-chip local sort. Not bitonic: bitonic
+5. **Vulkan bring-up** — instance, device, queues, surface selection and the swapchain are done.
+   Swapchain *recreation* on resize is not; see the notes for why that is deferred.
+6. **GPU-driven culling** — the two-pass shaders, their CPU mirrors and the compute pipelines are
+   done. What is left is writing the descriptors and the barrier between the passes. Culling should
+   dispatch 16 meshlets per thread, not one.
+7. **SPIR-V in the jar** — done. `shaderc` compiles the GLSL during the build and `verifyJar`
+   asserts the modules are in the jar. The compiler found two real errors on its first run.
+8. **Compute pipelines** — done. `gpu/CullingPipeline` creates the frustum and occlusion
+   pipelines from the jar's SPIR-V; the descriptor layout is held as data in `gpu/CullBindings`
+   so the shaders, the layouts and the writes cannot drift apart.
+9. **Command recording** — the dispatches, the barrier between the two passes, and the indirect
+   draw that consumes the count buffer. Then the vertex and fragment shaders, so there is
+   something to draw.
+10. **Swapchain recreation** — deliberately not done yet; see the notes. Getting it wrong shows
+    a black window instead of throwing, which is worse than a crash.
+11. **Transparent sorting on the GPU** — radix sort with on-chip local sort. Not bitonic: bitonic
    is O(n log²n), needs a power of two, and scatters to global memory.
-9. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
+12. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
 
 ## Requirements
 
