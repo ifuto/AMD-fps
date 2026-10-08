@@ -47,6 +47,12 @@ public final class EntityGpuLayout {
     public static final int OFFSET_HALF_WIDTH = 20;
     public static final int OFFSET_HEIGHT = 24;
 
+    /**
+     * The four bytes that pad a record to {@value #INSTANCE_BYTES}. Written as zero on every
+     * upload; see {@link #write(ByteBuffer, int, EntityBuffer, int)}.
+     */
+    public static final int OFFSET_PADDING = 28;
+
     /** Fields actually written; the record is bigger than this because of the padding. */
     public static final int FIELDS = 7;
 
@@ -94,6 +100,52 @@ public final class EntityGpuLayout {
     }
 
     /** Writes a whole batch set, instances in order. Returns the number of instances written. */
+    /**
+     * Writes one instance straight out of an {@link EntityBuffer}, without materialising an
+     * {@link EntityInstance}.
+     *
+     * <p>This is the overload the scalable path uses. The record-taking {@link #write} above is
+     * kept for callers that have a single entity in hand, but routing a whole frame through it
+     * would allocate a record per instance, which is exactly what {@link EntityBuffer} avoids.
+     */
+    public static void write(ByteBuffer buffer, int index, EntityBuffer source, int sourceIndex) {
+        int base = offsetOf(index);
+        if (base < 0 || base + INSTANCE_BYTES > buffer.capacity()) {
+            throw new IndexOutOfBoundsException("buffer holds "
+                    + (buffer.capacity() / INSTANCE_BYTES) + " instances, cannot write index " + index);
+        }
+        // Absolute puts in ascending offset order. The buffer this lands in is host-visible and
+        // therefore write-combined, and write-combined memory coalesces only writes that arrive in
+        // order -- writing the fields out of order turns one bus transaction into eight.
+        buffer.putInt(base + OFFSET_X, Float.floatToRawIntBits(source.x(sourceIndex)));
+        buffer.putInt(base + OFFSET_Y, Float.floatToRawIntBits(source.y(sourceIndex)));
+        buffer.putInt(base + OFFSET_Z, Float.floatToRawIntBits(source.z(sourceIndex)));
+        buffer.putInt(base + OFFSET_YAW, Float.floatToRawIntBits(source.yaw(sourceIndex)));
+        buffer.putInt(base + OFFSET_LIGHT, source.light(sourceIndex));
+        buffer.putInt(base + OFFSET_HALF_WIDTH, Float.floatToRawIntBits(source.halfWidth(sourceIndex)));
+        buffer.putInt(base + OFFSET_HEIGHT, Float.floatToRawIntBits(source.height(sourceIndex)));
+        // Written every time rather than left alone: the buffer is reused across frames, and stale
+        // padding would make two frames with identical entities upload different bytes, which
+        // defeats any attempt to skip an unchanged upload.
+        buffer.putInt(base + OFFSET_PADDING, 0);
+    }
+
+    /**
+     * Writes a {@link SpatialBatchSet} into an instance buffer.
+     *
+     * <p>The set's indices are already in batch order, so this is one ascending pass and the bytes
+     * for a batch are contiguous -- which is what lets the draw use
+     * {@code firstInstance = batch.firstInstance()} with no per-batch offset fixups.
+     *
+     * @return how many instances were written
+     */
+    public static int writeAll(ByteBuffer buffer, EntityBuffer source, SpatialBatchSet set) {
+        for (int i = 0; i < set.instanceCount(); i++) {
+            write(buffer, i, source, set.instanceIndex(i));
+        }
+        return set.instanceCount();
+    }
+
     public static int writeAll(ByteBuffer buffer, EntityBatchSet set) {
         int index = 0;
         for (EntityInstance instance : set.instances()) {
