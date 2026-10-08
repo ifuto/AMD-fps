@@ -83,6 +83,8 @@ class CullShaderTest {
         assertEquals(CullBindings.MESHLET_BUFFER_BINDING, found.get("MeshletData"));
         assertEquals(CullBindings.DRAW_COMMAND_BUFFER_BINDING, found.get("DrawCommands"));
         assertEquals(CullBindings.COUNTER_BUFFER_BINDING, found.get("Counters"));
+        assertEquals(CullBindings.ORIENTATION_BUFFER_BINDING, found.get("MeshletOrientations"),
+                "the back-face cull reads the per-meshlet orientation");
     }
 
     @Test

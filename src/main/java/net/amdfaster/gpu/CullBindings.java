@@ -39,6 +39,18 @@ public final class CullBindings {
     public static final int HIZ_IMAGE_BINDING = 4;
 
     /**
+     * One {@code uint} per meshlet: its {@code Orientation.ordinal()}, 0..5.
+     *
+     * <p>A separate buffer rather than three more bits in the packed bounds. Six orientations need
+     * three bits and the bounds word has exactly two free, and the alternatives were all worse --
+     * stealing a bit from a bounds field would cap meshlets at 8 blocks wide, and hiding it in the
+     * high bits of a section origin word would break the day the world gets taller. Four bytes per
+     * meshlet is small next to the 5 332 bytes of mesh data, and the root signature has nine DWORDs
+     * of its thirteen spare, so the extra binding costs nothing that was being used.
+     */
+    public static final int ORIENTATION_BUFFER_BINDING = 5;
+
+    /**
      * Threads per work group. 64 is the size AMD recommends across every generation: it is two
      * full wave32s on RDNA and one full wave64 on GCN, so no lane is masked out on either.
      */
@@ -46,6 +58,9 @@ public final class CullBindings {
 
     /** Bytes per meshlet record: packed bounds and three section-origin words. */
     public static final int MESHLET_RECORD_BYTES = 16;
+
+    /** Bytes per meshlet in the orientation buffer. */
+    public static final int ORIENTATION_BYTES_PER_MESHLET = 4;
 
     /** Bytes in one {@code VkDrawIndexedIndirectCommand}. */
     public static final int DRAW_COMMAND_BYTES = 20;
@@ -106,7 +121,9 @@ public final class CullBindings {
                 new Binding(FRAME_UBO_BINDING, DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, STAGE_COMPUTE, "frame"),
                 new Binding(MESHLET_BUFFER_BINDING, DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, STAGE_COMPUTE, "meshlets"),
                 new Binding(DRAW_COMMAND_BUFFER_BINDING, DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, STAGE_COMPUTE, "draws"),
-                new Binding(COUNTER_BUFFER_BINDING, DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, STAGE_COMPUTE, "counters"));
+                new Binding(COUNTER_BUFFER_BINDING, DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, STAGE_COMPUTE, "counters"),
+                new Binding(ORIENTATION_BUFFER_BINDING, DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, STAGE_COMPUTE,
+                        "orientations"));
     }
 
     /**

@@ -15,6 +15,12 @@ public final class ArrayVoxelView implements VoxelView {
     private final int sizeY;
     private final int sizeZ;
     private final int[] keys;
+
+    /**
+     * Keys that were stored against an opaque voxel, and so are seen from one side only. Tracked per
+     * distinct key because {@link #isSingleSided} is asked per key, not per position.
+     */
+    private final java.util.Set<Integer> singleSidedKeys = new java.util.HashSet<>();
     private final boolean[] opaque;
 
     public ArrayVoxelView(int sizeX, int sizeY, int sizeZ) {
@@ -36,6 +42,9 @@ public final class ArrayVoxelView implements VoxelView {
 
     public ArrayVoxelView set(int x, int y, int z, int key, boolean opaque) {
         this.keys[index(x, y, z)] = key;
+        if (opaque) {
+            this.singleSidedKeys.add(key);
+        }
         this.opaque[index(x, y, z)] = opaque;
         return this;
     }
@@ -78,6 +87,11 @@ public final class ArrayVoxelView implements VoxelView {
     }
 
     @Override
+    @Override
+    public boolean isSingleSided(int key) {
+        return this.singleSidedKeys.contains(key);
+    }
+
     public int color(int key) {
         return key;
     }

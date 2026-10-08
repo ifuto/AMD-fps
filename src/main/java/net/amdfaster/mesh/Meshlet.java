@@ -82,10 +82,21 @@ public final class Meshlet {
     private final int maxX;
     private final int maxY;
     private final int maxZ;
+    private final boolean singleSided;
+
+    /**
+     * Bit of {@link #packedBounds()} that says every face in this meshlet is single-sided.
+     *
+     * <p>Back-face culling a whole meshlet is only sound when nothing in it needs both sides drawn.
+     * The flag is opt-in: a meshlet whose builder was never told otherwise keeps it clear and is
+     * never back-face culled, so the worst case of forgetting to set it is a missed optimisation
+     * rather than geometry that disappears.
+     */
+    public static final int SINGLE_SIDED_BIT = 30;
 
     Meshlet(Orientation orientation, short[] positions, float[] uvs, byte[] quadIndices,
             int[] quadColors, int[] vertexLights, int quadCount, int vertexCount,
-            int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
+            int minX, int minY, int minZ, int maxX, int maxY, int maxZ, boolean singleSided) {
         if (quadCount > MAX_QUADS) {
             throw new IllegalArgumentException("meshlet has " + quadCount + " quads, max " + MAX_QUADS);
         }
@@ -106,6 +117,7 @@ public final class Meshlet {
         this.maxX = maxX;
         this.maxY = maxY;
         this.maxZ = maxZ;
+        this.singleSided = singleSided;
     }
 
     public Orientation orientation() {
@@ -188,6 +200,15 @@ public final class Meshlet {
     }
 
     /**
+     * Whether every face in this meshlet can be assumed to be seen from one side only.
+     *
+     * <p>Required before back-face culling the meshlet as a whole. See {@link #SINGLE_SIDED_BIT}.
+     */
+    public boolean singleSided() {
+        return this.singleSided;
+    }
+
+    /**
      * The culling data the GPU gets, packed into 4 bytes.
      *
      * <p>Six axis-aligned bounds at 5 bits each (0..16 section-local) = 30 bits. The compressed
@@ -202,7 +223,8 @@ public final class Meshlet {
                 | ((this.minZ & 0x1F) << 10)
                 | ((this.maxX & 0x1F) << 15)
                 | ((this.maxY & 0x1F) << 20)
-                | ((this.maxZ & 0x1F) << 25);
+                | ((this.maxZ & 0x1F) << 25)
+                | (this.singleSided ? 1 << SINGLE_SIDED_BIT : 0);
     }
 
     public static int unpackMinX(int packedBounds) {

@@ -53,7 +53,8 @@ public final class SectionMesher {
     /** Meshes a section with flat lighting taken from the view's merge key. */
     public static SectionMesh mesh(VoxelView view, int originX, int originY, int originZ) {
         SectionMeshBuilder builder = new SectionMeshBuilder(originX, originY, originZ);
-        GreedyMesher.mesh(view, face -> builder.add(toQuad(face, view)));
+        GreedyMesher.mesh(view, face -> builder.add(toQuad(face, view),
+                view.isSingleSided(face.key())));
         return builder.build();
     }
 
@@ -79,7 +80,8 @@ public final class SectionMesher {
         VertexLight[] corners = new VertexLight[SmoothLight.CORNERS];
         SectionMeshBuilder builder =
                 new SectionMeshBuilder(cache.originX(), cache.originY(), cache.originZ());
-        GreedyMesher.mesh(view, face -> builder.add(toQuadSmooth(face, view, cache, corners)));
+        GreedyMesher.mesh(view, face -> builder.add(toQuadSmooth(face, view, cache, corners),
+                view.isSingleSided(face.key())));
         return builder.build();
     }
 

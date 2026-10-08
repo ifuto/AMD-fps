@@ -40,6 +40,23 @@ public interface VoxelView {
      */
     int key(int x, int y, int z, Orientation orientation);
 
+    /**
+     * Whether a face with this key is only ever seen from one side.
+     *
+     * <p>What this buys is whole-meshlet back-face culling: a meshlet is built from one orientation
+     * bucket, so if every face in it is single-sided the whole thing can be dropped with one
+     * comparison when the camera is behind it, before its vertices are shaded.
+     *
+     * <p>Defaults to {@code false}, which means "do not cull". A view that has not thought about it
+     * loses an optimisation; one that answers {@code true} for a face the rasteriser draws from both
+     * sides deletes geometry the player can see. Full opaque cubes are single-sided. So are blocks
+     * whose model already emits both windings as separate quads, because those land in opposite
+     * orientation buckets and each is culled correctly on its own.
+     */
+    default boolean isSingleSided(int key) {
+        return false;
+    }
+
     int color(int key);
 
     int light(int key);

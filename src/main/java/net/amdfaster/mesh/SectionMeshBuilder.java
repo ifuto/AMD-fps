@@ -30,7 +30,18 @@ public final class SectionMeshBuilder {
         }
     }
 
+    /** Adds a quad whose sidedness is unknown, so its meshlet will not be back-face culled. */
     public void add(Quad quad) {
+        add(quad, false);
+    }
+
+    /**
+     * Adds a quad, declaring whether it is seen from one side only.
+     *
+     * <p>Forwarded to the per-orientation builder, which ANDs the declarations: a meshlet is
+     * back-face culled only when every quad in it can be.
+     */
+    public void add(Quad quad, boolean singleSided) {
         if (quad.isDegenerate()) {
             return;
         }
@@ -38,7 +49,7 @@ public final class SectionMeshBuilder {
         if (builder.isFull()) {
             this.finished[quad.orientation().ordinal()].add(builder.build());
         }
-        this.current[quad.orientation().ordinal()].add(quad);
+        this.current[quad.orientation().ordinal()].add(quad, singleSided);
     }
 
     public SectionMesh build() {

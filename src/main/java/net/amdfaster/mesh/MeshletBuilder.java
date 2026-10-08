@@ -45,6 +45,7 @@ public final class MeshletBuilder {
 
     private int vertexCount;
     private int quadCount;
+    private boolean singleSided;
     private int minX = 16;
     private int minY = 16;
     private int minZ = 16;
@@ -83,7 +84,27 @@ public final class MeshletBuilder {
         return this.quadCount >= Meshlet.MAX_QUADS;
     }
 
+    /** Adds a quad whose sidedness is unknown, so the meshlet will not be back-face culled. */
     public void add(Quad quad) {
+        add(quad, false);
+    }
+
+    /**
+     * Adds a quad, declaring whether it is seen from one side only.
+     *
+     * <p>The meshlet is single-sided when <em>every</em> quad in it is, so the declarations are
+     * AND-ed together. That is the only order-independent way to combine them: a sticky flag would
+     * make the answer depend on whether the alpha-tested quad happened to arrive first.
+     *
+     * <p>A quad that needs both windings drawn must be declared {@code false}. Getting it wrong
+     * deletes a face the player can see; the other way round only costs an optimisation.
+     */
+    public void add(Quad quad, boolean quadIsSingleSided) {
+        if (this.quadCount == 0) {
+            this.singleSided = quadIsSingleSided;
+        } else {
+            this.singleSided = this.singleSided && quadIsSingleSided;
+        }
         if (quad.orientation() != this.orientation) {
             throw new IllegalArgumentException("quad faces " + quad.orientation()
                     + " but this builder collects " + this.orientation);
@@ -158,7 +179,8 @@ public final class MeshletBuilder {
                 Arrays.copyOf(this.quadColors, this.quadCount),
                 Arrays.copyOf(this.vertexLights, this.vertexCount),
                 this.quadCount, this.vertexCount,
-                this.minX, this.minY, this.minZ, this.maxX, this.maxY, this.maxZ);
+                this.minX, this.minY, this.minZ, this.maxX, this.maxY, this.maxZ,
+                this.singleSided);
 
         this.reset();
         return meshlet;
@@ -174,5 +196,8 @@ public final class MeshletBuilder {
         this.maxX = 0;
         this.maxY = 0;
         this.maxZ = 0;
+        // Cleared, not carried over. A builder is reused for every bucket of every section, and a
+        // declaration that outlived its meshlet would silently back-face cull one that should not be.
+        this.singleSided = false;
     }
 }

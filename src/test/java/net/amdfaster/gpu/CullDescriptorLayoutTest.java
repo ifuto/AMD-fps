@@ -25,13 +25,31 @@ class CullDescriptorLayoutTest {
     }
 
     @Test
-    void theFrustumPassBindsFourDescriptors() {
+    void theFrustumPassBindsFiveDescriptors() {
         List<Binding> bindings = CullBindings.descriptorBindings();
-        assertEquals(4, bindings.size());
+        assertEquals(5, bindings.size());
         assertEquals(CullBindings.FRAME_UBO_BINDING, bindings.get(0).binding());
         assertEquals(CullBindings.MESHLET_BUFFER_BINDING, bindings.get(1).binding());
         assertEquals(CullBindings.DRAW_COMMAND_BUFFER_BINDING, bindings.get(2).binding());
         assertEquals(CullBindings.COUNTER_BUFFER_BINDING, bindings.get(3).binding());
+        assertEquals(CullBindings.ORIENTATION_BUFFER_BINDING, bindings.get(4).binding());
+        assertEquals(CullBindings.DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                bindings.get(4).descriptorType());
+    }
+
+    @Test
+    void addingTheOrientationBindingCostsNothingInRootSignatureTerms() {
+        // A root signature charges one DWORD per bound descriptor *set*, not one per binding inside
+        // it. The orientation buffer went into the set the pass already binds, so the verdict is
+        // byte-for-byte what it was -- which is the only reason a sixth binding was free to add.
+        // Had it needed its own set it would have cost a DWORD of a thirteen DWORD budget.
+        RootSignatureBudget.Verdict verdict =
+                RootSignatureBudget.check(CullBindings.PUSH_CONSTANT_BYTES, 1);
+        assertTrue(verdict.fits(), verdict.detail());
+        assertEquals(CullBindings.PUSH_CONSTANT_BYTES / 4 + 1, verdict.dwords(),
+                "two DWORDs of push constants plus one descriptor set");
+        assertEquals(5, CullBindings.descriptorBindings().size(),
+                "five bindings, all inside that one set, so all free");
     }
 
     @Test

@@ -83,6 +83,11 @@ public record MeshletGpuLayout(int meshletCount, int[] runStart, int[] runCount)
         return this.meshletCount * LIGHT_BYTES_PER_MESHLET;
     }
 
+    /** Bytes for the per-meshlet orientation buffer the back-face test reads. */
+    public int orientationBytes() {
+        return this.meshletCount * CullBindings.ORIENTATION_BYTES_PER_MESHLET;
+    }
+
     /** Work groups a culling dispatch needs, at the work group size the shaders use. */
     public int cullWorkGroups() {
         return CullBindings.workGroups(this.meshletCount);

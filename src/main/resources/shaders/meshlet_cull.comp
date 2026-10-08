@@ -1,4 +1,4 @@
-// Meshlet frustum culling with indirect draw compaction.
+// Meshlet frustum and back-face culling with indirect draw compaction.
 //
 // One invocation per meshlet. Visible meshlets claim a slot with an atomic add and write their own
 // draw command into it, so the output buffer ends up dense and vkCmdDrawIndexedIndirectCount can
@@ -34,6 +34,12 @@ layout(std430, binding = 2) buffer DrawCommands {
 layout(std430, binding = 3) buffer Counters {
     uint visibleCount;
     uint testedCount;
+};
+
+// One uint per meshlet: its Orientation.ordinal(), 0..5. Six orientations need three bits and the
+// packed bounds word has two free, so this is its own buffer.
+layout(std430, binding = 5) readonly buffer MeshletOrientations {
+    uint orientations[];
 };
 
 layout(push_constant) uniform Push {
@@ -84,6 +90,30 @@ void main() {
     atomicAdd(testedCount, 1u);
     if (!visibleAgainstFrustum(boxMin, boxMax)) {
         return;
+    }
+
+    // Whole-meshlet back-face cull. Every face in a meshlet shares the bucket's normal, so one
+    // comparison replaces a per-face test, and what it saves is the vertex shading and the draw
+    // rather than the fragments -- the rasteriser was already rejecting these.
+    //
+    // Gated on bit 30 of the packed bounds: a meshlet whose builder never declared itself
+    // single-sided is left alone. boxMin and boxMax are camera-relative here, so the camera is at
+    // the origin and each test is a comparison against zero.
+    if ((packed >> 30u & 1u) != 0u) {
+        uint o = orientations[index];
+        // Ordinals: NEG_X 0, POS_X 1, NEG_Y 2, POS_Y 3, NEG_Z 4, POS_Z 5.
+        bool positive = (o & 1u) != 0u;
+        bool backFacing;
+        if (o < 2u) {
+            backFacing = positive ? boxMin.x >= 0.0 : boxMax.x <= 0.0;
+        } else if (o < 4u) {
+            backFacing = positive ? boxMin.y >= 0.0 : boxMax.y <= 0.0;
+        } else {
+            backFacing = positive ? boxMin.z >= 0.0 : boxMax.z <= 0.0;
+        }
+        if (backFacing) {
+            return;
+        }
     }
 
     // indexCount, instanceCount, firstIndex, vertexOffset, firstInstance.
