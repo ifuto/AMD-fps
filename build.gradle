@@ -104,13 +104,32 @@ def compileShaders = tasks.register("compileShaders") {
             shaderc.shaderc_compile_options_set_target_env(options, shaderc.shaderc_target_env_vulkan,
                     shaderc.shaderc_env_version_vulkan_1_2)
 
-            def sources = shadersSourceDir.listFiles()?.findAll { it.name.endsWith(".comp") }?.sort() ?: []
+            // Shader kind is picked from the extension, because shaderc needs to be told which
+            // stage it is compiling: the same GLSL is a different program per stage and the errors
+            // it produces otherwise ("gl_WorkGroupID undeclared") point nowhere near the real fault.
+            def kindFor = { String name ->
+                if (name.endsWith(".vert")) return shaderc.shaderc_glsl_vertex_shader
+                if (name.endsWith(".frag")) return shaderc.shaderc_glsl_fragment_shader
+                return shaderc.shaderc_glsl_compute_shader
+            }
+            // Compute shaders keep their existing names; the graphics stages are suffixed so that
+            // block.vert and block.frag do not both claim block.spv.
+            def spvName = { String name ->
+                int dot = name.lastIndexOf('.')
+                String base = name.substring(0, dot)
+                String ext = name.substring(dot + 1)
+                return ext == "comp" ? base + ".spv" : base + "_" + ext + ".spv"
+            }
+
+            def sources = shadersSourceDir.listFiles()?.findAll {
+                it.name.endsWith(".comp") || it.name.endsWith(".vert") || it.name.endsWith(".frag")
+            }?.sort() ?: []
             if (sources.isEmpty()) {
-                throw new GradleException("no .comp shaders in " + shadersSourceDir)
+                throw new GradleException("no shaders in " + shadersSourceDir)
             }
             sources.each { File source ->
                 long result = shaderc.shaderc_compile_into_spv(compiler, source.text,
-                        shaderc.shaderc_glsl_compute_shader, source.name, "main", options)
+                        kindFor(source.name), source.name, "main", options)
                 if (result == 0L) {
                     throw new GradleException("shaderc_compile_into_spv returned null for " + source.name)
                 }
@@ -124,7 +143,7 @@ def compileShaders = tasks.register("compileShaders") {
                     def bytes = shaderc.shaderc_result_get_bytes(result)
                     def out = new byte[bytes.remaining()]
                     bytes.get(out)
-                    def target = new File(outDir, source.name.replace(".comp", ".spv"))
+                    def target = new File(outDir, spvName(source.name))
                     target.bytes = out
                     println("compiled " + source.name + " -> shaders/" + target.name
                             + " (" + out.length + " bytes of SPIR-V)")
@@ -251,7 +270,9 @@ tasks.register("verifyJar") {
                         // shader toolchain, and a missing module fails at pipeline creation with
                         // no useful message.
                         "shaders/meshlet_cull.spv",
-                        "shaders/meshlet_occlusion.spv"
+                        "shaders/meshlet_occlusion.spv",
+                        "shaders/block_vert.spv",
+                        "shaders/block_frag.spv"
                 ]
                 required.findAll { !names.contains(it) }.each { problems << jar.name + " is missing " + it }
 

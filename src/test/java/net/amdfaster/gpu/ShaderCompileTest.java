@@ -1,6 +1,7 @@
 package net.amdfaster.gpu;
 
 import org.junit.jupiter.api.Test;
+import net.amdfaster.gpu.BlockBindings;
 import org.lwjgl.util.shaderc.Shaderc;
 
 import java.io.IOException;
@@ -35,7 +36,22 @@ class ShaderCompileTest {
         }
     }
 
-    /** Compiles one compute shader; returns null on success or the compiler's message on failure. */
+    /**
+     * Picks the shaderc stage from the extension. shaderc has to be told which stage it is
+     * compiling: the same GLSL is a different program per stage, and the errors it produces
+     * otherwise point nowhere near the real fault.
+     */
+    private static int kindFor(String path) {
+        if (path.endsWith(".vert")) {
+            return Shaderc.shaderc_glsl_vertex_shader;
+        }
+        if (path.endsWith(".frag")) {
+            return Shaderc.shaderc_glsl_fragment_shader;
+        }
+        return Shaderc.shaderc_glsl_compute_shader;
+    }
+
+    /** Compiles one shader; returns null on success or the compiler's message on failure. */
     private static String compile(String path) {
         long compiler = Shaderc.shaderc_compiler_initialize();
         if (compiler == 0L) {
@@ -48,7 +64,7 @@ class ShaderCompileTest {
             Shaderc.shaderc_compile_options_set_target_env(options, Shaderc.shaderc_target_env_vulkan,
                     Shaderc.shaderc_env_version_vulkan_1_2);
             result = Shaderc.shaderc_compile_into_spv(compiler, read(path),
-                    Shaderc.shaderc_glsl_compute_shader, path, "main", options);
+                    kindFor(path), path, "main", options);
             if (result == 0L) {
                 return "shaderc_compile_into_spv returned null";
             }
@@ -78,7 +94,7 @@ class ShaderCompileTest {
             Shaderc.shaderc_compile_options_set_target_env(options, Shaderc.shaderc_target_env_vulkan,
                     Shaderc.shaderc_env_version_vulkan_1_2);
             result = Shaderc.shaderc_compile_into_spv(compiler, read(path),
-                    Shaderc.shaderc_glsl_compute_shader, path, "main", options);
+                    kindFor(path), path, "main", options);
             int status = Shaderc.shaderc_result_get_compilation_status(result);
             if (status != Shaderc.shaderc_compilation_status_success) {
                 fail(path + " did not compile: " + Shaderc.shaderc_result_get_error_message(result));
@@ -110,9 +126,23 @@ class ShaderCompileTest {
     }
 
     @Test
-    void bothShadersProduceSpirvWithTheRightMagic() {
+    void theBlockVertexShaderCompiles() {
+        String error = compile(BlockBindings.VERTEX_SHADER_PATH);
+        assertTrue(error == null, BlockBindings.VERTEX_SHADER_PATH + ": " + error);
+    }
+
+    @Test
+    void theBlockFragmentShaderCompiles() {
+        String error = compile(BlockBindings.FRAGMENT_SHADER_PATH);
+        assertTrue(error == null, BlockBindings.FRAGMENT_SHADER_PATH + ": " + error);
+    }
+
+    @Test
+    void everyShaderProducesSpirvWithTheRightMagic() {
         for (String path : new String[] {CullBindings.CULL_SHADER_PATH,
-                CullBindings.OCCLUSION_SHADER_PATH}) {
+                CullBindings.OCCLUSION_SHADER_PATH,
+                BlockBindings.VERTEX_SHADER_PATH,
+                BlockBindings.FRAGMENT_SHADER_PATH}) {
             byte[] spv = compileToSpirv(path);
             assertTrue(spv.length > 20, path + " produced a suspiciously short module: " + spv.length);
             // SPIR-V is little-endian and starts with 0x07230203.
