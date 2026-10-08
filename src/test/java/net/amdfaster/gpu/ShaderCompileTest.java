@@ -126,6 +126,18 @@ class ShaderCompileTest {
     }
 
     @Test
+    void thePyramidReductionShaderCompiles() {
+        String error = compile(CullBindings.HIZ_REDUCE_SHADER_PATH);
+        assertTrue(error == null, CullBindings.HIZ_REDUCE_SHADER_PATH + ": " + error);
+    }
+
+    @Test
+    void theEntityOcclusionShaderCompiles() {
+        String error = compile(CullBindings.ENTITY_OCCLUSION_SHADER_PATH);
+        assertTrue(error == null, CullBindings.ENTITY_OCCLUSION_SHADER_PATH + ": " + error);
+    }
+
+    @Test
     void theBlockVertexShaderCompiles() {
         String error = compile(BlockBindings.VERTEX_SHADER_PATH);
         assertTrue(error == null, BlockBindings.VERTEX_SHADER_PATH + ": " + error);
@@ -141,6 +153,8 @@ class ShaderCompileTest {
     void everyShaderProducesSpirvWithTheRightMagic() {
         for (String path : new String[] {CullBindings.CULL_SHADER_PATH,
                 CullBindings.OCCLUSION_SHADER_PATH,
+                CullBindings.HIZ_REDUCE_SHADER_PATH,
+                CullBindings.ENTITY_OCCLUSION_SHADER_PATH,
                 BlockBindings.VERTEX_SHADER_PATH,
                 BlockBindings.FRAGMENT_SHADER_PATH}) {
             byte[] spv = compileToSpirv(path);

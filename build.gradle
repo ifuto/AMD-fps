@@ -266,6 +266,10 @@ tasks.register("verifyJar") {
                         "net/amdfaster/light/LightCache.class",
                         "net/amdfaster/light/VertexLight.class",
                         "net/amdfaster/entity/EntityBatcher.class",
+                        "net/amdfaster/entity/EntityOcclusionCuller.class",
+                        "net/amdfaster/cull/PyramidGeometry.class",
+                        "net/amdfaster/cull/CameraCutDetector.class",
+                        "net/amdfaster/dirty/RebuildScheduler.class",
                         // The Minecraft adapter is the only package that touches net.minecraft, so
                         // asserting it is in the jar also asserts the boundary stayed where it was
                         // designed to be: if this entry ever has to move, something upstream of the
@@ -280,6 +284,8 @@ tasks.register("verifyJar") {
                         // no useful message.
                         "shaders/meshlet_cull.spv",
                         "shaders/meshlet_occlusion.spv",
+                        "shaders/hiz_reduce.spv",
+                        "shaders/entity_occlusion.spv",
                         "shaders/block_vert.spv",
                         "shaders/block_frag.spv"
                 ]

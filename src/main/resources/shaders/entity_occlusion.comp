@@ -1,0 +1,173 @@
+// Hides entities that are behind terrain, against the same hierarchical depth buffer the meshlet
+// pass builds.
+//
+// This is the case CPU ray-tracing cannot win. A thousand cows behind a stone wall cost a full model,
+// texture and light lookup each before anything decides they are invisible, and tracing a ray per
+// entity per frame to find that out spends real CPU on the thread that is already the bottleneck.
+// The pyramid is already there from the terrain pass, so one fetch per entity at the right level
+// answers it for free.
+//
+// MIRRORS net.amdfaster.entity.EntityOcclusionCuller. The Java class is the reference path and is
+// what the tests pin; this has to agree with it on the level choice, the footprint span, the corner
+// that supplies the nearest depth, and the direction of the comparison.
+//
+// THE PYRAMID MUST BE TERRAIN ONLY. Entities must not write depth into it. If they do, an entity
+// visible last frame leaves its own depth in the buffer, and this compares where it is now against
+// where it was then: move away by a fraction of a block and its nearest depth drops below its own
+// stale depth, it is culled, it stops being drawn, it stops appearing in the pyramid, and it never
+// comes back. That is not a fudge-factor problem, it is a structural one, and the fix is that pass
+// one renders terrain and only terrain.
+
+#version 450
+
+layout(local_size_x = 64) in;
+
+// The same frame block the meshlet passes use, at the same offsets, so one uniform buffer serves
+// both. Offsets: viewProjection 0, frustumPlanes 64, cameraOrigin 160, counts 176/180/184, size 192.
+layout(std140, binding = 0) uniform Frame {
+    mat4  viewProjection;
+    vec4  frustumPlanes[6];
+    vec4  cameraOrigin;
+    uint  meshletCount;
+    uint  hizWidth;
+    uint  hizHeight;
+    uint  _pad0;
+};
+
+// Matches EntityGpuLayout: 32 bytes, ascending offsets, padding written as zero.
+struct Entity {
+    vec4  positionAndYaw;   // OFFSET_X 0, OFFSET_Y 4, OFFSET_Z 8, OFFSET_YAW 12
+    uint  light;            // OFFSET_LIGHT 16
+    float halfWidth;        // OFFSET_HALF_WIDTH 20
+    float height;           // OFFSET_HEIGHT 24
+    uint  _padding;         // OFFSET_PADDING 28
+};
+
+layout(std430, binding = 1) readonly buffer Instances {
+    Entity instances[];
+};
+
+// The distance and frustum pass already ran; this walks its output rather than the whole buffer.
+layout(std430, binding = 2) readonly buffer Candidates {
+    uint candidateCount;
+    uint candidates[];
+};
+
+layout(std430, binding = 3) buffer Survivors {
+    uint survivorCount;
+    uint survivors[];
+};
+
+layout(binding = 4) uniform sampler2D hiZDepth;
+
+layout(push_constant) uniform Push {
+    uint baseCandidate;
+    uint flags;   // bit 0: a camera cut made the pyramid stale, so pass everything through
+};
+
+int ceilDim(int base, int level) {
+    return max(1, -(-base >> level));
+}
+
+int selectLevel(vec2 boxPixels) {
+    float longest = max(boxPixels.x, boxPixels.y);
+    if (longest <= 1.0) {
+        return 0;
+    }
+    int level = int(ceil(log2(longest)));
+    int maxLevel = 0;
+    while (ceilDim(int(hizWidth), maxLevel) > 1 || ceilDim(int(hizHeight), maxLevel) > 1) {
+        ++maxLevel;
+    }
+    return min(level, maxLevel);
+}
+
+// Hull of the eight corners. Not the tightest bound, but cheap and conservative in the direction
+// that matters. Returns false when any corner lands behind the camera, in which case the entity is
+// kept: culling on a degenerate projection is how geometry disappears while you look at it.
+bool projectToPixels(vec3 boxMin, vec3 boxMax, out vec4 pixels) {
+    vec2 lo = vec2(1e30);
+    vec2 hi = vec2(-1e30);
+    for (int corner = 0; corner < 8; ++corner) {
+        vec3 p = mix(boxMin, boxMax,
+                     notEqual(bvec3(corner & 1, corner & 2, corner & 4), bvec3(false)));
+        vec4 clip = viewProjection * vec4(p, 1.0);
+        if (clip.w <= 0.0) {
+            return false;
+        }
+        vec2 ndc = clip.xy / clip.w;
+        // Vulkan's framebuffer has Y growing downwards; NDC has it growing upwards.
+        vec2 pixel = vec2((ndc.x * 0.5 + 0.5) * float(hizWidth),
+                          (0.5 - ndc.y * 0.5) * float(hizHeight));
+        lo = min(lo, pixel);
+        hi = max(hi, pixel);
+    }
+    pixels = vec4(lo, hi);
+    return true;
+}
+
+void main() {
+    uint slot = baseCandidate + gl_GlobalInvocationID.x;
+    if (slot >= candidateCount) {
+        return;
+    }
+
+    uint index = candidates[slot];
+    Entity entity = instances[index];
+
+    if ((flags & 1u) != 0u) {
+        survivors[atomicAdd(survivorCount, 1u)] = index;
+        return;
+    }
+
+    // Minecraft puts y at the entity's feet, so the box runs from y to y + height, and the footprint
+    // is a square of half-width either side of x and z.
+    vec3 position = entity.positionAndYaw.xyz - cameraOrigin.xyz;
+    vec3 boxMin = position + vec3(-entity.halfWidth, 0.0, -entity.halfWidth);
+    vec3 boxMax = position + vec3(entity.halfWidth, entity.height, entity.halfWidth);
+
+    vec4 pixels;
+    if (!projectToPixels(boxMin, boxMax, pixels)) {
+        survivors[atomicAdd(survivorCount, 1u)] = index;
+        return;
+    }
+    if (pixels.z <= 0.0 || pixels.x >= float(hizWidth)
+            || pixels.w <= 0.0 || pixels.y >= float(hizHeight)) {
+        // Off screen is the frustum pass's decision, not this one's, and it has already been made.
+        survivors[atomicAdd(survivorCount, 1u)] = index;
+        return;
+    }
+
+    int level = selectLevel(pixels.zw - pixels.xy);
+    ivec2 spanLimit = ivec2(ceilDim(int(hizWidth), level), ceilDim(int(hizHeight), level)) - ivec2(1);
+    ivec2 lo = clamp(ivec2(floor(pixels.xy)) >> level, ivec2(0), spanLimit);
+    ivec2 hi = clamp(ivec2(floor(pixels.zw)) >> level, ivec2(0), spanLimit);
+
+    // Every texel the box overhangs. At the selected level that is at most two per axis, so at most
+    // four fetches, and reading only the centre texel would test the box against the wrong footprint.
+    float pyramidMin = 1e30;
+    for (int ty = lo.y; ty <= hi.y; ++ty) {
+        for (int tx = lo.x; tx <= hi.x; ++tx) {
+            pyramidMin = min(pyramidMin, texelFetch(hiZDepth, ivec2(tx, ty), level).r);
+        }
+    }
+
+    // Nearest point in reversed-Z is the largest z over w across the corners. Comparing the far
+    // corner instead would cull boxes that stick out in front of the wall.
+    float nearest = 0.0;
+    for (int corner = 0; corner < 8; ++corner) {
+        vec3 p = mix(boxMin, boxMax,
+                     notEqual(bvec3(corner & 1, corner & 2, corner & 4), bvec3(false)));
+        vec4 clip = viewProjection * vec4(p, 1.0);
+        nearest = max(nearest, clip.z / clip.w);
+    }
+
+    if (nearest < pyramidMin) {
+        return;   // behind every surface its footprint covers
+    }
+
+    // Compaction by atomicAdd leaves the survivors unordered. That is fine here because entities are
+    // instanced per model batch and depth-tested, so intra-batch order is not observable; anything
+    // that does care about order has to sort, not rely on this.
+    survivors[atomicAdd(survivorCount, 1u)] = index;
+}

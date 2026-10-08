@@ -65,6 +65,17 @@ public final class CullBindings {
     /** Path of the occlusion pass source. */
     public static final String OCCLUSION_SHADER_PATH = "/shaders/meshlet_occlusion.comp";
 
+    /**
+     * Path of the pyramid reduction source.
+     *
+     * <p>Min-reduced, ceil-halved, edge-clamped. All three are correctness requirements rather than
+     * choices; see {@code net.amdfaster.cull.PyramidGeometry} and the shader header.
+     */
+    public static final String HIZ_REDUCE_SHADER_PATH = "/shaders/hiz_reduce.comp";
+
+    /** Path of the entity occlusion pass source, the GPU mirror of {@code EntityOcclusionCuller}. */
+    public static final String ENTITY_OCCLUSION_SHADER_PATH = "/shaders/entity_occlusion.comp";
+
     /** Compiled SPIR-V for the frustum pass, produced by the {@code compileShaders} build task. */
     public static final String CULL_SPIRV_PATH = "/shaders/meshlet_cull.spv";
 

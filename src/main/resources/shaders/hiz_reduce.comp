@@ -1,0 +1,63 @@
+// Builds one level of the hierarchical depth buffer from the level below it.
+//
+// Dispatched once per level, from level 1 up to the deepest, each dispatch reading the level the
+// previous one wrote. Measured elsewhere at well under a millisecond for a 1080p chain, which is
+// cheap next to what it lets the cull passes skip.
+//
+// Two properties of this reduction are load-bearing and both are easy to get wrong:
+//
+// It is a MINIMUM, because depth is reversed. Larger is nearer, and "fully hidden" means the tested
+// box is behind every surface its footprint covers -- a minimum over that footprint. A maximum
+// answers a different question and deletes geometry that is visible through the part of its
+// footprint the occluder does not reach.
+//
+// The out-of-range tap is clamped, not skipped. The pyramid is ceil-halved (see PyramidGeometry),
+// so a level with an odd dimension has one more texel than twice its parent can account for, and the
+// last texel's second source falls outside the finer level. Clamping reads the edge texel twice.
+// Duplicating a value already in a minimum cannot change the result, so the reduction stays exact;
+// skipping the tap instead would drop a row or column of the screen at every odd level, and there
+// are five such levels between 1080p and 1x1. Under a minimum a dropped texel makes the stored value
+// larger, which culls visible geometry rather than merely missing a cull.
+//
+// VK_EXT_sampler_filter_minmax would do this in one bilinear tap per output, and is worth using when
+// the driver has it; the four explicit fetches below are the portable form of the same reduction.
+
+#version 450
+
+// 8x8 is 64 threads, the wave size on RDNA, so a work group is exactly one wave and there is no
+// partial-wave tail to pay for.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+// The same image as the destination, bound as a different subresource range: the source mip in
+// SHADER_READ_ONLY_OPTIMAL and the destination mip in GENERAL. Reading and writing one image across
+// two levels is fine; doing it within a level is not, and the dispatch has to be separated by a
+// barrier because level n reads what level n-1 wrote.
+layout(binding = 0) uniform sampler2D source;
+layout(binding = 1, r32f) uniform writeonly image2D destination;
+
+layout(push_constant) uniform Push {
+    ivec2 sourceSize;
+    ivec2 destinationSize;
+    int   sourceLevel;
+    int   _pad;
+};
+
+void main() {
+    ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    if (texel.x >= destinationSize.x || texel.y >= destinationSize.y) {
+        return;
+    }
+
+    ivec2 origin = texel * 2;
+    ivec2 limit = sourceSize - ivec2(1);
+
+    float reduced = texelFetch(source, clamp(origin, ivec2(0), limit), sourceLevel).r;
+    reduced = min(reduced, texelFetch(source, clamp(origin + ivec2(1, 0), ivec2(0), limit),
+            sourceLevel).r);
+    reduced = min(reduced, texelFetch(source, clamp(origin + ivec2(0, 1), ivec2(0), limit),
+            sourceLevel).r);
+    reduced = min(reduced, texelFetch(source, clamp(origin + ivec2(1, 1), ivec2(0), limit),
+            sourceLevel).r);
+
+    imageStore(destination, texel, vec4(reduced));
+}

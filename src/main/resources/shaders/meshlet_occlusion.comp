@@ -6,8 +6,15 @@
 // Doing it in two passes is what keeps the first pass cheap: it only ever draws what was visible
 // before, so its cost tracks the visible set rather than the whole world.
 //
-// Depth is reversed-Z, so "closer" is a larger value. A meshlet is occluded when its nearest
-// depth is still farther than the pyramid's maximum over the pixels it covers.
+// Depth is reversed-Z, so "closer" is a larger value. A meshlet is occluded when its nearest depth
+// is behind *every* surface its footprint covers, which is a statement about the MINIMUM depth over
+// that footprint. The pyramid must therefore be built by min-reduction -- hiz_reduce.comp does
+// exactly that -- and the comparison below reads a minimum, not a maximum.
+//
+// A max-reduced pyramid answers a different question: "is this box behind the nearest thing anywhere
+// in the region". One near pixel in the region is then enough to satisfy it, and boxes that are
+// plainly visible through the rest of their footprint get deleted. That is not a missed cull, it is
+// geometry disappearing, which is why the direction matters more than the shape of the pyramid.
 
 #version 450
 
@@ -49,16 +56,23 @@ layout(push_constant) uniform Push {
 
 // The coarsest level whose texels are at least as large as the box. Sampling anything finer means
 // a gather over pixels the pyramid has already reduced, which is both slower and no more correct.
+//
+// The chain is ceil-halved, matching PyramidGeometry on the CPU. Vulkan's own mip rule floors, and
+// on 1920x1080 that leaves level 4 sixty-seven rows tall where 67 * 2 = 134 -- row 135 of level 3
+// would belong to no texel above it. Under a min-reduction a dropped texel makes the stored value
+// LARGER, which culls visible geometry rather than merely missing a cull.
+int ceilDim(int base, int level) {
+    return max(1, -(-base >> level));
+}
+
 int selectLevel(vec2 boxPixels) {
     float longest = max(boxPixels.x, boxPixels.y);
     if (longest <= 1.0) {
         return 0;
     }
     int level = int(ceil(log2(longest)));
-    int smallest = int(min(hizWidth, hizHeight));
     int maxLevel = 0;
-    while (smallest > 1) {
-        smallest >>= 1;
+    while (ceilDim(int(hizWidth), maxLevel) > 1 || ceilDim(int(hizHeight), maxLevel) > 1) {
         ++maxLevel;
     }
     return min(level, maxLevel);
@@ -118,10 +132,20 @@ void main() {
     }
 
     int level = selectLevel(pixels.zw - pixels.xy);
-    // The pyramid is a max-reduction, so one fetch at the right level answers the question.
-    ivec2 texel = ivec2((pixels.xy + pixels.zw) * 0.5) >> level;
-    ivec2 limit = textureSize(hiZDepth, level) - ivec2(1);
-    float pyramidMax = texelFetch(hiZDepth, clamp(texel, ivec2(0), limit), level).r;
+
+    // Every texel the box overhangs, not the one at its centre. Reading a single texel tests the box
+    // against a footprint that is not its own. At the selected level a box spans at most two texels
+    // per axis, so this is at most four fetches.
+    ivec2 spanLimit = ivec2(ceilDim(int(hizWidth), level), ceilDim(int(hizHeight), level)) - ivec2(1);
+    ivec2 lo = clamp(ivec2(floor(pixels.xy)) >> level, ivec2(0), spanLimit);
+    ivec2 hi = clamp(ivec2(floor(pixels.zw)) >> level, ivec2(0), spanLimit);
+
+    float pyramidMin = 1e30;
+    for (int ty = lo.y; ty <= hi.y; ++ty) {
+        for (int tx = lo.x; tx <= hi.x; ++tx) {
+            pyramidMin = min(pyramidMin, texelFetch(hiZDepth, ivec2(tx, ty), level).r);
+        }
+    }
 
     // Nearest depth of the box in reversed-Z is its largest clip z over clip w.
     float nearest = 0.0;
@@ -132,9 +156,9 @@ void main() {
         nearest = max(nearest, clip.z / clip.w);
     }
 
-    if (nearest < pyramidMax) {
-        // Even the closest point is behind the pyramid's farthest: fully occluded. Zeroing the
-        // instance count drops the draw without a second compaction pass.
+    if (nearest < pyramidMin) {
+        // The box's closest point is behind every surface its footprint covers: fully occluded.
+        // Zeroing the instance count drops the draw without a second compaction pass.
         draws[base + 1u] = 0u;
         atomicAdd(testedCount, 1u);
     }
