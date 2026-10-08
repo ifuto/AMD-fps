@@ -164,7 +164,13 @@ Nothing is drawn by this mod yet; Minecraft still renders through its own pipeli
     a black window instead of throwing, which is worse than a crash.
 14. **Transparent sorting on the GPU** — radix sort with on-chip local sort. Not bitonic: bitonic
    is O(n log²n), needs a power of two, and scatters to global memory.
-15. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
+15. **Entity rendering that ignores entity count** — done on the CPU side. `EntityBuffer` keeps a
+    frame's entities in primitive arrays so nothing is allocated per entity, `EntityCuller` bounds
+    what reaches the expensive stages by distance, frustum and a budget, and
+    `SpatialEntityBatcher` makes the draw count depend on where entities are rather than on the
+    order they arrived in. Measured on the same geometry, the greedy batcher this replaces produced
+    20 draws when entities arrived grouped and 1000 when they arrived interleaved.
+16. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
 
 ## Requirements
 
