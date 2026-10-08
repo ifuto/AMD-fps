@@ -116,6 +116,22 @@ public final class EntityGrid {
         this.size++;
     }
 
+    /**
+     * Records a cell and model, replacing any batch already recorded for that pair.
+     *
+     * <p>Batching needs this for one case: a cell holding more instances than one draw may carry.
+     * When that happens the batcher opens a second batch for the same cell and model and repoints
+     * the grid at it, so the next instance in that cell joins the new one.
+     */
+    public void set(long cellKey, int modelKey, int value) {
+        int slot = probe(cellKey, modelKey);
+        if (slot >= 0) {
+            this.values[slot] = value;
+            return;
+        }
+        put(cellKey, modelKey, value);
+    }
+
     private void grow() {
         long[] oldCells = this.cellKeys;
         int[] oldModels = this.modelKeys;
