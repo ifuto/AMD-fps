@@ -139,11 +139,6 @@ def compileShaders = tasks.register("compileShaders") {
     }
 }
 
-sourceSets.main.resources.srcDir(spirvResourceDir)
-tasks.named("processResources") {
-    dependsOn(compileShaders)
-}
-
 processResources {
     def modVersion = project.version
 
@@ -151,6 +146,14 @@ processResources {
 
     filesMatching("fabric.mod.json") {
         expand "version": modVersion
+    }
+
+    // The compiled shader modules go straight into the processed resources rather than through a
+    // source set srcDir. Registering build/generated as a resources root also made the sources jar
+    // consume another task's output without depending on it, which Gradle rejects.
+    dependsOn(compileShaders)
+    from(spirvResourceDir) {
+        include "**/*.spv"
     }
 }
 
