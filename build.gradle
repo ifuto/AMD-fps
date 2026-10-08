@@ -243,6 +243,9 @@ tasks.register("verifyJar") {
                         "net/amdfaster/platform/GpuIdentity.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
+                        "net/amdfaster/light/SmoothLight.class",
+                        "net/amdfaster/light/LightCache.class",
+                        "net/amdfaster/entity/EntityBatcher.class",
                         "assets/amdfaster/icon.png",
                         // The mod ships pre-compiled SPIR-V, not GLSL: no player should need a
                         // shader toolchain, and a missing module fails at pipeline creation with

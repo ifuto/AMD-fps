@@ -103,3 +103,4 @@ jar-in-jar されている」を **assert** し、1 つでも外せばビルド�
 残りの未取得資料: **RDNA3/4 ISA 参照ガイド**（`docs.amd.com` のサインイン要求）、
 **GCN Performance Guide**。ただし **RDNA Performance Guide 全文は
 `fetched_content/` に取得済み**で、`10` で照合済み。
+- `13_light_and_entity_batching.md` — per-vertex smooth lighting, the 18^3 light cache, and grouping same-model entities into one instanced draw.

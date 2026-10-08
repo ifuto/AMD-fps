@@ -84,6 +84,28 @@ nice-to-have but the only sensible one.
 * `/amdfaster vk` — creates a real `VkDevice` against Minecraft's window, prints which adapter,
   queue families and memory types were chosen, and tears it down again.
 
+**Lighting** (`net.amdfaster.light`)
+
+* `LightValue` — packed lightmap coordinates in Minecraft's own bit layout, so a value computed here
+  can be handed to vanilla's lightmap without conversion. The twelve unused bits between the two
+  channels are what let the four-sample average be a single integer add.
+* `LightCache` — an 18³ snapshot of the light and opacity around a section, read once. Smooth
+  lighting wants four samples per face corner, and answering those by walking the level's chunk map
+  makes lighting the dominant cost of meshing rather than a rounding error on it.
+* `SmoothLight` / `FaceRef` / `VertexLight` — per-corner ambient occlusion and interpolated light.
+  Solid neighbours are excluded from the average rather than averaged in, so a glowing block does not
+  light the corner beside it. No winding table is involved: a corner's outward direction is derived
+  from which end of the face it sits on.
+
+**Entity batching** (`net.amdfaster.entity`)
+
+* `EntityBatcher` — same-model instances grouped into one instanced draw with a merged bounding box,
+  so a hundred dropped items cost one draw call and one frustum test instead of a hundred of each.
+  Batches are capped on instance count *and* on bounds span, because an unbounded merged box
+  spanning a whole farm is never culled.
+* `EntityGpuLayout` — the 32-byte instance record, padded from 28 so two records fit a cache line
+  instead of most of them straddling one.
+
 **GPU-driven culling** (`net.amdfaster.cull`, `net.amdfaster.gpu`)
 
 * `Frustum` — six planes from a view-projection matrix, using the **reversed-Z [0,1]** convention
@@ -125,14 +147,17 @@ Nothing is drawn by this mod yet; Minecraft still renders through its own pipeli
 8. **Compute pipelines** — done. `gpu/CullingPipeline` creates the frustum and occlusion
    pipelines from the jar's SPIR-V; the descriptor layout is held as data in `gpu/CullBindings`
    so the shaders, the layouts and the writes cannot drift apart.
-9. **Command recording** — the dispatches, the barrier between the two passes, and the indirect
+9. **Lighting into the vertex stream** — the lighting engine is done and tested; wiring per-vertex
+   light and AO into `Quad` and the vertex attributes is next. That changes the attribute stride, so
+   the upload layout, the GPU layout, both compute shaders and their tests all move together.
+10. **Command recording** — the dispatches, the barrier between the two passes, and the indirect
    draw that consumes the count buffer. Then the vertex and fragment shaders, so there is
    something to draw.
-10. **Swapchain recreation** — deliberately not done yet; see the notes. Getting it wrong shows
+11. **Swapchain recreation** — deliberately not done yet; see the notes. Getting it wrong shows
     a black window instead of throwing, which is worse than a crash.
-11. **Transparent sorting on the GPU** — radix sort with on-chip local sort. Not bitonic: bitonic
+12. **Transparent sorting on the GPU** — radix sort with on-chip local sort. Not bitonic: bitonic
    is O(n log²n), needs a power of two, and scatters to global memory.
-12. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
+13. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
 
 ## Requirements
 
