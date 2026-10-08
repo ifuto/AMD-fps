@@ -170,7 +170,18 @@ Nothing is drawn by this mod yet; Minecraft still renders through its own pipeli
     `SpatialEntityBatcher` makes the draw count depend on where entities are rather than on the
     order they arrived in. Measured on the same geometry, the greedy batcher this replaces produced
     20 draws when entities arrived grouped and 1000 when they arrived interleaved.
-16. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
+16. **Chunk rebuild coalescing** — done. A block change invalidates its own section plus one
+    neighbour per axis whose local coordinate is 0 or 15, so 1 to 8; measured over 128 000 blocks,
+    65.1 % invalidate exactly one, where vanilla treats the worst case of 8 as the only case. Two
+    dirty sets deduplicate, so a TNT storm costs one rebuild per section instead of one per changed
+    block, and a light-only change rewrites the light stream alone and skips meshing and ambient
+    occlusion entirely.
+17. **Entity occlusion culling** — done. Entities are tested against the terrain depth pyramid
+    rather than ray-traced on the CPU, which is what a thousand cows behind a stone wall needs.
+    Fixing the reduction direction, the footprint span and the pyramid's level dimensions in the
+    existing meshlet pass removed three defects that deleted visible geometry rather than merely
+    missing a cull.
+18. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
 
 ## Requirements
 

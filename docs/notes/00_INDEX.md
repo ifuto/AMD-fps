@@ -25,6 +25,7 @@
 | 13 | [`13_light_and_entity_batching.md`](13_light_and_entity_batching.md) | **ライティングとエンティティバッチングの設計**。`LightValue.pack` を vanilla の `LightTexture.pack` と同じ配置にして平均を整数加算 1 回にした理由、18³ ライトキャッシュ、遮蔽サンプルを平均に入れない判断、同一モデルのエンティティを 1 個のインスタンスドローにまとめる条件 | 設計 |
 | 14 | [`14_stage8_11_mc_light_shaders.md`](14_stage8_11_mc_light_shaders.md) | **Stage 8〜11 実装記録**。`net.amdfaster.mc` を唯一 Minecraft 型に触るパッケージにした理由、`BlockKeys` のビット配置と範囲外を例外にする判断、`SectionCoords` をシフト／マスクで書く理由、**ライトを頂点単位にしたときに頂点 dedup キーを広げないと継ぎ目が走査順に依存する話**、角の対応表を「中身ではなく不変条件で」テストする理由、`discard` を使わない判断、**VK_FORMAT をリテラルで書いて 3 つとも外して CI に捕まった話** | 実装＋ CI |
 | 15 | [`15_entity_scaling.md`](15_entity_scaling.md) | **エンティティ数を無関係にする実装記録**。確保ゼロの `EntityBuffer` とオープンアドレス法の `EntityGrid`、**greedy バッチャが到着順で 20 → 1000 と 50 倍ぶれる実測表**とそれを固定するテスト、ソートせず O(n) で効かせるバジェット（距離 2 乗の 64 バンド）、write-combined メモリへの昇順書き込みとパディングを毎回ゼロで書く理由 | 実装＋ CI |
+| 16 | [`16_bottleneck_survey.md`](16_bottleneck_survey.md) | **ボトルネック調査と最も重い 2 箇所の実装**。第三者実測による重さ順位（**ブロック 1 個でリビルド 50 回**、牛 1000 頭 24→140 FPS）、**65.1% のブロックは 1 セクションしか無効化しない**という実測分布と dirty セットの統合、ライトだけを別ストリームに書いて meshing と AO を丸ごと飛ばす話、そして既存オクルージョンシェーダで見つかった **可視の幾何を消す 3 バグ**（max reduction／中心 1 テクセル／floor ピラミッド、網羅検証で取りこぼし 0 vs 2061） | arXiv / GPU Zen / Granite / 第三者実測 ＋ 実装＋ CI |
 
 ## 2. 最重要の発見（3つだけ挙げるなら）
 
