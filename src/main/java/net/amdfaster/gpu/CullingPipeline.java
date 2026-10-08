@@ -160,7 +160,10 @@ public final class CullingPipeline implements AutoCloseable {
                     .module(module)
                     .pName(stack.UTF8("main"));
 
-            VkComputePipelineCreateInfo createInfo = VkComputePipelineCreateInfo.calloc(1, stack)
+            // calloc(int, MemoryStack) returns a Buffer, and its setters keep returning Buffer,
+            // unlike the single-struct calloc(MemoryStack) form. vkCreateComputePipelines wants the
+            // Buffer anyway.
+            VkComputePipelineCreateInfo.Buffer createInfo = VkComputePipelineCreateInfo.calloc(1, stack)
                     .sType$Default()
                     .stage(stage)
                     .layout(layout);
