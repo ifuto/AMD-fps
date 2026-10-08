@@ -147,17 +147,24 @@ Nothing is drawn by this mod yet; Minecraft still renders through its own pipeli
 8. **Compute pipelines** — done. `gpu/CullingPipeline` creates the frustum and occlusion
    pipelines from the jar's SPIR-V; the descriptor layout is held as data in `gpu/CullBindings`
    so the shaders, the layouts and the writes cannot drift apart.
-9. **Lighting into the vertex stream** — the lighting engine is done and tested; wiring per-vertex
-   light and AO into `Quad` and the vertex attributes is next. That changes the attribute stride, so
-   the upload layout, the GPU layout, both compute shaders and their tests all move together.
-10. **Command recording** — the dispatches, the barrier between the two passes, and the indirect
-   draw that consumes the count buffer. Then the vertex and fragment shaders, so there is
-   something to draw.
-11. **Swapchain recreation** — deliberately not done yet; see the notes. Getting it wrong shows
+9. **Lighting into the vertex stream** — done. `Quad` carries four packed corner lights instead of
+   one, `SectionMesher` computes them from the light cache during meshing, and light is its own
+   vertex stream so re-lighting a section does not rewrite its geometry. Light became part of the
+   vertex dedup key: two corners can share a position and a texture coordinate while being lit
+   differently, and merging them would make a seam depend on mesher visit order.
+10. **Minecraft block adapter** — done. `net.amdfaster.mc` is the only package that touches
+   `net.minecraft`, and it reduces a `BlockState` to the integers the mesher needs, so everything
+   downstream stays testable without a running client.
+11. **Block shaders** — done. `block.vert` unpacks the per-vertex light word and `block.frag`
+   applies the lightmap and the occlusion shade. No `discard`: cutout runs a Z pre-pass with depth
+   test `EQUAL`, because `discard` would disable early depth on the pass drawing most of the scene.
+12. **Command recording** — the dispatches, the barrier between the two passes, and the indirect
+   draw that consumes the count buffer. The shaders now exist, so there is something to draw.
+13. **Swapchain recreation** — deliberately not done yet; see the notes. Getting it wrong shows
     a black window instead of throwing, which is worse than a crash.
-12. **Transparent sorting on the GPU** — radix sort with on-chip local sort. Not bitonic: bitonic
+14. **Transparent sorting on the GPU** — radix sort with on-chip local sort. Not bitonic: bitonic
    is O(n log²n), needs a power of two, and scatters to global memory.
-13. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
+15. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
 
 ## Requirements
 

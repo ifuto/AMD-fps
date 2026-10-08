@@ -264,7 +264,16 @@ tasks.register("verifyJar") {
                         "net/amdfaster/command/AmdFasterCommand.class",
                         "net/amdfaster/light/SmoothLight.class",
                         "net/amdfaster/light/LightCache.class",
+                        "net/amdfaster/light/VertexLight.class",
                         "net/amdfaster/entity/EntityBatcher.class",
+                        // The Minecraft adapter is the only package that touches net.minecraft, so
+                        // asserting it is in the jar also asserts the boundary stayed where it was
+                        // designed to be: if this entry ever has to move, something upstream of the
+                        // mesher has started depending on Minecraft types.
+                        "net/amdfaster/mc/BlockKeys.class",
+                        "net/amdfaster/mc/LevelBlockSampler.class",
+                        "net/amdfaster/mesh/voxel/SectionMesher.class",
+                        "net/amdfaster/gpu/BlockBindings.class",
                         "assets/amdfaster/icon.png",
                         // The mod ships pre-compiled SPIR-V, not GLSL: no player should need a
                         // shader toolchain, and a missing module fails at pipeline creation with

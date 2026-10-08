@@ -22,6 +22,8 @@
 | 10 | [`10_primary_source_verifications.md`](10_primary_source_verifications.md) | **一次ソース再検証**。`fetched_content/` に落ちた RDNA Performance Guide 全文と突き合わせ、**自分のメモの誤り1件（workgroup size）を訂正**し、HOST_VISIBLE 書き込み制約など実装直結の事実を追加 | `fetched_content/`（fetch.yml が取得） |
 | 11 | [`11_stage2_meshing.md`](11_stage2_meshing.md) | **Stage 2 実装記録**。`net.amdfaster.mesh` の設計と確定数値（meshlet 62 quad / 8bit index / 4 バイト packed AABB / 6 バケット分割）、**CI が捕まえた実バグ 2 件**（axis に ordinal を入れていた、巻き順テーブルの行入替）、そしてテストで判明した「頂点 dedup は効かない」事実 | 実装＋ CI |
 | 12 | [`12_stage4_5_vk_and_culling.md`](12_stage4_5_vk_and_culling.md) | **Stage 4–5 実装記録**。Vulkan の「判断」を LWJGL 型なしに分離した理由、テストが直した実装バグ 2 件（large BAR カードでメッシュが 256 MiB の不可視ヒープに行く、ReBAR 判定がシステム RAM を数えて false になる）、LWJGL の呼び出し形で CI に落ちた 3 件、**root signature 13 DWORD 予算がシェーダ設計を変えた話**、2 パスカリング、そしてシェーダと Java のバインディング整合テスト | 実装＋ CI |
+| 13 | [`13_light_and_entity_batching.md`](13_light_and_entity_batching.md) | **ライティングとエンティティバッチングの設計**。`LightValue.pack` を vanilla の `LightTexture.pack` と同じ配置にして平均を整数加算 1 回にした理由、18³ ライトキャッシュ、遮蔽サンプルを平均に入れない判断、同一モデルのエンティティを 1 個のインスタンスドローにまとめる条件 | 設計 |
+| 14 | [`14_stage8_11_mc_light_shaders.md`](14_stage8_11_mc_light_shaders.md) | **Stage 8〜11 実装記録**。`net.amdfaster.mc` を唯一 Minecraft 型に触るパッケージにした理由、`BlockKeys` のビット配置と範囲外を例外にする判断、`SectionCoords` をシフト／マスクで書く理由、**ライトを頂点単位にしたときに頂点 dedup キーを広げないと継ぎ目が走査順に依存する話**、角の対応表を「中身ではなく不変条件で」テストする理由、`discard` を使わない判断、**VK_FORMAT をリテラルで書いて 3 つとも外して CI に捕まった話** | 実装＋ CI |
 
 ## 2. 最重要の発見（3つだけ挙げるなら）
 
@@ -103,4 +105,3 @@ jar-in-jar されている」を **assert** し、1 つでも外せばビルド�
 残りの未取得資料: **RDNA3/4 ISA 参照ガイド**（`docs.amd.com` のサインイン要求）、
 **GCN Performance Guide**。ただし **RDNA Performance Guide 全文は
 `fetched_content/` に取得済み**で、`10` で照合済み。
-- `13_light_and_entity_batching.md` — per-vertex smooth lighting, the 18^3 light cache, and grouping same-model entities into one instanced draw.
