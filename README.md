@@ -181,7 +181,15 @@ Nothing is drawn by this mod yet; Minecraft still renders through its own pipeli
     Fixing the reduction direction, the footprint span and the pyramid's level dimensions in the
     existing meshlet pass removed three defects that deleted visible geometry rather than merely
     missing a cull.
-18. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
+18. **Cull reuse and hot-path cleanup** — done. `CullReuse` skips the whole culling stage when the
+    camera, field of view, viewport and section meshes are bit-for-bit unchanged, which is exact
+    rather than approximate because it is a deterministic function of unchanged inputs. A light-only
+    rebuild and entity movement deliberately do not invalidate it. `selectLevel` lost two `Math.log`
+    calls for one bit count, and the frustum test lost eighteen unpredictable branches.
+19. **Whole-meshlet back-face culling** — done. A meshlet comes from one orientation bucket, so all
+    its faces share a normal and the test is a single comparison. Gated on a per-quad declaration
+    that is AND-ed, because a sticky flag would make the answer depend on which quad arrived first.
+20. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
 
 ## Requirements
 
