@@ -1,5 +1,7 @@
 package net.amdfaster.gpu;
 
+import org.lwjgl.vulkan.VK10;
+
 import java.util.List;
 
 /**
@@ -50,18 +52,25 @@ public final class BlockBindings {
     public static final int UV_LOCATION = 1;
     public static final int LIGHT_LOCATION = 2;
 
+    // These reference VK10 rather than spelling out the enum values. The first version did spell
+    // them out, on the theory that keeping this class free of LWJGL was worth something, and got
+    // all three wrong -- the format enum is not laid out in tidy blocks of eight, because some
+    // component widths have no SRGB variant and so the groups are uneven. CI reported the first
+    // mismatch as "expected 96 but was 84". Referring to the binding is not a compromise here: it
+    // is the only version that cannot drift, and LWJGL is on the classpath anyway.
+
     /**
      * {@code short x, short y, short z, short flags}. Signed integers rather than normalised:
      * block coordinates are integers, and normalising them to [-1,1] would lose the exact values
      * at the ends of the range, which is exactly where a section boundary is.
      */
-    public static final int FORMAT_POSITION = 84;
+    public static final int FORMAT_POSITION = VK10.VK_FORMAT_R16G16B16A16_SINT;
 
     /** {@code float u, float v}. */
-    public static final int FORMAT_ATTRIBUTE = 103;
+    public static final int FORMAT_ATTRIBUTE = VK10.VK_FORMAT_R32G32_SFLOAT;
 
     /** One word: block in bits 4..7, sky in bits 20..23, occlusion in bits 24..25. */
-    public static final int FORMAT_LIGHT = 98;
+    public static final int FORMAT_LIGHT = VK10.VK_FORMAT_R32_UINT;
 
     // --- resources ------------------------------------------------------------------------
 

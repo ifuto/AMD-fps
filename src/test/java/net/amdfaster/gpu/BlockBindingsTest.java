@@ -1,6 +1,7 @@
 package net.amdfaster.gpu;
 
 import net.amdfaster.light.LightValue;
+import net.amdfaster.mesh.Meshlet;
 import net.amdfaster.light.VertexLight;
 import org.junit.jupiter.api.Test;
 import org.lwjgl.vulkan.VK10;
@@ -161,22 +162,84 @@ class BlockBindingsTest {
         assertEquals(3, declared.size(), "exactly three vertex inputs, one per stream");
     }
 
-    @Test
-    void theVertexFormatsAreTheVulkanConstantsTheyClaimToBe() {
-        // The formats are plain ints in BlockBindings so that class stays usable without LWJGL.
-        // This is what stops them being wrong: each is checked against the binding itself.
-        assertEquals(VK10.VK_FORMAT_R16G16B16A16_SINT, BlockBindings.FORMAT_POSITION);
-        assertEquals(VK10.VK_FORMAT_R32G32_SFLOAT, BlockBindings.FORMAT_ATTRIBUTE);
-        assertEquals(VK10.VK_FORMAT_R32_UINT, BlockBindings.FORMAT_LIGHT);
+    /** The GLSL type of each vertex input, keyed by its name. */
+    private static Map<String, String> inputTypes(String source) {
+        Map<String, String> types = new HashMap<>();
+        Matcher m = Pattern.compile("layout\\s*\\(location\\s*=\\s*\\d+\\)\\s*in\\s+(\\w+)\\s+(\\w+)\\s*;")
+                .matcher(source);
+        while (m.find()) {
+            types.put(m.group(2), m.group(1));
+        }
+        return types;
+    }
+
+    /**
+     * The only Vulkan format that can hold {@code type} at {@code stride} bytes per vertex.
+     *
+     * <p>Derived from the shader rather than written down next to a second copy of the same guess.
+     * A format whose size does not match {@code Meshlet}'s stride walks off the end of the buffer
+     * on the last vertex of every meshlet, which is a GPU fault rather than a wrong pixel.
+     */
+    private static int requiredFormat(String name, Map<String, String> types, int stride) {
+        String type = types.get(name);
+        assertNotNull(type, name + " is not declared in block.vert");
+        int components = switch (type) {
+            case "float", "int", "uint" -> 1;
+            case "vec2", "ivec2" -> 2;
+            case "vec3", "ivec3" -> 3;
+            case "vec4", "ivec4" -> 4;
+            default -> throw new AssertionError("unhandled GLSL input type: " + type);
+        };
+        assertEquals(0, stride % components,
+                name + ": stride " + stride + " is not divisible by " + components + " components");
+        int bytes = stride / components;
+        boolean floating = type.startsWith("vec");
+        boolean signed = type.startsWith("i");
+
+        if (floating) {
+            assertEquals(4, bytes, name + ": vec components are float32");
+            return switch (components) {
+                case 1 -> VK10.VK_FORMAT_R32_SFLOAT;
+                case 2 -> VK10.VK_FORMAT_R32G32_SFLOAT;
+                case 3 -> VK10.VK_FORMAT_R32G32B32_SFLOAT;
+                default -> VK10.VK_FORMAT_R32G32B32A32_SFLOAT;
+            };
+        }
+        return switch (components) {
+            case 1 -> bytes == 4
+                    ? (signed ? VK10.VK_FORMAT_R32_SINT : VK10.VK_FORMAT_R32_UINT)
+                    : (signed ? VK10.VK_FORMAT_R16_SINT : VK10.VK_FORMAT_R16_UINT);
+            case 2 -> bytes == 2 ? VK10.VK_FORMAT_R16G16_SINT : VK10.VK_FORMAT_R32G32_SINT;
+            case 3 -> bytes == 2 ? VK10.VK_FORMAT_R16G16B16_SINT : VK10.VK_FORMAT_R32G32B32_SINT;
+            default -> bytes == 2 ? VK10.VK_FORMAT_R16G16B16A16_SINT : VK10.VK_FORMAT_R32G32B32A32_SINT;
+        };
     }
 
     @Test
-    void theStreamStridesMatchTheFormats() {
-        // A format whose size does not match Meshlet's stride silently walks off the end of the
-        // buffer on the last vertex of every meshlet, which is a GPU fault rather than a bad pixel.
-        assertEquals(net.amdfaster.mesh.Meshlet.POSITION_STRIDE, 8, "4 x int16");
-        assertEquals(net.amdfaster.mesh.Meshlet.ATTRIBUTE_STRIDE, 8, "2 x float32");
-        assertEquals(net.amdfaster.mesh.Meshlet.LIGHT_STRIDE, 4, "1 x uint32");
+    void eachVertexStreamUsesTheFormatItsGlslTypeAndStrideRequire() {
+        Map<String, String> types = inputTypes(vertexSource());
+        assertEquals(3, types.size(), "exactly three inputs, one per stream");
+
+        assertEquals("ivec4", types.get("inPosition"), "block coordinates are integers");
+        assertEquals(requiredFormat("inPosition", types, Meshlet.POSITION_STRIDE),
+                BlockBindings.FORMAT_POSITION, "position format");
+
+        assertEquals("vec2", types.get("inUV"), "atlas coordinates are float");
+        assertEquals(requiredFormat("inUV", types, Meshlet.ATTRIBUTE_STRIDE),
+                BlockBindings.FORMAT_ATTRIBUTE, "attribute format");
+
+        assertEquals("uint", types.get("inLight"), "light is one packed word");
+        assertEquals(requiredFormat("inLight", types, Meshlet.LIGHT_STRIDE),
+                BlockBindings.FORMAT_LIGHT, "light format");
+    }
+
+    @Test
+    void theStreamStridesAreWhatTheFormatsImply() {
+        // The other direction: Meshlet's write methods are what fill the buffers, so if a stride
+        // and a format disagree it is Meshlet that has to change.
+        assertEquals(8, Meshlet.POSITION_STRIDE, "4 x int16");
+        assertEquals(8, Meshlet.ATTRIBUTE_STRIDE, "2 x float32");
+        assertEquals(4, Meshlet.LIGHT_STRIDE, "1 x uint32");
     }
 
     @Test
