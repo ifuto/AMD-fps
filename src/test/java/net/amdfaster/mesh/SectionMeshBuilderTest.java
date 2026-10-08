@@ -63,7 +63,7 @@ class SectionMeshBuilderTest {
             int x = i % 16;
             int z = (i / 16) % 16;
             int y = 1 + i / 256;
-            builder.add(new Quad(Orientation.POS_Y, x, y, z, x + 1, y, z + 1, 0f, 0f, 1f, 1f, 0, 0));
+            builder.add(Quad.uniform(Orientation.POS_Y, x, y, z, x + 1, y, z + 1, 0f, 0f, 1f, 1f, 0, 0));
         }
         SectionMesh mesh = builder.build();
 
@@ -93,7 +93,7 @@ class SectionMeshBuilderTest {
     @Test
     void degenerateQuadsAreIgnored() {
         SectionMeshBuilder builder = new SectionMeshBuilder(0, 0, 0);
-        builder.add(new Quad(Orientation.POS_Y, 0, 16, 0, 0, 16, 1, 0f, 0f, 1f, 1f, 0, 0));
+        builder.add(Quad.uniform(Orientation.POS_Y, 0, 16, 0, 0, 16, 1, 0f, 0f, 1f, 1f, 0, 0));
         SectionMesh mesh = builder.build();
         assertTrue(mesh.isEmpty());
     }
