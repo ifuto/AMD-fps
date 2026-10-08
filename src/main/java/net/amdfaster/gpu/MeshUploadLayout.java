@@ -10,13 +10,17 @@ import net.amdfaster.mesh.SectionMesh;
  * reservations for data that is always uploaded together. The regions are laid out end to end with
  * each one starting on an aligned offset, so a following section's reservation is aligned too.
  *
- * <p>Positions and attributes stay separate streams rather than interleaved. Interleaving would
- * save a vertex binding, but the culling shader reads positions without attributes and the
- * attribute stream is rewritten on light updates without touching positions; splitting them keeps
- * both cheap.
+ * <p>The streams stay separate rather than interleaved. Interleaving would save a vertex binding,
+ * but the Z pre-pass reads positions and nothing else, and the light stream is rewritten when a
+ * torch is placed or the sun goes down without geometry changing at all. Interleaved, that update
+ * would rewrite every byte of the section's vertex data to change one word per vertex.
+ *
+ * <p>Order is positions, attributes, lights, indices -- the order the streams are written in, so a
+ * single sequential pass over the staging buffer fills all four without seeking.
  */
 public record MeshUploadLayout(long positionsOffset, int positionsBytes,
                                long attributesOffset, int attributesBytes,
+                               long lightsOffset, int lightsBytes,
                                long indicesOffset, int indicesBytes,
                                long totalBytes) {
 
@@ -30,7 +34,7 @@ public record MeshUploadLayout(long positionsOffset, int positionsBytes,
     public static final int ALIGNMENT = 4;
 
     /** The layout of an empty section: no bytes, and the uploader skips it. */
-    public static final MeshUploadLayout EMPTY = new MeshUploadLayout(0, 0, 0, 0, 0, 0, 0);
+    public static final MeshUploadLayout EMPTY = new MeshUploadLayout(0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     public boolean isEmpty() {
         return this.totalBytes == 0;
@@ -42,7 +46,7 @@ public record MeshUploadLayout(long positionsOffset, int positionsBytes,
      */
     public static MeshUploadLayout forSection(SectionMesh mesh, long baseOffset) {
         return of(baseOffset, mesh.totalPositionBytes(), mesh.totalAttributeBytes(),
-                mesh.totalIndexBytes());
+                mesh.totalLightBytes(), mesh.totalIndexBytes());
     }
 
     /**
@@ -52,16 +56,17 @@ public record MeshUploadLayout(long positionsOffset, int positionsBytes,
      * @return {@link #EMPTY} when there is nothing to upload
      */
     public static MeshUploadLayout of(long baseOffset, int positionsBytes, int attributesBytes,
-                                      int indicesBytes) {
-        if (positionsBytes == 0 && attributesBytes == 0 && indicesBytes == 0) {
+                                      int lightsBytes, int indicesBytes) {
+        if (positionsBytes == 0 && attributesBytes == 0 && lightsBytes == 0 && indicesBytes == 0) {
             return EMPTY;
         }
         long start = alignUp(baseOffset, ALIGNMENT);
         long attributesOffset = alignUp(start + positionsBytes, ALIGNMENT);
-        long indicesOffset = alignUp(attributesOffset + attributesBytes, ALIGNMENT);
+        long lightsOffset = alignUp(attributesOffset + attributesBytes, ALIGNMENT);
+        long indicesOffset = alignUp(lightsOffset + lightsBytes, ALIGNMENT);
         long end = alignUp(indicesOffset + indicesBytes, ALIGNMENT);
         return new MeshUploadLayout(start, positionsBytes, attributesOffset, attributesBytes,
-                indicesOffset, indicesBytes, end - baseOffset);
+                lightsOffset, lightsBytes, indicesOffset, indicesBytes, end - baseOffset);
     }
 
     private static long alignUp(long value, int alignment) {

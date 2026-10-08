@@ -40,6 +40,21 @@ public final class Meshlet {
     public static final int ATTRIBUTE_STRIDE = 8;
 
     /**
+     * Bytes per vertex in the light stream: one word holding both lightmap channels and the ambient
+     * occlusion level.
+     *
+     * <p>Its own stream rather than a field appended to the attributes, for the same reason position
+     * has one. The Z pre-pass that cutout geometry uses reads positions and nothing else, so a
+     * narrow light stream costs it nothing. And light changes without geometry changing -- a torch
+     * placed or the sun going down rewrites this stream and leaves positions and uv untouched, which
+     * an interleaved layout would make impossible.
+     *
+     * <p>Four bytes also divides a 64-byte cache line exactly, so sixteen vertices sit in a line and
+     * none straddles one.
+     */
+    public static final int LIGHT_STRIDE = 4;
+
+    /**
      * Bytes of index data per quad: six 8-bit indices, {@code 0 1 2 0 2 3}, drawn as a triangle
      * list.
      *
@@ -58,7 +73,7 @@ public final class Meshlet {
     private final float[] uvs;
     private final byte[] quadIndices;
     private final int[] quadColors;
-    private final int[] quadLights;
+    private final int[] vertexLights;
     private final int quadCount;
     private final int vertexCount;
     private final int minX;
@@ -69,7 +84,7 @@ public final class Meshlet {
     private final int maxZ;
 
     Meshlet(Orientation orientation, short[] positions, float[] uvs, byte[] quadIndices,
-            int[] quadColors, int[] quadLights, int quadCount, int vertexCount,
+            int[] quadColors, int[] vertexLights, int quadCount, int vertexCount,
             int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
         if (quadCount > MAX_QUADS) {
             throw new IllegalArgumentException("meshlet has " + quadCount + " quads, max " + MAX_QUADS);
@@ -82,7 +97,7 @@ public final class Meshlet {
         this.uvs = uvs;
         this.quadIndices = quadIndices;
         this.quadColors = quadColors;
-        this.quadLights = quadLights;
+        this.vertexLights = vertexLights;
         this.quadCount = quadCount;
         this.vertexCount = vertexCount;
         this.minX = minX;
@@ -138,8 +153,14 @@ public final class Meshlet {
         return this.quadColors[quad];
     }
 
-    public int light(int quad) {
-        return this.quadLights[quad];
+    /**
+     * Packed light and ambient occlusion at vertex {@code vertex}.
+     *
+     * <p>Per vertex, not per quad. Two corners of the same merged quad can be at opposite ends of
+     * the light range, and the rasteriser interpolates between them for free.
+     */
+    public int light(int vertex) {
+        return this.vertexLights[vertex];
     }
 
     public int minX() {
@@ -218,6 +239,11 @@ public final class Meshlet {
         return this.vertexCount * ATTRIBUTE_STRIDE;
     }
 
+    /** Bytes this meshlet needs in the light stream. */
+    public int lightBytes() {
+        return this.vertexCount * LIGHT_STRIDE;
+    }
+
     /** Bytes this meshlet needs in the index stream. */
     public int indexBytes() {
         return this.quadCount * INDEX_BYTES_PER_QUAD;
@@ -248,6 +274,19 @@ public final class Meshlet {
         for (int i = 0; i < this.vertexCount; i++) {
             out.putFloat(this.uvs[i * 2]);
             out.putFloat(this.uvs[i * 2 + 1]);
+        }
+    }
+
+    /**
+     * Writes the light stream.
+     *
+     * <p>Sequential like the others, for the same reason: this lands in host-visible memory and that
+     * memory is write-combined.
+     */
+    public void writeLights(ByteBuffer out) {
+        requireOrder(out);
+        for (int i = 0; i < this.vertexCount; i++) {
+            out.putInt(this.vertexLights[i]);
         }
     }
 

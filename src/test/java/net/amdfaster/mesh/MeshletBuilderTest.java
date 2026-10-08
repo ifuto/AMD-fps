@@ -1,5 +1,7 @@
 package net.amdfaster.mesh;
 
+import net.amdfaster.light.LightValue;
+import net.amdfaster.light.VertexLight;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -14,11 +16,11 @@ class MeshletBuilderTest {
 
     /** Two adjacent 1x1 quads on the z=0 plane, sharing the edge x=1. */
     private static Quad left() {
-        return new Quad(Orientation.NEG_Z, 0, 0, 0, 1, 1, 0, 0f, 0f, 1f, 1f, 0xFF112233, 0x00F000F0);
+        return Quad.uniform(Orientation.NEG_Z, 0, 0, 0, 1, 1, 0, 0f, 0f, 1f, 1f, 0xFF112233, 0x00F000F0);
     }
 
     private static Quad right() {
-        return new Quad(Orientation.NEG_Z, 1, 0, 0, 2, 1, 0, 0f, 0f, 1f, 1f, 0xFF112233, 0x00F000F0);
+        return Quad.uniform(Orientation.NEG_Z, 1, 0, 0, 2, 1, 0, 0f, 0f, 1f, 1f, 0xFF112233, 0x00F000F0);
     }
 
     @Test
@@ -87,7 +89,7 @@ class MeshletBuilderTest {
     void packedBoundsSurvivesTheTopOfTheRange() {
         // Section coordinates run 0..16 inclusive, so 16 needs all 5 bits and must not wrap to 0.
         MeshletBuilder builder = new MeshletBuilder(Orientation.POS_Y);
-        builder.add(new Quad(Orientation.POS_Y, 15, 16, 15, 16, 16, 16, 0f, 0f, 1f, 1f, 0, 0));
+        builder.add(Quad.uniform(Orientation.POS_Y, 15, 16, 15, 16, 16, 16, 0f, 0f, 1f, 1f, 0, 0));
         Meshlet m = builder.build();
 
         assertEquals(15, m.minX());
@@ -108,14 +110,14 @@ class MeshletBuilderTest {
     void rejectsQuadsOfAnotherOrientation() {
         MeshletBuilder builder = new MeshletBuilder(Orientation.NEG_Z);
         assertThrows(IllegalArgumentException.class,
-                () -> builder.add(new Quad(Orientation.POS_Z, 0, 0, 1, 1, 1, 1, 0f, 0f, 1f, 1f, 0, 0)));
+                () -> builder.add(Quad.uniform(Orientation.POS_Z, 0, 0, 1, 1, 1, 1, 0f, 0f, 1f, 1f, 0, 0)));
     }
 
     @Test
     void rejectsDegenerateQuads() {
         MeshletBuilder builder = new MeshletBuilder(Orientation.NEG_Z);
         assertThrows(IllegalArgumentException.class,
-                () -> builder.add(new Quad(Orientation.NEG_Z, 0, 0, 0, 1, 0, 0, 0f, 0f, 1f, 1f, 0, 0)));
+                () -> builder.add(Quad.uniform(Orientation.NEG_Z, 0, 0, 0, 1, 0, 0, 0f, 0f, 1f, 1f, 0, 0)));
     }
 
     @Test
@@ -131,7 +133,7 @@ class MeshletBuilderTest {
             assertFalse(builder.isFull(), "full too early at " + i);
             int x = i % 16;
             int z = i / 16;
-            builder.add(new Quad(Orientation.POS_Y, x, 16, z, x + 1, 16, z + 1,
+            builder.add(Quad.uniform(Orientation.POS_Y, x, 16, z, x + 1, 16, z + 1,
                     0f, 0f, 1f, 1f, 0, 0));
         }
         assertTrue(builder.isFull());
@@ -239,7 +241,7 @@ class MeshletBuilderTest {
     void attributesCarryTilingUvOutsideTheUnitSquare() {
         // A greedy quad spanning 4 blocks tiles its texture, so uv must exceed 0..1.
         MeshletBuilder builder = new MeshletBuilder(Orientation.POS_Y);
-        builder.add(new Quad(Orientation.POS_Y, 0, 16, 0, 4, 16, 4, 0f, 0f, 4f, 4f, 0, 0));
+        builder.add(Quad.uniform(Orientation.POS_Y, 0, 16, 0, 4, 16, 4, 0f, 0f, 4f, 4f, 0, 0));
         Meshlet m = builder.build();
 
         boolean foundBeyondOne = false;
@@ -249,5 +251,115 @@ class MeshletBuilderTest {
             }
         }
         assertTrue(foundBeyondOne, "greedy quads must be able to tile their texture");
+    }
+
+    /** A quad on the z=0 plane carrying four distinct corner lights. */
+    private static Quad fourLights() {
+        return new Quad(Orientation.NEG_Z, 0, 0, 0, 1, 1, 0, 0f, 0f, 1f, 1f, 0xFF112233,
+                VertexLight.packLight(LightValue.pack(0, 15), 3),
+                VertexLight.packLight(LightValue.pack(4, 15), 2),
+                VertexLight.packLight(LightValue.pack(8, 11), 1),
+                VertexLight.packLight(LightValue.pack(12, 7), 0));
+    }
+
+    @Test
+    void aUniformQuadLightsEveryCornerTheSame() {
+        Quad quad = left();
+        for (int corner = 0; corner < Quad.VERTICES; corner++) {
+            assertEquals(quad.lightA(), quad.cornerLight(corner), "corner " + corner);
+        }
+        assertEquals(0x00F000F0, quad.lightA());
+    }
+
+    @Test
+    void eachCornerKeepsItsOwnLight() {
+        MeshletBuilder builder = new MeshletBuilder(Orientation.NEG_Z);
+        Quad quad = fourLights();
+        builder.add(quad);
+        Meshlet m = builder.build();
+
+        assertEquals(4, m.vertexCount(), "four distinct corners");
+        for (int corner = 0; corner < Quad.VERTICES; corner++) {
+            int vertex = m.vertexIndex(0, corner);
+            assertEquals(quad.cornerLight(corner), m.light(vertex), "corner " + corner);
+            // And the light is a real packed word, not a placeholder. The four corners were built
+            // with sky 15,15,11,7 and occlusion 3,2,1,0.
+            int[] expectedSky = {15, 15, 11, 7};
+            assertEquals(expectedSky[corner],
+                    LightValue.sky(VertexLight.unpackLight(m.light(vertex))), "corner " + corner);
+            assertEquals(3 - corner, VertexLight.unpackAo(m.light(vertex)), "corner " + corner);
+            assertEquals(corner == 0 ? 0 : corner == 1 ? 4 : corner == 2 ? 8 : 12,
+                    LightValue.block(VertexLight.unpackLight(m.light(vertex))), "corner " + corner);
+        }
+    }
+
+    @Test
+    void cornersThatDifferOnlyInLightAreNotDeduplicated() {
+        // The corruption this guards against is invisible until a seam appears in the wrong place.
+        // Two corners can share a position and a uv and still be lit differently -- where a lit
+        // face meets a shaded one is exactly that -- and merging them gives both whichever light
+        // the mesher happened to visit first.
+        int bright = VertexLight.packLight(LightValue.pack(15, 15), 3);
+        int dark = VertexLight.packLight(LightValue.pack(0, 0), 0);
+
+        MeshletBuilder same = new MeshletBuilder(Orientation.NEG_Z);
+        same.add(Quad.uniform(Orientation.NEG_Z, 0, 0, 0, 1, 1, 0, 0f, 0f, 1f, 1f, 0, bright));
+        same.add(Quad.uniform(Orientation.NEG_Z, 0, 0, 0, 1, 1, 0, 0f, 0f, 1f, 1f, 0, bright));
+        assertEquals(4, same.vertexCount(), "identical in every respect, so they merge");
+
+        MeshletBuilder different = new MeshletBuilder(Orientation.NEG_Z);
+        different.add(Quad.uniform(Orientation.NEG_Z, 0, 0, 0, 1, 1, 0, 0f, 0f, 1f, 1f, 0, bright));
+        different.add(Quad.uniform(Orientation.NEG_Z, 0, 0, 0, 1, 1, 0, 0f, 0f, 1f, 1f, 0, dark));
+        assertEquals(8, different.vertexCount(), "same place, same uv, different light: two vertices");
+
+        Meshlet m = different.build();
+        assertEquals(bright, m.light(m.vertexIndex(0, 0)));
+        assertEquals(dark, m.light(m.vertexIndex(1, 0)));
+    }
+
+    @Test
+    void theLightStreamHasTheDeclaredLayout() {
+        MeshletBuilder builder = new MeshletBuilder(Orientation.NEG_Z);
+        builder.add(left());
+        builder.add(right());
+        Meshlet m = builder.build();
+
+        assertEquals(4, Meshlet.LIGHT_STRIDE);
+        assertEquals(m.vertexCount() * Meshlet.LIGHT_STRIDE, m.lightBytes());
+        assertEquals(0, m.lightBytes() % Meshlet.LIGHT_STRIDE);
+        // Four bytes divides a 64-byte line exactly, so no vertex straddles one.
+        assertEquals(0, 64 % Meshlet.LIGHT_STRIDE);
+
+        ByteBuffer lights = ByteBuffer.allocate(m.lightBytes()).order(ByteOrder.LITTLE_ENDIAN);
+        m.writeLights(lights);
+        assertEquals(0, lights.remaining(), "the stream must be filled exactly");
+
+        lights.flip();
+        for (int i = 0; i < m.vertexCount(); i++) {
+            assertEquals(m.light(i), lights.getInt(), "vertex " + i);
+        }
+    }
+
+    @Test
+    void theLightStreamRejectsABigEndianBuffer() {
+        MeshletBuilder builder = new MeshletBuilder(Orientation.NEG_Z);
+        builder.add(left());
+        Meshlet m = builder.build();
+        ByteBuffer bigEndian = ByteBuffer.allocate(m.lightBytes());
+        assertEquals(ByteOrder.BIG_ENDIAN, bigEndian.order());
+        assertThrows(IllegalArgumentException.class, () -> m.writeLights(bigEndian));
+    }
+
+    @Test
+    void rebuildingStartsTheVertexLightsFresh() {
+        MeshletBuilder builder = new MeshletBuilder(Orientation.NEG_Z);
+        builder.add(fourLights());
+        Meshlet first = builder.build();
+
+        builder.add(left());
+        Meshlet second = builder.build();
+        assertEquals(4, second.vertexCount());
+        assertEquals(left().lightA(), second.light(0), "no light left over from the previous build");
+        assertEquals(4, first.vertexCount(), "the first meshlet is unaffected by the reset");
     }
 }

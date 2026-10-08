@@ -17,7 +17,11 @@ package net.amdfaster.mesh;
  * @param u1,v1       texture coordinate at the maximum corner; may lie outside 0..1 when a greedy
  *                    quad spans several blocks and the texture is tiled
  * @param color       packed ARGB, uniform across the quad
- * @param light       packed lightmap value, uniform across the quad
+ * @param lightA,lightB,lightC,lightD packed light and ambient occlusion per corner, in the same
+ *                    order {@link #cornerX} numbers them. Per corner rather than per quad because a
+ *                    greedy-merged quad spans whole blocks and its two ends can differ across the
+ *                    full 0..15 light range; one value for the quad is what makes large merged
+ *                    faces look flat. See {@code VertexLight#packed()}.
  */
 public record Quad(
         Orientation orientation,
@@ -26,8 +30,33 @@ public record Quad(
         float u0, float v0,
         float u1, float v1,
         int color,
-        int light
+        int lightA, int lightB, int lightC, int lightD
 ) {
+
+    /**
+     * A quad lit uniformly, for callers that have one lightmap value for the whole face.
+     *
+     * <p>The mesher uses this today. It is a stepping stone rather than the destination: flat
+     * lighting is wrong on a merged face, and the four-corner form is what lets the smooth lighting
+     * pass plug in without touching the mesh format again.
+     */
+    public static Quad uniform(Orientation orientation,
+            int x0, int y0, int z0, int x1, int y1, int z1,
+            float u0, float v0, float u1, float v1, int color, int light) {
+        return new Quad(orientation, x0, y0, z0, x1, y1, z1, u0, v0, u1, v1, color,
+                light, light, light, light);
+    }
+
+    /** Packed light and occlusion at corner {@code i} in 0..3. */
+    public int cornerLight(int i) {
+        return switch (i) {
+            case 0 -> this.lightA;
+            case 1 -> this.lightB;
+            case 2 -> this.lightC;
+            case 3 -> this.lightD;
+            default -> throw new IllegalArgumentException("corner out of range: " + i);
+        };
+    }
 
     /** Vertices per quad. Minecraft quads are never split, so this is a constant. */
     public static final int VERTICES = 4;

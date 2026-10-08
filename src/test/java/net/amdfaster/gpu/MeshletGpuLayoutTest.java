@@ -109,4 +109,31 @@ class MeshletGpuLayoutTest {
             assertEquals(1, layout.runCount(o));
         }
     }
+
+    @Test
+    void theLightStreamIsSizedFromTheWorstCaseVertexCount() {
+        assertEquals(992, MeshletGpuLayout.LIGHT_BYTES_PER_MESHLET, "248 vertices x 4 bytes");
+        assertEquals(MeshletGpuLayout.VERTICES_PER_MESHLET * Meshlet.LIGHT_STRIDE,
+                MeshletGpuLayout.LIGHT_BYTES_PER_MESHLET);
+
+        ArrayVoxelView view = new ArrayVoxelView(16, 16, 16);
+        view.set(4, 4, 4, 1, true);
+        MeshletGpuLayout layout = MeshletGpuLayout.forSection(SectionMesher.mesh(view, 0, 0, 0));
+        assertEquals(layout.meshletCount() * MeshletGpuLayout.LIGHT_BYTES_PER_MESHLET,
+                layout.lightBytes());
+        // The worst-case reservation has to cover what the section actually needs, or the light
+        // upload overruns the buffer on a dense section.
+        SectionMesh mesh = SectionMesher.mesh(view, 0, 0, 0);
+        assertTrue(layout.lightBytes() >= mesh.totalLightBytes(),
+                layout.lightBytes() + " < " + mesh.totalLightBytes());
+    }
+
+    @Test
+    void anEmptySectionReservesNoLightBytes() {
+        MeshletGpuLayout empty =
+                MeshletGpuLayout.forSection(SectionMesher.mesh(new ArrayVoxelView(16, 16, 16), 0, 0, 0));
+        assertTrue(empty.isEmpty());
+        assertEquals(0, empty.lightBytes());
+        assertEquals(0, empty.vertexSlots());
+    }
 }

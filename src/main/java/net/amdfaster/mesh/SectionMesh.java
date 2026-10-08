@@ -108,6 +108,16 @@ public final class SectionMesh {
         return this.totalVertices * Meshlet.ATTRIBUTE_STRIDE;
     }
 
+    /**
+     * Bytes of light data for the whole section.
+     *
+     * <p>Its own total because the light stream is uploaded on its own schedule: a light update
+     * rewrites this and nothing else.
+     */
+    public int totalLightBytes() {
+        return this.totalVertices * Meshlet.LIGHT_STRIDE;
+    }
+
     public int totalIndexBytes() {
         return this.totalQuads * Meshlet.INDEX_BYTES_PER_QUAD;
     }

@@ -18,12 +18,12 @@ class WindingTest {
 
     static Quad unitQuad(Orientation o) {
         return switch (o) {
-            case NEG_X -> new Quad(o, 0, 0, 0, 0, 1, 1, 0f, 0f, 1f, 1f, 0xFFFFFFFF, 0);
-            case POS_X -> new Quad(o, 1, 0, 0, 1, 1, 1, 0f, 0f, 1f, 1f, 0xFFFFFFFF, 0);
-            case NEG_Y -> new Quad(o, 0, 0, 0, 1, 0, 1, 0f, 0f, 1f, 1f, 0xFFFFFFFF, 0);
-            case POS_Y -> new Quad(o, 0, 1, 0, 1, 1, 1, 0f, 0f, 1f, 1f, 0xFFFFFFFF, 0);
-            case NEG_Z -> new Quad(o, 0, 0, 0, 1, 1, 0, 0f, 0f, 1f, 1f, 0xFFFFFFFF, 0);
-            case POS_Z -> new Quad(o, 0, 0, 1, 1, 1, 1, 0f, 0f, 1f, 1f, 0xFFFFFFFF, 0);
+            case NEG_X -> Quad.uniform(o, 0, 0, 0, 0, 1, 1, 0f, 0f, 1f, 1f, 0xFFFFFFFF, 0);
+            case POS_X -> Quad.uniform(o, 1, 0, 0, 1, 1, 1, 0f, 0f, 1f, 1f, 0xFFFFFFFF, 0);
+            case NEG_Y -> Quad.uniform(o, 0, 0, 0, 1, 0, 1, 0f, 0f, 1f, 1f, 0xFFFFFFFF, 0);
+            case POS_Y -> Quad.uniform(o, 0, 1, 0, 1, 1, 1, 0f, 0f, 1f, 1f, 0xFFFFFFFF, 0);
+            case NEG_Z -> Quad.uniform(o, 0, 0, 0, 1, 1, 0, 0f, 0f, 1f, 1f, 0xFFFFFFFF, 0);
+            case POS_Z -> Quad.uniform(o, 0, 0, 1, 1, 1, 1, 0f, 0f, 1f, 1f, 0xFFFFFFFF, 0);
         };
     }
 

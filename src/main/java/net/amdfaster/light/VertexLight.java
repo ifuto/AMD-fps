@@ -20,6 +20,12 @@ public record VertexLight(int light, int ao) {
     /** Highest occlusion level: nothing nearby blocking the corner. */
     public static final int AO_MAX = 3;
 
+    /** Where the occlusion level sits in a packed word; bits 24 and 25. */
+    private static final int AO_SHIFT = 24;
+
+    /** Everything a packed word holds except the occlusion level. */
+    private static final int LIGHT_MASK = 0x00FFFFFF;
+
     /**
      * Brightness multiplier per occlusion level, indexed by {@link #ao()}.
      *
@@ -52,6 +58,40 @@ public record VertexLight(int light, int ao) {
     /** Fully lit and unoccluded. */
     public static VertexLight fullBright() {
         return new VertexLight(LightValue.fullBright(), AO_MAX);
+    }
+
+    /**
+     * The two channels and the occlusion level in one word, for the vertex stream.
+     *
+     * <p>The lightmap coordinate occupies bits 4..7 and 20..23, so bits 24..31 are unused and the
+     * occlusion level goes in the lowest two of them. One 4-byte attribute instead of two, and the
+     * shader that unpacks it does so once per vertex while the fetch is in flight.
+     */
+    public int packed() {
+        return packLight(this.light, this.ao);
+    }
+
+    /** The same packing as {@link #packed()}, without allocating a {@code VertexLight}. */
+    public static int packLight(int light, int ao) {
+        if (ao < AO_MIN || ao > AO_MAX) {
+            throw new IllegalArgumentException("ao out of range 0..3: " + ao);
+        }
+        return (light & LIGHT_MASK) | (ao << AO_SHIFT);
+    }
+
+    /** The occlusion level of a packed word. */
+    public static int unpackAo(int packed) {
+        return (packed >>> AO_SHIFT) & AO_MAX;
+    }
+
+    /** The lightmap coordinate of a packed word, with the occlusion bits removed. */
+    public static int unpackLight(int packed) {
+        return packed & LIGHT_MASK;
+    }
+
+    /** Rebuilds a {@code VertexLight} from a packed word. */
+    public static VertexLight unpack(int packed) {
+        return new VertexLight(unpackLight(packed), unpackAo(packed));
     }
 
     /** Lightmap U for the block channel. */

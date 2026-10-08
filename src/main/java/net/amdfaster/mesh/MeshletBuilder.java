@@ -22,7 +22,16 @@ import java.util.Map;
  */
 public final class MeshletBuilder {
 
-    private record VertexKey(short x, short y, short z, float u, float v) {
+    /**
+     * What makes two corners the same vertex.
+     *
+     * <p>Light is part of the key, and leaving it out is a subtle corruption rather than a visible
+     * one. Two corners can share a position and a uv and still be lit differently -- the corner
+     * where a lit face meets a shaded one is exactly that -- and merging them would give both
+     * whichever light arrived first. The seam would then depend on the order the mesher happened to
+     * visit the two faces.
+     */
+    private record VertexKey(short x, short y, short z, float u, float v, int light) {
     }
 
     private final Orientation orientation;
@@ -32,7 +41,7 @@ public final class MeshletBuilder {
     private final float[] uvs = new float[Meshlet.MAX_VERTICES * 2];
     private final byte[] quadIndices = new byte[Meshlet.MAX_QUADS * Quad.VERTICES];
     private final int[] quadColors = new int[Meshlet.MAX_QUADS];
-    private final int[] quadLights = new int[Meshlet.MAX_QUADS];
+    private final int[] vertexLights = new int[Meshlet.MAX_VERTICES];
 
     private int vertexCount;
     private int quadCount;
@@ -93,8 +102,9 @@ public final class MeshletBuilder {
             short z = (short) quad.cornerZ(corner);
             float u = quad.cornerU(corner);
             float v = quad.cornerV(corner);
+            int light = quad.cornerLight(corner);
 
-            VertexKey key = new VertexKey(x, y, z, u, v);
+            VertexKey key = new VertexKey(x, y, z, u, v, light);
             Integer existing = this.vertexIndex.get(key);
             int index;
             if (existing != null) {
@@ -106,6 +116,7 @@ public final class MeshletBuilder {
                 this.positions[index * 3 + 2] = z;
                 this.uvs[index * 2] = u;
                 this.uvs[index * 2 + 1] = v;
+                this.vertexLights[index] = light;
                 this.vertexIndex.put(key, index);
             }
             this.quadIndices[base + corner] = (byte) index;
@@ -131,7 +142,6 @@ public final class MeshletBuilder {
         }
 
         this.quadColors[this.quadCount] = quad.color();
-        this.quadLights[this.quadCount] = quad.light();
         this.quadCount++;
     }
 
@@ -146,7 +156,7 @@ public final class MeshletBuilder {
                 Arrays.copyOf(this.uvs, this.vertexCount * 2),
                 Arrays.copyOf(this.quadIndices, this.quadCount * Quad.VERTICES),
                 Arrays.copyOf(this.quadColors, this.quadCount),
-                Arrays.copyOf(this.quadLights, this.quadCount),
+                Arrays.copyOf(this.vertexLights, this.vertexCount),
                 this.quadCount, this.vertexCount,
                 this.minX, this.minY, this.minZ, this.maxX, this.maxY, this.maxZ);
 

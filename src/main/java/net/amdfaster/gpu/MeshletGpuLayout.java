@@ -28,6 +28,9 @@ public record MeshletGpuLayout(int meshletCount, int[] runStart, int[] runCount)
     /** Vertices per meshlet: 62 quads x 4. */
     public static final int VERTICES_PER_MESHLET = Meshlet.MAX_QUADS * 4;
 
+    /** Bytes of light data per meshlet at its worst case: 248 vertices x 4. */
+    public static final int LIGHT_BYTES_PER_MESHLET = VERTICES_PER_MESHLET * Meshlet.LIGHT_STRIDE;
+
     private static final MeshletGpuLayout EMPTY =
             new MeshletGpuLayout(0, new int[Orientation.values().length],
                     new int[Orientation.values().length]);
@@ -73,6 +76,11 @@ public record MeshletGpuLayout(int meshletCount, int[] runStart, int[] runCount)
     /** Vertex slots the whole section's meshlets occupy at their worst case. */
     public int vertexSlots() {
         return this.meshletCount * VERTICES_PER_MESHLET;
+    }
+
+    /** Bytes of light buffer the whole section's meshlets occupy at their worst case. */
+    public int lightBytes() {
+        return this.meshletCount * LIGHT_BYTES_PER_MESHLET;
     }
 
     /** Work groups a culling dispatch needs, at the work group size the shaders use. */
