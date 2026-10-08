@@ -1,13 +1,26 @@
 // Meshlet frustum and back-face culling with indirect draw compaction.
 //
-// One invocation per meshlet. Visible meshlets claim a slot with an atomic add and write their own
+// One invocation per meshlet. Visible meshlets claim a slot in a compacted list and write their own
 // draw command into it, so the output buffer ends up dense and vkCmdDrawIndexedIndirectCount can
 // consume it without the CPU ever reading back a count.
 //
+// The compaction is wave-cooperative: one ballot per wave, one atomic per wave. A per-lane atomic
+// aims every surviving lane in the dispatch at the same address, and that counter is the single
+// most contended location in the pass. RE Engine measured cluster culling at 0.543 ms with one
+// cluster per wave and 0.051 ms once a wave appended cooperatively -- better than ten times, for a
+// change that does no less work.
+//
 // local_size_x is 64: two full wave32s on RDNA, one full wave64 on GCN. AMD's guidance is a
-// multiple of 64 so that no lane is masked out on either generation.
+// multiple of 64 so that no lane is masked out on either generation. The subgroup intrinsics below
+// adapt to whichever width the driver actually reports, so the same source is correct on both.
 
 #version 450
+
+// One ballot, reused for both the exclusive prefix and the total. Asking for
+// subgroupExclusiveAdd and subgroupAdd separately is the same predicate twice, and some compilers
+// emit a second ballot for it rather than caching the mask.
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_ballot : require
 
 layout(local_size_x = 64) in;
 
@@ -76,54 +89,77 @@ void main() {
     barrier();
 
     uint index = baseMeshlet + gl_GlobalInvocationID.x;
-    if (index >= meshletCount) {
-        return;
-    }
+    bool inRange = index < meshletCount;
 
-    uvec4 record = meshlets[index];
-    uint packed = record.x;
-    vec3 origin = vec3(record.yzw) - cameraOrigin.xyz;
+    // No early return past this point. Subgroup operations only see active lanes, so a lane that
+    // returned would silently drop out of the ballot and the wave's totals would be short.
+    bool visible = false;
+    if (inRange) {
+        uvec4 record = meshlets[index];
+        uint packed = record.x;
+        vec3 origin = vec3(record.yzw) - cameraOrigin.xyz;
 
-    vec3 boxMin = origin + decodeTriple(packed, 0u);
-    vec3 boxMax = origin + decodeTriple(packed, 15u);
+        vec3 boxMin = origin + decodeTriple(packed, 0u);
+        vec3 boxMax = origin + decodeTriple(packed, 15u);
 
-    atomicAdd(testedCount, 1u);
-    if (!visibleAgainstFrustum(boxMin, boxMax)) {
-        return;
-    }
+        visible = visibleAgainstFrustum(boxMin, boxMax);
 
-    // Whole-meshlet back-face cull. Every face in a meshlet shares the bucket's normal, so one
-    // comparison replaces a per-face test, and what it saves is the vertex shading and the draw
-    // rather than the fragments -- the rasteriser was already rejecting these.
-    //
-    // Gated on bit 30 of the packed bounds: a meshlet whose builder never declared itself
-    // single-sided is left alone. boxMin and boxMax are camera-relative here, so the camera is at
-    // the origin and each test is a comparison against zero.
-    if ((packed >> 30u & 1u) != 0u) {
-        uint o = orientations[index];
-        // Ordinals: NEG_X 0, POS_X 1, NEG_Y 2, POS_Y 3, NEG_Z 4, POS_Z 5.
-        bool positive = (o & 1u) != 0u;
-        bool backFacing;
-        if (o < 2u) {
-            backFacing = positive ? boxMin.x >= 0.0 : boxMax.x <= 0.0;
-        } else if (o < 4u) {
-            backFacing = positive ? boxMin.y >= 0.0 : boxMax.y <= 0.0;
-        } else {
-            backFacing = positive ? boxMin.z >= 0.0 : boxMax.z <= 0.0;
-        }
-        if (backFacing) {
-            return;
+        // Whole-meshlet back-face cull. Every face in a meshlet shares the bucket's normal, so one
+        // comparison replaces a per-face test, and what it saves is the vertex shading and the draw
+        // rather than the fragments -- the rasteriser was already rejecting these.
+        //
+        // Gated on bit 30 of the packed bounds: a meshlet whose builder never declared itself
+        // single-sided is left alone. boxMin and boxMax are camera-relative here, so the camera is
+        // at the origin and each test is a comparison against zero.
+        if (visible && (packed >> 30u & 1u) != 0u) {
+            uint o = orientations[index];
+            // Ordinals: NEG_X 0, POS_X 1, NEG_Y 2, POS_Y 3, NEG_Z 4, POS_Z 5.
+            bool positive = (o & 1u) != 0u;
+            bool backFacing;
+            if (o < 2u) {
+                backFacing = positive ? boxMin.x >= 0.0 : boxMax.x <= 0.0;
+            } else if (o < 4u) {
+                backFacing = positive ? boxMin.y >= 0.0 : boxMax.y <= 0.0;
+            } else {
+                backFacing = positive ? boxMin.z >= 0.0 : boxMax.z <= 0.0;
+            }
+            visible = !backFacing;
         }
     }
 
-    // indexCount, instanceCount, firstIndex, vertexOffset, firstInstance.
-    // One meshlet is at most 62 quads = 372 indices and 248 vertices, all inside its own
-    // contiguous run, so the command is derivable from the meshlet index alone.
-    uint slot = atomicAdd(visibleCount, 1u);
-    uint base = slot * 5u;
-    draws[base + 0u] = 372u;      // indexCount
-    draws[base + 1u] = 1u;        // instanceCount
-    draws[base + 2u] = index * 372u;
-    draws[base + 3u] = index * 248u;
-    draws[base + 4u] = 0u;
+    // One ballot each, reused for the prefix and the total.
+    uvec4 testedMask = subgroupBallot(inRange);
+    uint waveTested = subgroupBallotBitCount(testedMask);
+
+    uvec4 visibleMask = subgroupBallot(visible);
+    uint laneSlot = subgroupBallotExclusiveBitCount(visibleMask);
+    uint waveVisible = subgroupBallotBitCount(visibleMask);
+
+    // subgroupElect is the lowest *active* lane, which is what makes this correct across an early
+    // bail-out above: the lanes that had no meshlet are not active and do not get counted.
+    uint visibleBase = 0u;
+    if (subgroupElect()) {
+        if (waveTested != 0u) {
+            atomicAdd(testedCount, waveTested);
+        }
+        // Skipping the atomic entirely when the wave contributed nothing is the other half of the
+        // saving: on a dispatch padded out to a work-group boundary, most of the tail waves have
+        // nothing to append.
+        if (waveVisible != 0u) {
+            visibleBase = atomicAdd(visibleCount, waveVisible);
+        }
+    }
+    visibleBase = subgroupBroadcastFirst(visibleBase);
+
+    if (visible) {
+        // indexCount, instanceCount, firstIndex, vertexOffset, firstInstance.
+        // One meshlet is at most 62 quads = 372 indices and 248 vertices, all inside its own
+        // contiguous run, so the command is derivable from the meshlet index alone.
+        uint base = (visibleBase + laneSlot) * 5u;
+        draws[base + 0u] = 372u;      // indexCount
+        draws[base + 1u] = 1u;        // instanceCount
+        draws[base + 2u] = index * 372u;
+        draws[base + 3u] = index * 248u;
+        draws[base + 4u] = 0u;
+    }
 }

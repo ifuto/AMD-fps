@@ -20,6 +20,11 @@
 
 #version 450
 
+// One ballot, reused for the prefix and the total. See meshlet_cull.comp for why the survivor
+// append is wave-cooperative rather than one atomic per lane.
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_ballot : require
+
 layout(local_size_x = 64) in;
 
 // The same frame block the meshlet passes use, at the same offsets, so one uniform buffer serves
@@ -113,66 +118,87 @@ bool projectToPixels(vec3 boxMin, vec3 boxMax, out vec4 pixels) {
 
 void main() {
     uint slot = baseCandidate + gl_GlobalInvocationID.x;
-    if (slot >= candidateCount) {
-        return;
-    }
+    bool inRange = slot < candidateCount;
+    bool stale = (flags & 1u) != 0u;
 
-    uint index = candidates[slot];
-    Entity entity = instances[index];
+    // No early return past this point: subgroup operations only count active lanes, so a lane that
+    // returned would vanish from the ballot and the wave's total would be short.
+    uint index = 0u;
+    bool keep = false;
+    if (inRange) {
+        index = candidates[slot];
 
-    if ((flags & 1u) != 0u) {
-        survivors[atomicAdd(survivorCount, 1u)] = index;
-        return;
-    }
+        if (stale) {
+            // A camera cut made the pyramid describe a different world. Culling against it hides
+            // geometry in plain view, and because culled geometry is never redrawn it never returns
+            // to the pyramid, so the mistake does not correct itself.
+            keep = true;
+        } else {
+            Entity entity = instances[index];
 
-    // Minecraft puts y at the entity's feet, so the box runs from y to y + height, and the footprint
-    // is a square of half-width either side of x and z.
-    vec3 position = entity.positionAndYaw.xyz - cameraOrigin.xyz;
-    vec3 boxMin = position + vec3(-entity.halfWidth, 0.0, -entity.halfWidth);
-    vec3 boxMax = position + vec3(entity.halfWidth, entity.height, entity.halfWidth);
+            // Minecraft puts y at the entity's feet, so the box runs from y to y + height, and the
+            // footprint is a square of half-width either side of x and z.
+            vec3 position = entity.positionAndYaw.xyz - cameraOrigin.xyz;
+            vec3 boxMin = position + vec3(-entity.halfWidth, 0.0, -entity.halfWidth);
+            vec3 boxMax = position + vec3(entity.halfWidth, entity.height, entity.halfWidth);
 
-    vec4 pixels;
-    if (!projectToPixels(boxMin, boxMax, pixels)) {
-        survivors[atomicAdd(survivorCount, 1u)] = index;
-        return;
-    }
-    if (pixels.z <= 0.0 || pixels.x >= float(hizWidth)
-            || pixels.w <= 0.0 || pixels.y >= float(hizHeight)) {
-        // Off screen is the frustum pass's decision, not this one's, and it has already been made.
-        survivors[atomicAdd(survivorCount, 1u)] = index;
-        return;
-    }
+            vec4 pixels;
+            if (!projectToPixels(boxMin, boxMax, pixels)) {
+                // A corner behind the camera makes the projection nonsense, and culling on nonsense
+                // is how geometry disappears while the player is looking straight at it.
+                keep = true;
+            } else if (pixels.z <= 0.0 || pixels.x >= float(hizWidth)
+                    || pixels.w <= 0.0 || pixels.y >= float(hizHeight)) {
+                // Off screen is the frustum pass's decision, not this one's, and it has been made.
+                keep = true;
+            } else {
+                int level = selectLevel(pixels.zw - pixels.xy);
+                ivec2 spanLimit =
+                        ivec2(ceilDim(int(hizWidth), level), ceilDim(int(hizHeight), level)) - ivec2(1);
+                ivec2 lo = clamp(ivec2(floor(pixels.xy)) >> level, ivec2(0), spanLimit);
+                ivec2 hi = clamp(ivec2(floor(pixels.zw)) >> level, ivec2(0), spanLimit);
 
-    int level = selectLevel(pixels.zw - pixels.xy);
-    ivec2 spanLimit = ivec2(ceilDim(int(hizWidth), level), ceilDim(int(hizHeight), level)) - ivec2(1);
-    ivec2 lo = clamp(ivec2(floor(pixels.xy)) >> level, ivec2(0), spanLimit);
-    ivec2 hi = clamp(ivec2(floor(pixels.zw)) >> level, ivec2(0), spanLimit);
+                // Every texel the box overhangs. At the selected level that is at most two per axis,
+                // so at most four fetches, and reading only the centre texel would test the box
+                // against the wrong footprint.
+                float pyramidMin = 1e30;
+                for (int ty = lo.y; ty <= hi.y; ++ty) {
+                    for (int tx = lo.x; tx <= hi.x; ++tx) {
+                        pyramidMin = min(pyramidMin, texelFetch(hiZDepth, ivec2(tx, ty), level).r);
+                    }
+                }
 
-    // Every texel the box overhangs. At the selected level that is at most two per axis, so at most
-    // four fetches, and reading only the centre texel would test the box against the wrong footprint.
-    float pyramidMin = 1e30;
-    for (int ty = lo.y; ty <= hi.y; ++ty) {
-        for (int tx = lo.x; tx <= hi.x; ++tx) {
-            pyramidMin = min(pyramidMin, texelFetch(hiZDepth, ivec2(tx, ty), level).r);
+                // Nearest point in reversed-Z is the largest z over w across the corners. Comparing
+                // the far corner instead would cull boxes that stick out in front of the wall.
+                float nearest = 0.0;
+                for (int corner = 0; corner < 8; ++corner) {
+                    vec3 p = mix(boxMin, boxMax,
+                                 notEqual(bvec3(corner & 1, corner & 2, corner & 4), bvec3(false)));
+                    vec4 clip = viewProjection * vec4(p, 1.0);
+                    nearest = max(nearest, clip.z / clip.w);
+                }
+
+                keep = nearest >= pyramidMin;
+            }
         }
     }
 
-    // Nearest point in reversed-Z is the largest z over w across the corners. Comparing the far
-    // corner instead would cull boxes that stick out in front of the wall.
-    float nearest = 0.0;
-    for (int corner = 0; corner < 8; ++corner) {
-        vec3 p = mix(boxMin, boxMax,
-                     notEqual(bvec3(corner & 1, corner & 2, corner & 4), bvec3(false)));
-        vec4 clip = viewProjection * vec4(p, 1.0);
-        nearest = max(nearest, clip.z / clip.w);
-    }
+    uvec4 keepMask = subgroupBallot(keep);
+    uint laneSlot = subgroupBallotExclusiveBitCount(keepMask);
+    uint waveKept = subgroupBallotBitCount(keepMask);
 
-    if (nearest < pyramidMin) {
-        return;   // behind every surface its footprint covers
+    uint base = 0u;
+    // subgroupElect is the lowest *active* lane, and skipping the atomic when the wave kept nothing
+    // matters most on the padded tail of a dispatch.
+    if (waveKept != 0u && subgroupElect()) {
+        base = atomicAdd(survivorCount, waveKept);
     }
+    base = subgroupBroadcastFirst(base);
 
-    // Compaction by atomicAdd leaves the survivors unordered. That is fine here because entities are
-    // instanced per model batch and depth-tested, so intra-batch order is not observable; anything
-    // that does care about order has to sort, not rely on this.
-    survivors[atomicAdd(survivorCount, 1u)] = index;
+    if (keep) {
+        // Compaction leaves the survivors unordered. That is fine here because entities are instanced
+        // per model batch and depth-tested, so intra-batch order is not observable; anything that
+        // does care about order has to sort, not rely on this.
+        survivors[base + laneSlot] = index;
+    }
 }

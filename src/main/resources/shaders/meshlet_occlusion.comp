@@ -18,6 +18,9 @@
 
 #version 450
 
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_ballot : require
+
 layout(local_size_x = 64) in;
 
 layout(std140, binding = 0) uniform Frame {
@@ -161,10 +164,15 @@ void main() {
         nearest = max(nearest, clip.z / clip.w);
     }
 
+    // Zeroing the instance count drops the draw without a second compaction pass. This pass has no
+    // list to append to, so the only atomic is the stat counter -- and that is still one address
+    // every surviving lane in the dispatch is aiming at, so it is coalesced per wave like the rest.
     if (nearest < pyramidMin) {
-        // The box's closest point is behind every surface its footprint covers: fully occluded.
-        // Zeroing the instance count drops the draw without a second compaction pass.
         draws[base + 1u] = 0u;
-        atomicAdd(testedCount, 1u);
+    }
+    uvec4 culledMask = subgroupBallot(nearest < pyramidMin);
+    uint waveCulled = subgroupBallotBitCount(culledMask);
+    if (waveCulled != 0u && subgroupElect()) {
+        atomicAdd(testedCount, waveCulled);
     }
 }
