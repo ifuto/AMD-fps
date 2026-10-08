@@ -1,3 +1,23 @@
+// shaderc on the build script classpath so the GLSL can be compiled to SPIR-V during the build.
+// The mod ships the compiled SPIR-V; a player never needs a GLSL toolchain.
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath "org.lwjgl:lwjgl:3.3.3"
+        classpath "org.lwjgl:lwjgl-shaderc:3.3.3"
+        // LWJGL extracts its natives from the classpath at load time, so the platform classifier
+        // has to be here rather than only in the test runtime.
+        classpath "org.lwjgl:lwjgl:3.3.3:natives-linux"
+        classpath "org.lwjgl:lwjgl-shaderc:3.3.3:natives-linux"
+        classpath "org.lwjgl:lwjgl:3.3.3:natives-windows"
+        classpath "org.lwjgl:lwjgl-shaderc:3.3.3:natives-windows"
+        classpath "org.lwjgl:lwjgl:3.3.3:natives-macos"
+        classpath "org.lwjgl:lwjgl-shaderc:3.3.3:natives-macos"
+    }
+}
+
 plugins {
     id 'fabric-loom' version '1.16.1'
 }
@@ -48,6 +68,80 @@ test {
         events "passed", "failed", "skipped"
         exceptionFormat "full"
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// GLSL -> SPIR-V. The shaders are checked by ShaderCompileTest as well, but that only proves they
+// compile; this is what puts the result in the jar. Both matter: without this task the mod would
+// ship GLSL and need a compiler at runtime, and without the test the failure mode is a Gradle
+// error instead of a readable one.
+// ---------------------------------------------------------------------------------------------
+
+def shadersSourceDir = file("src/main/resources/shaders")
+def spirvResourceDir = layout.buildDirectory.dir("generated/spirv")
+
+def compileShaders = tasks.register("compileShaders") {
+    notCompatibleWithConfigurationCache("invokes shaderc through the build script classpath")
+    inputs.dir(shadersSourceDir)
+    outputs.dir(spirvResourceDir)
+
+    doLast {
+        // A local alias for the class: Groovy cannot import it, because imports are only legal at
+        // the top of a script and Gradle wants plugins{} there.
+        def shaderc = org.lwjgl.util.shaderc.Shaderc
+        def outDir = new File(spirvResourceDir.get().asFile, "shaders")
+        outDir.mkdirs()
+
+        long compiler = shaderc.shaderc_compiler_initialize()
+        if (compiler == 0L) {
+            throw new GradleException("shaderc_compiler_initialize returned null; "
+                    + "the natives for this platform may not be on the build script classpath")
+        }
+        long options = shaderc.shaderc_compile_options_initialize()
+        try {
+            shaderc.shaderc_compile_options_set_source_language(options,
+                    shaderc.shaderc_source_language_glsl)
+            shaderc.shaderc_compile_options_set_target_env(options, shaderc.shaderc_target_env_vulkan,
+                    shaderc.shaderc_env_version_vulkan_1_2)
+
+            def sources = shadersSourceDir.listFiles()?.findAll { it.name.endsWith(".comp") }?.sort() ?: []
+            if (sources.isEmpty()) {
+                throw new GradleException("no .comp shaders in " + shadersSourceDir)
+            }
+            sources.each { File source ->
+                long result = shaderc.shaderc_compile_into_spv(compiler, source.text,
+                        shaderc.shaderc_glsl_compute_shader, source.name, "main", options)
+                if (result == 0L) {
+                    throw new GradleException("shaderc_compile_into_spv returned null for " + source.name)
+                }
+                try {
+                    int status = shaderc.shaderc_result_get_compilation_status(result)
+                    if (status != shaderc.shaderc_compilation_status_success) {
+                        // Keep it on one line so the CI log grep picks it up.
+                        throw new GradleException("GLSL compile failed for " + source.name + " -> "
+                                + shaderc.shaderc_result_get_error_message(result))
+                    }
+                    def bytes = shaderc.shaderc_result_get_bytes(result)
+                    def out = new byte[bytes.remaining()]
+                    bytes.get(out)
+                    def target = new File(outDir, source.name.replace(".comp", ".spv"))
+                    target.bytes = out
+                    println("compiled " + source.name + " -> shaders/" + target.name
+                            + " (" + out.length + " bytes of SPIR-V)")
+                } finally {
+                    shaderc.shaderc_result_release(result)
+                }
+            }
+        } finally {
+            shaderc.shaderc_compile_options_release(options)
+            shaderc.shaderc_compiler_release(compiler)
+        }
+    }
+}
+
+sourceSets.main.resources.srcDir(spirvResourceDir)
+tasks.named("processResources") {
+    dependsOn(compileShaders)
 }
 
 processResources {
@@ -146,7 +240,12 @@ tasks.register("verifyJar") {
                         "net/amdfaster/platform/GpuIdentity.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
-                        "assets/amdfaster/icon.png"
+                        "assets/amdfaster/icon.png",
+                        // The mod ships pre-compiled SPIR-V, not GLSL: no player should need a
+                        // shader toolchain, and a missing module fails at pipeline creation with
+                        // no useful message.
+                        "shaders/meshlet_cull.spv",
+                        "shaders/meshlet_occlusion.spv"
                 ]
                 required.findAll { !names.contains(it) }.each { problems << jar.name + " is missing " + it }
 

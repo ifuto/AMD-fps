@@ -120,8 +120,9 @@ Nothing is drawn by this mod yet; Minecraft still renders through its own pipeli
 6. **GPU-driven culling** — the two-pass shaders and their CPU mirrors are done. What is left is
    the descriptor sets, the compute pipelines and the barrier between the passes. Culling should
    dispatch 16 sections per wave, not one.
-7. **Shader compilation in CI** — the GLSL ships as a resource and is not compiled yet. Wiring
-   `lwjgl-shaderc` into the build would catch syntax errors here instead of at runtime.
+7. **SPIR-V in the jar** — `shaderc` now compiles the GLSL in a test, which found two real errors
+   on the first run. The next step is moving it into the build so the mod ships pre-compiled
+   SPIR-V instead of source.
 8. **Transparent sorting on the GPU** — radix sort with on-chip local sort. Not bitonic: bitonic
    is O(n log²n), needs a power of two, and scatters to global memory.
 9. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
@@ -143,8 +144,9 @@ renderer.
 ./gradlew build
 ```
 
-The jar lands in `build/libs/`. CI runs the same command on every push and then `verifyJar`
-asserts the result: that the tests ran and passed, that the jar holds the entrypoint and the probe
+The jar lands in `build/libs/`. Tests compile the GLSL to SPIR-V with `shaderc`, so a shader typo
+fails the build here rather than at runtime on a player's machine. CI runs the same command on every
+push and then `verifyJar` asserts the result: that the tests ran and passed, that the jar holds the entrypoint and the probe
 classes, that `fabric.mod.json`'s version matches the project version, and that `lwjgl-vulkan` is
 actually jar-in-jar'd (Minecraft ships lwjgl, lwjgl-glfw and lwjgl-opengl but not the Vulkan
 bindings).

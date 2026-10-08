@@ -151,12 +151,44 @@ view を 18³ にすればいい」と考えたからだ。
 - **無限固体 world は 1 枚も出さない**（18³ view ならここでおかしくなる）
 - world の底には床が残る
 
-## 9. 次にやること
+## 9. shaderc で GLSL を CI でコンパイルする
 
-1. **Minecraft アダプタ**（`BlockSampler` の実装：`Level` → key / opaque / light / atlas UV）。
-   `RegionVoxelView` が受け取る側なので、ここだけが Minecraft 型に触れる。
+それまでシェーダは **jar の中のただのテキスト**だった。`CullShaderTest` は Java と
+一致していなければならない部分（バインディング番号、std140 オフセット、workgroup サイズ）しか
+見ておらず、**GLSL が構文的に正しいかは誰も確認していなかった**。
+
+`lwjgl-shaderc` を **テスト専用依存**として追加した（モッドはコンパイル済み SPIR-V を同梱するので
+プレイヤーに GLSL ツールチェーンは不要）。shaderc はドライバが動かすのと同じコンパイラなので、
+これは近似ではなく本物のチェック。
+
+**追加して直ちに 2 件の実バグが出た**:
+
+```
+meshlet_occlusion.comp:119: error: 'textureSize' : required extension not requested:
+        GL_EXT_samplerless_texture_functions
+meshlet_occlusion.comp:120: error: 'texelFetch' : required extension not requested:
+        GL_EXT_samplerless_texture_functions
+```
+
+素の `texture2D` に対する `textureSize` / `texelFetch` は GLSL 4.50 では拡張が要る。
+拡張を要求する代わりに **`sampler2D` にした**。拡張依存が消え、しかもサンプラが
+「fetch が何をしたいか」を直接表現できる（nearest なので縮約の途中で texel が平均されない、
+clamp-to-edge なので画面端からはみ出したボックスも読める）。
+
+これはシェーダコンパイラが捕まえた最初のバグで、しかも **放っておけばプレイヤーの
+マシンでドライバのエラーとして出ていた種類**のもの。
+
+## 10. 次にやること
+
+1. **ビルド時の SPIR-V 生成**（shaderc をテストから build タスクへ。`.spv` を jar に入れ、
+   `verifyJar` で存在を保証する）
 2. **compute パイプラインとディスクリプタ**（`CullBindings` を実際に bind する）
 3. **swapchain の再作成**（リサイズと `VK_SUBOPTIMAL_KHR`。間違えると例外ではなく
    ハングか黒画面になるので、独立した変更にする）
-4. **shaderc での SPIR-V コンパイル**（今は GLSL をそのまま資源として同梱しているだけ。
-   CI でコンパイル検証できるようになれば、シェーダの構文エラーもここで捕まる）
+4. **Minecraft アダプタ**（`BlockSampler` の実装：`Level` → key / opaque / light / atlas UV）。
+   `RegionVoxelView` が受け取る側なので、ここだけが Minecraft 型に触れる。
+   **注意:** MC 1.21.11 の Mojang マッピング名はこの環境から確認できない
+   （MC ソースは公開されておらず、loom がビルド時にデコンパイルする）。
+   コンパイルは CI で検証できるが、**atlas UV と light の正しさはここでは検証できない**。
+   greedy 結合できるのは「1 面 1 スプライトの完全立方体」だけなので、
+   非立方体ブロックはモデルの焼き込み quad にフォールバックする別経路が要る。
