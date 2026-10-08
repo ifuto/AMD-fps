@@ -54,7 +54,9 @@ class CullReuseTest {
         // The case a plain == comparison gets wrong: 0.0f == -0.0f is true in Java, so a camera that
         // crosses the origin through negative zero would be treated as unmoved. The bit patterns
         // differ, and comparing bits is what catches it.
-        assertEquals(0.0f, -0.0f, "the language calls these equal, which is the trap");
+        // assertTrue, not assertEquals: JUnit compares floats by bits, so assertEquals(0.0f, -0.0f)
+        // fails. The trap is in the language's ==, and that is what this states.
+        assertTrue(0.0f == -0.0f, "Java calls these equal, which is the trap");
         assertTrue(Float.floatToRawIntBits(0.0f) != Float.floatToRawIntBits(-0.0f));
 
         CullReuse reuse = settled();

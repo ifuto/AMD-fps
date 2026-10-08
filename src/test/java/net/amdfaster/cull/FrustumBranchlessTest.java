@@ -103,7 +103,11 @@ class FrustumBranchlessTest {
         Frustum frustum = new Frustum(Frustum.identity());
         assertTrue(frustum.intersectsAabb(-0.5f, -0.5f, 0.25f, 0.5f, 0.5f, 0.75f));
         assertFalse(frustum.intersectsAabb(2f, 0f, 0.5f, 3f, 1f, 0.6f), "outside +X");
-        assertFalse(frustum.intersectsAabb(0f, 0f, 0.5f, 1f, 1f, 5f), "beyond the far plane");
+        // Entirely past z = 1. A box reaching from 0.5 to 5 straddles the far plane and is correctly
+        // reported visible: the AABB test is conservative, and "partly inside" has to count as inside
+        // or geometry at the edge of the world would blink.
+        assertFalse(frustum.intersectsAabb(0f, 0f, 2f, 1f, 1f, 5f), "entirely beyond the far plane");
+        assertTrue(frustum.intersectsAabb(0f, 0f, 0.5f, 1f, 1f, 5f), "straddling it is visible");
         assertFalse(frustum.intersectsAabb(0f, 0f, -5f, 1f, 1f, -1f), "behind the near plane");
     }
 
@@ -111,15 +115,16 @@ class FrustumBranchlessTest {
     void everyPlaneIsStillConsulted() {
         // The loop bound changed from PLANE_COUNT to the length of the backing array. If the two ever
         // stop matching, a plane would be silently skipped and geometry outside the frustum would be
-        // drawn -- or worse, one would be tested twice and cull things twice over.
-        Frustum frustum = new Frustum(perspective());
-        assertEquals(Frustum.PLANE_COUNT * 4, 24, "the plane array is four floats per plane");
-
-        // A box outside each plane in turn must be rejected by that plane.
-        assertFalse(frustum.intersectsAabb(-1e6f, 0f, -10f, -1e6f + 1f, 1f, -9f), "far outside -X");
-        assertFalse(frustum.intersectsAabb(1e6f, 0f, -10f, 1e6f + 1f, 1f, -9f), "far outside +X");
-        assertFalse(frustum.intersectsAabb(0f, -1e6f, -10f, 1f, -1e6f + 1f, -9f), "far outside -Y");
-        assertFalse(frustum.intersectsAabb(0f, 1e6f, -10f, 1f, 1e6f + 1f, -9f), "far outside +Y");
+        // drawn. So: put a box outside each of the six planes in turn, one at a time, and require that
+        // each one is rejected. A skipped plane shows up as the matching case passing.
+        Frustum frustum = new Frustum(Frustum.identity());
+        assertFalse(frustum.intersectsAabb(-1e6f, 0f, 0.25f, -1e6f + 1f, 1f, 0.75f), "outside LEFT");
+        assertFalse(frustum.intersectsAabb(1e6f, 0f, 0.25f, 1e6f + 1f, 1f, 0.75f), "outside RIGHT");
+        assertFalse(frustum.intersectsAabb(0f, -1e6f, 0.25f, 1f, -1e6f + 1f, 0.75f), "outside BOTTOM");
+        assertFalse(frustum.intersectsAabb(0f, 1e6f, 0.25f, 1f, 1e6f + 1f, 0.75f), "outside TOP");
+        assertFalse(frustum.intersectsAabb(0f, 0f, -1e6f, 1f, 1f, -1e6f + 1f), "outside NEAR");
+        assertFalse(frustum.intersectsAabb(0f, 0f, 1e6f, 1f, 1f, 1e6f + 1f), "outside FAR");
+        assertEquals(6, Frustum.PLANE_COUNT, "six planes, six cases above");
     }
 
     /** A reversed-Z perspective projection: near at depth 1, the far plane at 0. */
