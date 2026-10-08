@@ -151,7 +151,12 @@ class CullShaderTest {
         // indexCount, instanceCount, firstIndex, vertexOffset, firstInstance.
         assertEquals(20, CullBindings.DRAW_COMMAND_BYTES);
         String source = read(CullBindings.CULL_SHADER_PATH);
-        assertTrue(source.contains("slot * 5u"), "the stride in the shader must match");
+        // The slot is the wave's base plus this lane's offset within it; see the wave-cooperative
+        // append at the end of main(). Both halves have to be there -- a wave base alone would put
+        // every survivor of a wave on the same command, and a lane offset alone would make waves
+        // overwrite each other.
+        assertTrue(source.contains("(visibleBase + laneSlot) * 5u"), "the stride in the shader must match");
+        assertTrue(source.contains("subgroupBallotExclusiveBitCount"), "the lane slot must come from an exclusive scan");
     }
 
     @Test
@@ -186,8 +191,20 @@ class CullShaderTest {
     @Test
     void bothShadersGuardTheTailOfWork() {
         // The dispatch is rounded up, so the last work group is partly empty and every invocation
-        // past the end has to leave.
-        assertTrue(read(CullBindings.CULL_SHADER_PATH).contains("if (index >= meshletCount)"));
+        // past the end has to be excluded.
+        //
+        // The cull shader cannot return early any more: subgroup operations only count active
+        // lanes, so a lane that returned would vanish from the ballot and the wave's total would
+        // come up short. It folds the bound into the predicates it ballots instead, which is what
+        // keeps a padded lane out of both the tested count and the survivor list -- and therefore
+        // out of the indirect draw count, which is where an overstatement would show up as
+        // geometry drawn from an uninitialised draw command.
+        String cull = read(CullBindings.CULL_SHADER_PATH);
+        assertTrue(cull.contains("bool inRange = index < meshletCount;"),
+                "the cull shader must bound the tail of the dispatch");
+        assertTrue(cull.contains("subgroupBallot(inRange)"),
+                "padded lanes must be excluded from the tested count");
+
         assertTrue(read(CullBindings.OCCLUSION_SHADER_PATH).contains("if (slot >= visibleCount)"));
     }
 
