@@ -119,14 +119,23 @@ public final class Frustum {
      */
     public boolean intersectsAabb(float minX, float minY, float minZ,
                                   float maxX, float maxY, float maxZ) {
-        for (int p = 0; p < PLANE_COUNT; p++) {
-            float nx = normalX(p);
-            float ny = normalY(p);
-            float nz = normalZ(p);
-            float px = nx >= 0f ? maxX : minX;
-            float py = ny >= 0f ? maxY : minY;
-            float pz = nz >= 0f ? maxZ : minZ;
-            if (nx * px + ny * py + nz * pz + distance(p) < 0f) {
+        // Branchless per plane. Picking the corner with a ternary on the sign of each normal
+        // component is three unpredictable branches per plane, eighteen per box, and this runs for
+        // every meshlet and every entity in the world. Multiplying both ends and taking the max
+        // gives the same corner -- nx * maxX >= nx * minX exactly when nx >= 0 -- and Math.max is a
+        // maxss, so the selection costs nothing and never mispredicts.
+        //
+        // The plane coefficients are read straight out of the backing array with the index folded in
+        // rather than through the accessors, which keeps one bounds check per plane instead of four.
+        float[] c = this.planes;
+        for (int base = 0; base < c.length; base += 4) {
+            float nx = c[base];
+            float ny = c[base + 1];
+            float nz = c[base + 2];
+            float support = Math.max(nx * minX, nx * maxX)
+                    + Math.max(ny * minY, ny * maxY)
+                    + Math.max(nz * minZ, nz * maxZ);
+            if (support + c[base + 3] < 0f) {
                 return false;
             }
         }

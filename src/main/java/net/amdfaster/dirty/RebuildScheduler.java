@@ -66,6 +66,7 @@ public final class RebuildScheduler {
     private final int[] bandOffsets = new int[BANDS];
 
     private long[] order = new long[256];
+    private int[] bands = new int[256];
     private int[] drainedX = new int[DEFAULT_BUDGET];
     private int[] drainedY = new int[DEFAULT_BUDGET];
     private int[] drainedZ = new int[DEFAULT_BUDGET];
@@ -178,8 +179,14 @@ public final class RebuildScheduler {
             if (key == SectionCoord.EMPTY) {
                 continue;
             }
-            this.order[found++] = key;
-            this.bandCounts[bandOf(key, cameraX, cameraY, cameraZ)]++;
+            this.order[found] = key;
+            // The band is worked out once and kept. A counting sort needs it twice -- once to size
+            // the buckets and once to scatter into them -- and computing it the second time repeated
+            // a square root and three subtractions for every pending section on every frame.
+            int band = bandOf(key, cameraX, cameraY, cameraZ);
+            this.bands[found] = band;
+            this.bandCounts[band]++;
+            found++;
         }
 
         int running = 0;
@@ -189,7 +196,7 @@ public final class RebuildScheduler {
         }
         for (int i = 0; i < found; i++) {
             long key = this.order[i];
-            this.order[found + this.bandOffsets[bandOf(key, cameraX, cameraY, cameraZ)]++] = key;
+            this.order[found + this.bandOffsets[this.bands[i]]++] = key;
         }
 
         // Nearest band first. Each emitted section leaves the pending set immediately, which is what
@@ -219,7 +226,9 @@ public final class RebuildScheduler {
 
     private void ensureOrderCapacity(int needed) {
         if (this.order.length < needed) {
-            this.order = new long[Math.max(needed, this.order.length << 1)];
+            int size = Math.max(needed, this.order.length << 1);
+            this.order = new long[size];
+            this.bands = new int[size];
         }
     }
 

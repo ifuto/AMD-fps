@@ -190,6 +190,45 @@ class RebuildSchedulerTest {
     }
 
     @Test
+    void aPendingSetLargeEnoughToRegrowStillDrainsNearestFirst() {
+        // The counting sort keeps the band of each entry in an array parallel to its key. If the two
+        // ever drift apart -- on a regrow, which is exactly what 5 000 entries forces several of --
+        // sections come out in the wrong priority order. Nothing crashes; the player just gets the
+        // far edge of the world rebuilt before the block in front of them.
+        //
+        // The bands are recomputed here from the drained coordinates using a different expression
+        // from the implementation's, so this checks the ordering rather than restating it.
+        RebuildScheduler scheduler = new RebuildScheduler(5000, 256f);
+        java.util.Random random = new java.util.Random(4242L);
+        for (int i = 0; i < 5000; i++) {
+            scheduler.markGeometry(random.nextInt(400) - 200, random.nextInt(24) + 2,
+                    random.nextInt(400) - 200);
+        }
+        int marked = scheduler.pending();
+        assertTrue(marked > 4000, "the sample should mostly be distinct sections, got " + marked);
+
+        scheduler.drain(0f, 64f, 0f);
+        assertEquals(marked, scheduler.drainedCount(), "everything drained in one pass");
+        assertEquals(0, scheduler.pending());
+
+        int previousBand = -1;
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (int i = 0; i < scheduler.drainedCount(); i++) {
+            float dx = (scheduler.drainedX(i) << 4) + 8.0f;
+            float dy = (scheduler.drainedY(i) << 4) + 8.0f - 64.0f;
+            float dz = (scheduler.drainedZ(i) << 4) + 8.0f;
+            float distance = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+            int band = Math.min(31, (int) (distance / 8.0f));
+            assertTrue(band >= previousBand,
+                    "band went backwards at " + i + ": " + previousBand + " then " + band);
+            previousBand = band;
+            assertTrue(seen.add(scheduler.drainedX(i) + "," + scheduler.drainedY(i) + ","
+                    + scheduler.drainedZ(i)), "a section was drained twice");
+        }
+        assertEquals(marked, seen.size());
+    }
+
+    @Test
     void aStormOfBlockChangesInOneSectionIsOneRebuild() {
         // The TNT case end to end: five hundred blocks destroyed in one section, each marking every
         // section it can invalidate through SectionSet, and the scheduler still hands out one rebuild.

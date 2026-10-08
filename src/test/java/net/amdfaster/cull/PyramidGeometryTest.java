@@ -109,6 +109,33 @@ class PyramidGeometryTest {
     }
 
     @Test
+    void theIntegerLevelMatchesTheLogarithmItReplaced() {
+        // selectLevel used to be ceil(log(x) / log(2)). The bit-count form has to give the same
+        // answer everywhere, and the place to look is around the powers of two: that is where the
+        // quotient of two inexact logs lands nearest an integer.
+        PyramidGeometry pyramid = new PyramidGeometry(1 << 20, 1 << 20);
+
+        // Dense sweep, 1024 samples per doubling.
+        for (double x = 1.0; x < 4096.0; x *= 1.0009765625) {
+            float f = (float) x;
+            int expected = f <= 1f ? 0 : (int) Math.ceil(Math.log(f) / Math.log(2.0));
+            assertEquals(expected, pyramid.selectLevel(f, f), "at " + f);
+        }
+        // And the three values straddling every power of two out to a million pixels.
+        for (int e = 1; e <= 20; e++) {
+            for (int d = -1; d <= 1; d++) {
+                float f = (float) ((1 << e) + d);
+                if (f <= 1f) {
+                    continue;
+                }
+                int expected = Math.min((int) Math.ceil(Math.log(f) / Math.log(2.0)),
+                        pyramid.maxLevel());
+                assertEquals(expected, pyramid.selectLevel(f, f), "at " + f);
+            }
+        }
+    }
+
+    @Test
     void aBoxSpansAtMostTwoTexelsPerAxisAtItsSelectedLevel() {
         // That is the whole reason for the level choice: it bounds the reduction to four fetches.
         PyramidGeometry pyramid = new PyramidGeometry(1024, 1024);

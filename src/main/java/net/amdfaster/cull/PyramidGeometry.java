@@ -124,7 +124,26 @@ public final class PyramidGeometry {
         if (!(longest > 1f)) {
             return 0;
         }
-        int level = (int) Math.ceil(Math.log(longest) / Math.log(2.0));
+        // Ceiling then a bit count, rather than log(x) / log(2).
+        //
+        // The result is the same. Math.ceil is one SSE instruction and Integer.numberOfLeadingZeros
+        // is one lzcnt; the two Math.log calls this replaces are libm calls, and this runs once per
+        // meshlet per frame. Verified identical over a dense sweep of 1..4096 at 1024 steps per
+        // doubling plus the values around every power of two, with no mismatch.
+        //
+        // It is also exact by construction where the log form was only accidentally right. Both
+        // operands are inexact and the quotient lands near an integer exactly when the box size is a
+        // power of two, which is the one case where being a rounding step high selects a level too
+        // coarse -- widening the footprint past the box and letting unrelated geometry into the
+        // minimum. Measured, libm happens to land on the right side; nothing in the contract says
+        // it has to keep doing that.
+        int n = longest >= 2147483647f ? Integer.MAX_VALUE : (int) Math.ceil(longest);
+        if (n <= 1) {
+            return 0;
+        }
+        // 32 - numberOfLeadingZeros(v) is the number of bits v needs, which for v = n - 1 is exactly
+        // the smallest level whose texel is at least n pixels.
+        int level = 32 - Integer.numberOfLeadingZeros(n - 1);
         return Math.min(level, this.maxLevel);
     }
 

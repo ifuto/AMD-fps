@@ -74,12 +74,17 @@ int selectLevel(vec2 boxPixels) {
     if (longest <= 1.0) {
         return 0;
     }
-    int level = int(ceil(log2(longest)));
     int maxLevel = 0;
     while (ceilDim(int(hizWidth), maxLevel) > 1 || ceilDim(int(hizHeight), maxLevel) > 1) {
         ++maxLevel;
     }
-    return min(level, maxLevel);
+    // The same integer path PyramidGeometry takes on the CPU: ceiling, then a bit count. findMSB(v)
+    // + 1 is the number of bits v needs, so this is the smallest level whose texel is at least
+    // ceil(longest) pixels. Doing it in integers rather than with log2 is what makes the two agree
+    // exactly -- the CPU mirror is what the tests pin, and a level of disagreement between them
+    // would mean objects appearing and disappearing depending on which path answered.
+    int n = longest >= 2147483648.0 ? 2147483647 : int(ceil(longest));
+    return min(findMSB(n - 1) + 1, maxLevel);
 }
 
 // Hull of the eight corners. Not the tightest bound, but cheap and conservative in the direction
