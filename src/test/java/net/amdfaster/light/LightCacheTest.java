@@ -187,6 +187,25 @@ class LightCacheTest {
     }
 
     @Test
+    void lightOfAgreesWithLightValuePackForEveryCombination() {
+        // The cell keeps the block channel in bits 0..3 and LightValue keeps it in 4..7. This is the
+        // invariant that catches a lightOf which returns the cell's own layout: it would read
+        // plausibly, and every light value in the game would be wrong by a factor of sixteen.
+        for (int block = 0; block <= LightValue.MAX; block++) {
+            for (int sky = 0; sky <= LightValue.MAX; sky++) {
+                for (boolean occludes : new boolean[] {false, true}) {
+                    int cell = block | (sky << 4) | (occludes ? 256 : 0);
+                    assertEquals(LightValue.pack(block, sky), LightCache.lightOf(cell),
+                            "block=" + block + " sky=" + sky + " occludes=" + occludes);
+                    assertEquals(block, LightCache.blockOf(cell));
+                    assertEquals(sky, LightCache.skyOf(cell));
+                    assertEquals(occludes, LightCache.occludesOf(cell));
+                }
+            }
+        }
+    }
+
+    @Test
     void aCacheCanBeRefilledForANewSection() {
         LightCache cache = new LightCache();
         cache.fill(new MapSampler(15), 0, 0, 0);

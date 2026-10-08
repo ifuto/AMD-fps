@@ -75,9 +75,9 @@ public final class EntityBatcher {
             if (this.instances.size() >= maxInstances) {
                 return false;
             }
-            return within(max(this.minX, e.minX()), min(this.maxX, e.maxX()), maxSpan)
-                    && within(max(this.minY, e.minY()), min(this.maxY, e.maxY()), maxSpan)
-                    && within(max(this.minZ, e.minZ()), min(this.maxZ, e.maxZ()), maxSpan);
+            return within(min(this.minX, e.minX()), max(this.maxX, e.maxX()), maxSpan)
+                    && within(min(this.minY, e.minY()), max(this.maxY, e.maxY()), maxSpan)
+                    && within(min(this.minZ, e.minZ()), max(this.maxZ, e.maxZ()), maxSpan);
         }
 
         private static boolean within(float lo, float hi, float maxSpan) {

@@ -138,9 +138,15 @@ public final class LightCache {
         return (cell >> 4) & 0xF;
     }
 
-    /** Both channels of a raw cell, packed the way {@link LightValue} expects. */
+    /**
+     * Both channels of a raw cell, packed the way {@link LightValue} expects.
+     *
+     * <p>Note the block channel moves: the cell keeps it in bits 0..3, {@link LightValue} keeps it in
+     * bits 4..7. Returning the cell's own layout here would look plausible and silently disagree
+     * with {@code pack} about every value.
+     */
     public static int lightOf(int cell) {
-        return (cell & 0xF) | (((cell >> 4) & 0xF) << 20);
+        return ((cell & 0xF) << 4) | (((cell >> 4) & 0xF) << 20);
     }
 
     /** Whether a raw cell hides the corner behind it. */
