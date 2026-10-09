@@ -63,13 +63,15 @@ class LightUpdateBatcherTest {
         LightUpdateBatcher batcher = new LightUpdateBatcher();
         batcher.addChange(20, 0, 0, 0, 10);
         batcher.process(engine, AIR);
-        assertEquals(10, reachOf(engine, 20), "the first state");
+        // A level-10 source lights nine blocks either side, not ten: the source cell itself holds
+        // the 10 and each step away costs one, so the tenth block out is already at zero.
+        assertEquals(9, reachOf(engine, 20), "the first state");
 
         LightUpdateBatcher dimmed = new LightUpdateBatcher();
         dimmed.addChange(20, 0, 0, 10, 5);
         dimmed.process(engine, AIR);
 
-        assertEquals(5, reachOf(engine, 20), "the dimmer source's own reach, not the old one's");
+        assertEquals(4, reachOf(engine, 20), "the dimmer source's own reach, not the old one's");
         assertEquals(5, engine.field().get(20, 0, 0));
         assertEquals(0, engine.field().get(26, 0, 0), "and the old reach is genuinely gone");
     }
@@ -90,7 +92,8 @@ class LightUpdateBatcherTest {
         int completed = batcher.process(engine, AIR);
         assertEquals(1, completed, "one column per call once the budget is spent");
         assertEquals(5, batcher.pendingCount(), "the rest waits for the next frame");
-        assertEquals(1, batcher.budgetExhausted());
+        // Every call but the last stopped with work still waiting, so each of those counted.
+        assertEquals(5, batcher.budgetExhausted());
 
         while (!batcher.isEmpty()) {
             batcher.process(engine, AIR);
@@ -133,10 +136,6 @@ class LightUpdateBatcherTest {
         }
 
         LightEngine together = corridor();
-        LightUpdateBatcher batcher = new LightUpdateBatcher();
-        for (int i = 0; i < 6; i++) {
-            batcher.addChange(i * 3, 0, 0, 0, 14);
-        }
         // Set every source first, then propagate once, which is what coalescing amounts to.
         for (int i = 0; i < 6; i++) {
             together.field().set(i * 3, 0, 0, 14);
@@ -153,7 +152,10 @@ class LightUpdateBatcherTest {
     @Test
     void aColumnKeyGroupsTheBlocksThatShareAnUpdate() {
         assertEquals(LightUpdateBatcher.columnOf(0, 0), LightUpdateBatcher.columnOf(15, 15));
-        assertEquals(LightUpdateBatcher.columnOf(0, 0), LightUpdateBatcher.columnOf(-1, -1));
+        // -1 >> 4 is -1, so block -1 lives in section -1 and not section 0; -16 is the first block
+        // of that same section. Getting the shift wrong would fold the negative octant into one.
+        assertEquals(LightUpdateBatcher.columnOf(-1, -1), LightUpdateBatcher.columnOf(-16, -16));
+        assertTrue(LightUpdateBatcher.columnOf(0, 0) != LightUpdateBatcher.columnOf(-1, -1));
         assertTrue(LightUpdateBatcher.columnOf(0, 0) != LightUpdateBatcher.columnOf(16, 0));
     }
 

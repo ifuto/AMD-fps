@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SectionLightStoreTest {
@@ -71,7 +72,9 @@ class SectionLightStoreTest {
         // the arrays for all of them.
         SectionLightStore store = new SectionLightStore();
         for (int i = 0; i < 24; i++) {
-            store.set(i, 64, 0, 15);
+            // One block per section vertically, so 24 distinct sections and 24 arrays. Spreading
+            // them horizontally would put 16 of them in the same section and allocate two.
+            store.set(0, i * 16, 0, 15);
         }
         long lazy = store.allocatedBytes();
         long eager = store.bytesIfEager(33, 16);
@@ -187,7 +190,4 @@ class SectionLightStoreTest {
         assertEquals(SkyHeightmap.EMPTY, store.heightmap(0, 0).heightAt(0, 0));
     }
 
-    private static void assertSame(Object expected, Object actual, String message) {
-        org.junit.jupiter.api.Assertions.assertSame(expected, actual, message);
-    }
 }

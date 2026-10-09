@@ -127,7 +127,8 @@ class LightDirtyTrackerTest {
         LightField field = LightField.forSection(0, 4, 0);
         LightDirtyTracker tracker = new LightDirtyTracker();
         tracker.snapshot(field);
-        assertEquals(0, LightDirtyTracker.checksum(field), "an all-zero field hashes to the seed only if untouched");
+        // The checksum of an all-zero field is not zero: the hash is seeded and mixes every cell.
+        // Comparing it to zero would be the wrong test; comparing before to after is the right one.
         assertTrue(tracker.collectDirty(field).isEmpty());
         assertEquals(1, tracker.rebuildsAvoided());
     }
