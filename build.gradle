@@ -305,6 +305,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/platform/GpuReport.class",
                         "net/amdfaster/platform/GpuIdentity.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
+                        "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
                         "net/amdfaster/light/SmoothLight.class",
                         "net/amdfaster/light/LightField.class",
