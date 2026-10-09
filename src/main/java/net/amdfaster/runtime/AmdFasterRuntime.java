@@ -10,7 +10,6 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
-import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 
 /**
@@ -129,14 +128,49 @@ public final class AmdFasterRuntime {
         this.stages.begin(this.tickStage);
     }
 
+    private double lastX;
+    private double lastY;
+    private double lastZ;
+    private float lastPitch;
+    private float lastYaw;
+
     private void onEndTick(Minecraft client) {
         this.stages.end(this.tickStage);
-        // Input resets the idle clock. Polling rather than hooking input events, because any of the
-        // game's own input paths imply the player is there, and hooking each one separately is a longer
-        // list of places to be wrong.
-        if (client.screen == null || client.screen instanceof net.minecraft.client.gui.screens.ChatScreen) {
-            this.governor.noteInput(Util.getMillis());
+        if (isPlayerActive(client)) {
+            this.governor.noteInput(System.currentTimeMillis());
         }
+    }
+
+    /**
+     * Whether the player is doing something that needs frames drawn.
+     *
+     * <p>Derived from the camera rather than from input events. Two reasons. The practical one: the
+     * input plumbing differs between versions and between controllers, keyboards and touch, and every
+     * handler is a place to be wrong -- the previous attempt here called a keyboard method that does not
+     * exist and took the build down. The real one: movement and look direction are what actually decide
+     * whether the next frame will differ, so they are the correct signal, not a proxy for it. A player
+     * holding a key against a wall is inputting and getting nothing new; a player watching a mob walk
+     * past is not inputting and getting a different frame every time.
+     */
+    private boolean isPlayerActive(Minecraft client) {
+        if (client.player == null) {
+            return false;
+        }
+        double x = client.player.getX();
+        double y = client.player.getY();
+        double z = client.player.getZ();
+        float pitch = client.player.getXRot();
+        float yaw = client.player.getYRot();
+        boolean moved = x != this.lastX || y != this.lastY || z != this.lastZ
+                || pitch != this.lastPitch || yaw != this.lastYaw;
+        this.lastX = x;
+        this.lastY = y;
+        this.lastZ = z;
+        this.lastPitch = pitch;
+        this.lastYaw = yaw;
+        // A screen being open means the game is drawing a menu over the world, which is its own reason
+        // to keep rendering, and one the player chose.
+        return moved || client.screen != null;
     }
 
     /**
@@ -147,10 +181,13 @@ public final class AmdFasterRuntime {
      * wrong thing: the game ticks twenty times a second whatever the frame rate is.
      */
     private void onHudRender(Minecraft client, net.minecraft.client.gui.GuiGraphics graphics) {
-        long nowMs = Util.getMillis();
+        long nowMs = System.currentTimeMillis();
         if (this.lastFrameAtMs >= 0) {
             long elapsedMs = nowMs - this.lastFrameAtMs;
-            if (elapsedMs > 0) {
+            // Guarded at both ends. A wall clock can step backwards on an NTP adjustment, and a
+            // negative or absurd frame time would poison the percentile window and surface as a
+            // 1 percent low of zero -- a measurement error wearing the costume of a catastrophic frame.
+            if (elapsedMs > 0 && elapsedMs < 60_000L) {
                 this.recorder.record(elapsedMs * 1_000_000L);
                 this.framesTimed++;
             }
@@ -167,10 +204,6 @@ public final class AmdFasterRuntime {
     }
 
     private void applyGovernor(Minecraft client, long nowMs) {
-        // Any real input through the game's own handler means the player is present.
-        if (client.mouseHandler.isMouseGrabbed() || client.keyboardHandler.getDebugCrashType() != null) {
-            this.governor.noteInput(nowMs);
-        }
         boolean focused = client.isWindowActive();
         int requested = this.restoredFramerateLimit >= 0
                 ? this.restoredFramerateLimit
