@@ -94,7 +94,13 @@ class FrameTimeRecorderTest {
 
         assertEquals(3, recorder.sampleCount());
         assertEquals(20 * MS, recorder.meanFrameNanos());
-        assertEquals(10 * MS, recorder.percentileFrameNanos(50), "the median of 10, 20, 30");
+        // Nearest-rank p50 over three samples is the second value, not the middle of the range:
+        // rank is ceil(0.5 * 3) = 2, and 20 ms is the smallest sample with at least half the frames
+        // at or below it. The first version of this line asserted 10 ms on the strength of calling
+        // it "the median", which is the interpolation reading, not the one this class defines.
+        assertEquals(20 * MS, recorder.percentileFrameNanos(50), "nearest-rank p50 of 10, 20, 30");
+        assertEquals(10 * MS, recorder.percentileFrameNanos(1), "p1 rounds up to the best frame");
+        assertEquals(30 * MS, recorder.percentileFrameNanos(99), "p99 rounds up to the worst");
         assertEquals(30 * MS, recorder.worstFrameNanos());
         // The worst one percent of three frames rounds up to one frame: the 30 ms one.
         assertEquals(1_000_000_000.0 / (30 * MS), recorder.onePercentLowFps(), 1e-9);
