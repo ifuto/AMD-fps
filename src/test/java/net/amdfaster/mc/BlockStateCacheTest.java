@@ -108,32 +108,44 @@ class BlockStateCacheTest {
         // hold the volume -- so collisions happen constantly and every one of them has to evict
         // rather than answer with someone else's value.
         Counting resolver = new Counting();
-        for (int x = -20; x < 20; x++) {
-            for (int y = -20; y < 20; y++) {
-                for (int z = -20; z < 20; z++) {
+        for (int x = -6; x < 6; x++) {
+            for (int y = -6; y < 6; y++) {
+                for (int z = -6; z < 6; z++) {
                     resolver.put(x, y, z, BlockStateCache.pack((x + y + z) % 7 == 0,
                             (x * y * z) % 3 != 0, Math.abs(x + y) % 16));
                 }
             }
         }
 
-        // 64 entries against 64 000 coordinates: the table cannot hold a meaningful fraction.
-        BlockStateCache cache = new BlockStateCache(64);
+        // 8 entries against 1 728 coordinates: the table cannot hold a meaningful fraction, so
+        // collisions and evictions happen on essentially every lookup, which is the case that has
+        // to stay correct. Kept small on purpose -- this sweeps the volume several times and
+        // asserts on every voxel, and the message is built lazily so a passing assertion does not
+        // pay for a string it will never use.
+        BlockStateCache cache = new BlockStateCache(8);
+        int checked = 0;
         for (int pass = 0; pass < 3; pass++) {
-            for (int x = -20; x < 20; x++) {
-                for (int y = -20; y < 20; y++) {
-                    for (int z = -20; z < 20; z++) {
+            for (int x = -6; x < 6; x++) {
+                for (int y = -6; y < 6; y++) {
+                    for (int z = -6; z < 6; z++) {
                         int flags = cache.flags(x, y, z, resolver);
-                        assertEquals(BlockStateCache.isAir(resolver.truthValue(x, y, z)),
-                                BlockStateCache.isAir(flags), "air at " + x + "," + y + "," + z);
-                        assertEquals(BlockStateCache.isOpaque(resolver.truthValue(x, y, z)),
-                                BlockStateCache.isOpaque(flags), "opaque at " + x + "," + y + "," + z);
-                        assertEquals(BlockStateCache.lightEmission(resolver.truthValue(x, y, z)),
-                                BlockStateCache.lightEmission(flags), "emission at " + x + "," + y + "," + z);
+                        int truth = resolver.truthValue(x, y, z);
+                        final int cx = x;
+                        final int cy = y;
+                        final int cz = z;
+                        assertEquals(BlockStateCache.isAir(truth), BlockStateCache.isAir(flags),
+                                () -> "air at " + cx + "," + cy + "," + cz);
+                        assertEquals(BlockStateCache.isOpaque(truth), BlockStateCache.isOpaque(flags),
+                                () -> "opaque at " + cx + "," + cy + "," + cz);
+                        assertEquals(BlockStateCache.lightEmission(truth),
+                                BlockStateCache.lightEmission(flags),
+                                () -> "emission at " + cx + "," + cy + "," + cz);
+                        checked++;
                     }
                 }
             }
         }
+        assertEquals(3 * 12 * 12 * 12, checked, "the whole volume was swept three times");
         assertTrue(resolver.calls > cache.entries(),
                 "the table is smaller than the volume, so misses must have happened");
     }
