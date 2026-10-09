@@ -168,8 +168,60 @@ vec3 origin = vec3(record.yzw) - cameraOrigin.xyz;   // ← uint → float 変�
 ディスパッチ末尾をガードする）を書き、リテラルは式が変わったら更新する。
 ローカルにコンパイラが無いので、この種のテストは CI でしか検出できない。
 
+## 5.5 `indexCount` が常に 372 だった（3 の中で 2 番目に見つけた）
+
+cull シェーダは draw コマンドを自分で書くが、`indexCount` を**全メッシュレットで 372 固定**にしていた。
+
+```glsl
+draws[base + 0u] = 372u;   // ← 実際が 1 quad のメッシュレットでも 62 quad 分描画
+```
+
+固定ストライド（372 index / 248 vertex）を予約しているので、末尾は**未使用**。
+そこはゼロ埋めなので退化三角形になり、**見た目は何も壊れない**。
+つまり「正しく動くが、部分的に埋まった全メッシュレットで無駄なバーテックスシェーディングをする」
+という、レビューを素通りする種類のバグ。
+
+quad 数はレコードの 4 語が全部埋まっていて入れ場所が無いので、
+**サイドデータ語のオリエンテーション 3 bit の上**に載せた:
+
+```java
+(quadCount << 3) | orientation.ordinal()
+```
+
+```glsl
+uint o     = sideData[index] & 7u;          // バケット
+draws[base + 0u] = (sideData[index] >> 3u) * 6u;   // indexCount = quads * 6
+```
+
+ゼロ埋めが安全なのはこの `indexCount` が正確だから。逆に言えば
+**正確な `indexCount` とゼロ埋めパディングは組で成立している** — 片方だけだと壊れる。
+
+## 5.6 頂点ストリームのアップロード（`SectionUpload`）
+
+`Meshlet` の `writePositions` / `writeAttributes` / `writeLights` / `writeIndices` は
+**どれも呼び出し元が無かった**。cull データを接続しても、draw コマンドが指す
+ジオメトリが未アップロードのまま。
+
+`gpu/SectionUpload` を追加。6 バッファを**1 回のウォーク**で埋める。
+
+**要点は「後ろに詰めて書く」のではなく「スロットに書いて残りをゼロ埋めする」こと。**
+
+```java
+int start = out.position();
+writer.write(out);
+for (int i = out.position() - start; i < strideBytes; i++) out.put((byte) 0);
+```
+
+後ろに詰めると、62 quad 未満の最初のメッシュレット以降**全部がずれる**。
+slot `i` は `i * 372` index / `i * 248` vertex から始まる前提なので、
+以降の全 draw が**前のメッシュレットの頂点を読む**。壊れたジオメトリが出るだけでクラッシュはしない。
+
+テストは**書き込む前にバッファを `0x5A` で汚してから**書く。
+こうしないと「埋めなかったパディング」が「たまたまゼロだった」と区別できない。
+
 ## 6. 未解決
 
-- `writePositions` / `writeAttributes` / `writeLights` / `writeIndices` は依然**呼び出し元が無い**。
-  cull データの経路は接続したが、頂点ストリームのアップロードは未接続のまま。
-- `CullingPipeline` が `writeCullData` を実際に呼ぶ配線も未実装。
+- `CullingPipeline` はパイプラインとレイアウトを作るだけで、**ディスパッチもバッファも持たない**。
+  `SectionUpload` の出力を実際に `GpuBuffer.mapForWrite()` へ流し、
+  カリングをディスパッチする層が未実装。
+- `block.vert` / `block.frag` 側の頂点バインディングがこのストライドと一致するかの照合が未実施。

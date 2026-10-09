@@ -189,7 +189,14 @@ Nothing is drawn by this mod yet; Minecraft still renders through its own pipeli
 19. **Whole-meshlet back-face culling** — done. A meshlet comes from one orientation bucket, so all
     its faces share a normal and the test is a single comparison. Gated on a per-quad declaration
     that is AND-ed, because a sticky flag would make the answer depend on which quad arrived first.
-20. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
+20. **Wave-cooperative culling and the GPU upload path** — done. The cull passes append one atomic
+    per wave instead of one per surviving lane, which is what RE Engine measured at 0.543 ms down to
+    0.051 ms. Wiring up the packing then turned up two defects that rendered correctly and cost
+    performance rather than correctness: the section origin was decoded with a uint-to-float
+    conversion, so every section west or north of the world origin landed four billion blocks away
+    and was frustum-culled; and every draw used a hardcoded 62-quad index count, shading the padding
+    of every partially-filled meshlet as degenerate triangles.
+21. **APU path** — persistent mapped buffers, no staging copy, and bandwidth-aware LOD.
 
 ## Requirements
 
