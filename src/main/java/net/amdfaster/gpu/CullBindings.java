@@ -39,13 +39,18 @@ public final class CullBindings {
     public static final int HIZ_IMAGE_BINDING = 5;
 
     /**
-     * One {@code uint} per meshlet: its {@code Orientation.ordinal()}, 0..5.
+     * One {@code uint} per meshlet: the orientation bucket in the low three bits and the meshlet's
+     * quad count above them.
      *
      * <p>A separate buffer rather than three more bits in the packed bounds. Six orientations need
      * three bits and the bounds word has exactly two free, and the alternatives were all worse --
      * stealing a bit from a bounds field would cap meshlets at 8 blocks wide, and hiding it in the
      * high bits of a section origin word would break the day the world gets taller. Four bytes per
      * meshlet is small next to the 5 332 bytes of mesh data.
+     *
+     * <p>The quad count is packed alongside rather than given its own buffer because the cull shader
+     * needs it to write an exact {@code indexCount} and it is the only per-meshlet data left that
+     * the shader does not already have. See {@code Meshlet#writeSideData}.
      *
      * <p>Numbered 4, ahead of the pyramid, so that the frustum pass is 0..4 and the occlusion pass
      * is 0..5. Both stay dense and in order, which is what lets the two share a descriptor pool with
@@ -126,7 +131,7 @@ public final class CullBindings {
                 new Binding(DRAW_COMMAND_BUFFER_BINDING, DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, STAGE_COMPUTE, "draws"),
                 new Binding(COUNTER_BUFFER_BINDING, DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, STAGE_COMPUTE, "counters"),
                 new Binding(ORIENTATION_BUFFER_BINDING, DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, STAGE_COMPUTE,
-                        "orientations"));   // 0,1,2,3,4 -- dense, and a prefix of the occlusion set
+                        "sideData"));   // 0,1,2,3,4 -- dense, and a prefix of the occlusion set
     }
 
     /**

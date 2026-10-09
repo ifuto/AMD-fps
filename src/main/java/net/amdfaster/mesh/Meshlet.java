@@ -36,6 +36,17 @@ public final class Meshlet {
     public static final int CULL_RECORD_BYTES = 16;
 
     /**
+     * Bits of the side data word the orientation bucket occupies. Six orientations need three.
+     *
+     * <p>The quad count goes above it: {@value #MAX_QUADS} quads needs six bits, and the word is
+     * 32 wide, so both fit with room to spare.
+     */
+    public static final int SIDE_DATA_QUAD_SHIFT = 3;
+
+    /** Mask selecting the orientation bucket out of a side data word. */
+    public static final int ORIENTATION_MASK = (1 << SIDE_DATA_QUAD_SHIFT) - 1;
+
+    /**
      * Bytes per vertex in the position stream: {@code short x, short y, short z, short flags}.
      *
      * <p>8 bytes keeps eight vertices in one 128-byte cache line, which is the line size RDNA
@@ -321,16 +332,41 @@ public final class Meshlet {
     }
 
     /**
-     * Writes this meshlet's orientation bucket: its {@link Orientation#ordinal()}, 0 to 5.
+     * Writes this meshlet's side data word: the orientation bucket in the low
+     * {@value #SIDE_DATA_QUAD_SHIFT} bits and the quad count above them.
      *
-     * <p>A separate buffer rather than three more bits in the packed bounds word. The word has two
-     * spare bits and a bucket needs three, so it would not fit without widening the record -- and
-     * the cull shader reads this buffer only for meshlets that survived the frustum test, so
-     * keeping it out of the record also keeps the record it does read unconditionally smaller.
+     * <p>A separate buffer rather than more bits in the packed bounds word, which has only two
+     * spare and needs three for the bucket. The cull shader reads it only for meshlets that
+     * survived the frustum test, so keeping it out of the record also keeps the record it reads
+     * unconditionally smaller.
+     *
+     * <p>The quad count rides along because the shader writes its own draw command and cannot
+     * otherwise know how much of the meshlet to draw. Every meshlet reserves a fixed
+     * {@code }{@value #MAX_QUADS}{@code }-quad stride in the index buffer so that a meshlet at slot
+     * {@code i} starts at {@code i * 372} indices without a lookup table, and a meshlet with fewer
+     * quads than that leaves the rest of its stride unread. Drawing the whole reserved stride
+     * instead would shade the padding: with the tail zero-filled those are degenerate triangles, so
+     * nothing visibly wrong happens, which is exactly the kind of bug that survives review -- it
+     * costs vertex shading on every partially-filled meshlet and looks correct.
      */
-    public void writeOrientation(ByteBuffer out) {
+    public void writeSideData(ByteBuffer out) {
         requireOrder(out);
-        out.putInt(this.orientation.ordinal());
+        out.putInt(sideData(this.orientation.ordinal(), this.quadCount));
+    }
+
+    /** Packs the side data word. Exposed so the shader's decoding can be tested against it. */
+    public static int sideData(int orientationOrdinal, int quadCount) {
+        return (quadCount << SIDE_DATA_QUAD_SHIFT) | orientationOrdinal;
+    }
+
+    /** Recovers the orientation bucket from a side data word. */
+    public static int sideDataOrientation(int sideData) {
+        return sideData & ORIENTATION_MASK;
+    }
+
+    /** Recovers the quad count from a side data word. */
+    public static int sideDataQuads(int sideData) {
+        return sideData >>> SIDE_DATA_QUAD_SHIFT;
     }
 
     /** Writes the attribute stream. */

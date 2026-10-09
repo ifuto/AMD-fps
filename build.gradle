@@ -278,6 +278,11 @@ tasks.register("verifyJar") {
                         "net/amdfaster/mc/LevelBlockSampler.class",
                         "net/amdfaster/mesh/voxel/SectionMesher.class",
                         "net/amdfaster/gpu/BlockBindings.class",
+                        // The packing layer between a section mesh and a mapped GPU buffer. It is
+                        // asserted because a wrong fixed stride here is not a crash: it misaligns
+                        // every meshlet after the first short one, and every draw reads the
+                        // previous meshlet's vertices.
+                        "net/amdfaster/gpu/SectionUpload.class",
                         "assets/amdfaster/icon.png",
                         // The mod ships pre-compiled SPIR-V, not GLSL: no player should need a
                         // shader toolchain, and a missing module fails at pipeline creation with

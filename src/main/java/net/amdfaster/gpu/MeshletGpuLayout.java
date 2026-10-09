@@ -73,7 +73,7 @@ public record MeshletGpuLayout(int meshletCount, int[] runStart, int[] runCount)
         for (Orientation o : Orientation.values()) {
             for (Meshlet meshlet : mesh.meshlets(o)) {
                 meshlet.writeRecord(records, mesh.originX(), mesh.originY(), mesh.originZ());
-                meshlet.writeOrientation(orientations);
+                meshlet.writeSideData(orientations);
                 slot++;
             }
         }

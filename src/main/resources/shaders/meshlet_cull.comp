@@ -53,10 +53,12 @@ layout(std430, binding = 3) buffer Counters {
     uint testedCount;
 };
 
-// One uint per meshlet: its Orientation.ordinal(), 0..5. Six orientations need three bits and the
-// packed bounds word has two free, so this is its own buffer.
-layout(std430, binding = 4) readonly buffer MeshletOrientations {
-    uint orientations[];
+// One uint per meshlet: the orientation bucket in the low three bits, the quad count above them.
+// Six orientations need three bits and the packed bounds word has two free, so this is its own
+// buffer; the quad count rides along because the draw command below needs it and there is nowhere
+// else per-meshlet to put it.
+layout(std430, binding = 4) readonly buffer MeshletSideData {
+    uint sideData[];
 };
 
 layout(push_constant) uniform Push {
@@ -116,7 +118,7 @@ void main() {
         // single-sided is left alone. boxMin and boxMax are camera-relative here, so the camera is
         // at the origin and each test is a comparison against zero.
         if (visible && (packed >> 30u & 1u) != 0u) {
-            uint o = orientations[index];
+            uint o = sideData[index] & 7u;
             // Ordinals: NEG_X 0, POS_X 1, NEG_Y 2, POS_Y 3, NEG_Z 4, POS_Z 5.
             bool positive = (o & 1u) != 0u;
             bool backFacing;
@@ -157,11 +159,16 @@ void main() {
 
     if (visible) {
         // indexCount, instanceCount, firstIndex, vertexOffset, firstInstance.
-        // One meshlet is at most 62 quads = 372 indices and 248 vertices, all inside its own
-        // contiguous run, so the command is derivable from the meshlet index alone.
+        //
+        // Every meshlet reserves a fixed 372-index / 248-vertex stride, so where its run starts is
+        // derivable from the meshlet index alone with no lookup table. How much of that stride to
+        // draw is not: a meshlet with fewer than 62 quads leaves the rest unread, and drawing the
+        // whole reserved stride would shade the padding. The tail is zero-filled, so those come out
+        // as degenerate triangles and nothing looks wrong -- which is why the exact count comes
+        // from the side data word rather than being assumed.
         uint base = (visibleBase + laneSlot) * 5u;
-        draws[base + 0u] = 372u;      // indexCount
-        draws[base + 1u] = 1u;        // instanceCount
+        draws[base + 0u] = (sideData[index] >> 3u) * 6u;   // indexCount = quads * 6
+        draws[base + 1u] = 1u;                             // instanceCount
         draws[base + 2u] = index * 372u;
         draws[base + 3u] = index * 248u;
         draws[base + 4u] = 0u;
