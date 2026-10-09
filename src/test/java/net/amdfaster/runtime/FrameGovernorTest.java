@@ -102,7 +102,7 @@ class FrameGovernorTest {
         assertEquals(10, governor.tick(0, false, 60));
 
         governor.noteFocusChange(1000, true);
-        assertEquals(1000, governor.tick(1000, true, 60), "still capped on the frame focus returns");
+        assertEquals(10, governor.tick(1000, true, 60), "still capped on the frame focus returns");
         assertEquals(60, governor.tick(1000 + FrameGovernor.DEFAULT_FOCUS_GRACE_MS, true, 60),
                 "and full rate once the grace period has passed");
     }
