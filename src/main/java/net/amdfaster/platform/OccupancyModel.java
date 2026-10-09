@@ -126,7 +126,13 @@ public final class OccupancyModel {
     }
 
     /**
-     * The binding ceiling, and the occupancy it allows.
+     * The binding ceiling, the per-SIMD wave ceiling, and the residency it actually allows.
+     *
+     * <p>{@code waves} and {@code groupsPerCu} are different quantities and are kept distinct on
+     * purpose. {@code waves} is the per-SIMD ceiling set by registers and slots -- what a compiler
+     * occupancy remark reports. {@code groupsPerCu} is residency for a particular launch shape, which
+     * is what LDS constrains. Collapsing them into one number is how a model ends up reporting a
+     * per-SIMD figure that no launch can achieve, or a residency that ignores the register file.
      *
      * @param threadsPerGroup workgroup size
      * @param ldsBytesPerGroup LDS the workgroup asks for
@@ -152,33 +158,37 @@ public final class OccupancyModel {
         int simdsPerCu = 4;
         int wavesPerGroup = -(-threadsPerGroup / arch.waveSize());
 
+        // The per-SIMD ceiling. Registers first, then the slot count, whichever is smaller. This is
+        // unaffected by LDS, because LDS constrains how many groups fit rather than how many waves a
+        // SIMD can hold.
         int registerWaves = wavesPerSimd(arch, vgprsPerWave);
         Limiter limiter = Limiter.REGISTERS;
         int waves = registerWaves;
-
-        int slotsLimit = arch.waveSlots();
-        if (slotsLimit < waves) {
-            waves = slotsLimit;
+        if (arch.waveSlots() < waves) {
+            waves = arch.waveSlots();
             limiter = Limiter.WAVE_SLOTS;
         }
-
-        int ldsPerCu = arch.ldsBytesPerCu();
-        int ldsBlock = arch.ldsBlockBytes();
-        int ldsRounded = ldsBytesPerGroup <= 0 ? 0 : -(-ldsBytesPerGroup / ldsBlock) * ldsBlock;
-        if (ldsRounded > 0) {
-            // How many whole groups fit in the CU's LDS, converted to waves per SIMD.
-            int groupsInLds = ldsPerCu / ldsRounded;
-            int wavesFromLds = groupsInLds * wavesPerGroup / simdsPerCu;
-            if (wavesFromLds < waves) {
-                waves = wavesFromLds;
-                limiter = Limiter.LDS;
-            }
-        }
-
         if (waves <= 0) {
             return new Verdict(0, Limiter.NONE, 0, 0.0);
         }
-        int groupsPerCu = waves * simdsPerCu / wavesPerGroup;
+
+        // Residency, derived at group level. Doing it per SIMD and multiplying back is the wrong shape
+        // and loses whole groups: a single group using 60 KB of a 64 KB CU gives 2 waves over 4 SIMDs,
+        // which integer division floors to zero and reports as "nothing runs" when one group per CU
+        // runs perfectly well.
+        int groupsFromWaves = waves * simdsPerCu / wavesPerGroup;
+        int ldsBlock = arch.ldsBlockBytes();
+        int ldsRounded = ldsBytesPerGroup <= 0 ? 0 : -(-ldsBytesPerGroup / ldsBlock) * ldsBlock;
+        int groupsFromLds = ldsRounded <= 0 ? Integer.MAX_VALUE : arch.ldsBytesPerCu() / ldsRounded;
+
+        int groupsPerCu = groupsFromWaves;
+        if (groupsFromLds < groupsPerCu) {
+            groupsPerCu = groupsFromLds;
+            limiter = Limiter.LDS;
+        }
+        if (groupsPerCu <= 0) {
+            return new Verdict(waves, Limiter.NONE, 0, 0.0);
+        }
         return new Verdict(waves, limiter, groupsPerCu, (double) waves / arch.waveSlots());
     }
 

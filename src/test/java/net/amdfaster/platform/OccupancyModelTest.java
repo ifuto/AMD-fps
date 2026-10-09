@@ -117,12 +117,16 @@ class OccupancyModelTest {
         var comfortable = OccupancyModel.evaluate(RDNA4, 48, 64, 0);
         assertEquals(OccupancyModel.Limiter.REGISTERS, comfortable.limiter(), "nothing else competes");
         assertEquals(16, comfortable.waves());
+        assertEquals(32, comfortable.groupsPerCu(), "sixteen waves over four SIMDs, two per workgroup");
 
         // 60 KB per workgroup on a 64 KB CU leaves room for exactly one group.
         var ldsBound = OccupancyModel.evaluate(RDNA4, 48, 64, 60 * 1024);
         assertEquals(OccupancyModel.Limiter.LDS, ldsBound.limiter());
-        assertTrue(ldsBound.waves() < comfortable.waves(), "and it costs occupancy");
         assertEquals(1, ldsBound.groupsPerCu(), "one group fits in the CU's LDS");
+        assertEquals(16, ldsBound.waves(),
+                "the per-SIMD ceiling is unchanged -- it is residency that collapsed, which is why the "
+                        + "two numbers are reported separately rather than collapsed into one");
+        assertTrue(ldsBound.groupsPerCu() < comfortable.groupsPerCu(), "and residency did fall");
     }
 
     @Test
