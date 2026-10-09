@@ -332,6 +332,9 @@ tasks.register("verifyJar") {
                         // designed to be: if this entry ever has to move, something upstream of the
                         // mesher has started depending on Minecraft types.
                         "net/amdfaster/mc/BlockKeys.class",
+                        "net/amdfaster/mc/SectionSnapshot.class",
+                        "net/amdfaster/mc/HeightmapIndex.class",
+                        "net/amdfaster/particle/ParticleField.class",
                         "net/amdfaster/mc/LevelBlockSampler.class",
                         "net/amdfaster/mesh/voxel/SectionMesher.class",
                         "net/amdfaster/gpu/BlockBindings.class",
