@@ -77,6 +77,36 @@ class FrameTimeRecorderTest {
     }
 
     @Test
+    void aPartiallyFilledRingReportsTheFramesItActuallyHolds() {
+        // The case that caught a real bug. Before the ring fills, head points one past the newest
+        // sample, so walking the window from head read uninitialised zeros and skipped the real
+        // frames. It was silent in exactly the way these things usually are: the zeros sort to the
+        // front, every statistic still returned a number, and the mean -- which sums the backing
+        // array directly rather than walking the window -- was unaffected, so the two disagreed
+        // without either looking wrong.
+        //
+        // The ring-wrap test above could not catch it, because once the ring is full head really is
+        // the oldest slot and the walk was correct.
+        FrameTimeRecorder recorder = new FrameTimeRecorder(8);
+        recorder.record(30 * MS);
+        recorder.record(10 * MS);
+        recorder.record(20 * MS);
+
+        assertEquals(3, recorder.sampleCount());
+        assertEquals(20 * MS, recorder.meanFrameNanos());
+        assertEquals(10 * MS, recorder.percentileFrameNanos(50), "the median of 10, 20, 30");
+        assertEquals(30 * MS, recorder.worstFrameNanos());
+        // The worst one percent of three frames rounds up to one frame: the 30 ms one.
+        assertEquals(1_000_000_000.0 / (30 * MS), recorder.onePercentLowFps(), 1e-9);
+
+        long[] sorted = recorder.sortedSnapshot();
+        assertEquals(3, sorted.length, "the snapshot holds the samples, not the whole ring");
+        assertEquals(10 * MS, sorted[0]);
+        assertEquals(20 * MS, sorted[1]);
+        assertEquals(30 * MS, sorted[2]);
+    }
+
+    @Test
     void anEmptyRecorderAnswersZeroRatherThanDividingByZero() {
         FrameTimeRecorder recorder = new FrameTimeRecorder();
         assertEquals(0, recorder.sampleCount());

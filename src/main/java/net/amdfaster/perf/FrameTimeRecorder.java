@@ -88,11 +88,23 @@ public final class FrameTimeRecorder {
         this.totalRecorded = 0;
     }
 
-    /** The held frame times in ascending order. Allocated per call; do not call it in a hot path. */
+    /**
+     * The held frame times in ascending order. Allocated per call; do not call it in a hot path.
+     *
+     * <p>The walk starts at the oldest sample, and where that is depends on whether the ring has
+     * filled. Once it has, {@code head} points at the oldest because that is the slot about to be
+     * overwritten. Before it has, {@code head} points one past the newest and the oldest is slot
+     * zero -- walking from {@code head} there reads uninitialised zeros and skips the real samples,
+     * which is silent because the zeros sort to the front and every statistic still returns a
+     * plausible-looking number. Percentiles and the 1% low both go through here, so both were
+     * affected, while the mean was not: it sums the backing array directly, which happens to be
+     * right in both cases.
+     */
     public long[] sortedSnapshot() {
         long[] sorted = new long[this.count];
+        int oldest = this.count == this.capacity ? this.head : 0;
         for (int i = 0; i < this.count; i++) {
-            sorted[i] = this.nanos[(this.head + i) % this.capacity];
+            sorted[i] = this.nanos[(oldest + i) % this.capacity];
         }
         Arrays.sort(sorted);
         return sorted;
