@@ -151,7 +151,11 @@ class BlockLightPropertiesTest {
         // the reset and testing how many assertions happened to run.
         assertTrue(properties.isOpaque(STONE), "an unregistered block is opaque by default");
         assertFalse(properties.isRegistered(AIR), "and clearing dropped the registration");
-        assertEquals(2, properties.lookups(), "one lookup per property read above");
+        // One, not two. isOpaque goes through the property read and counts; isRegistered tests the
+        // presence bit directly, because whether an id has been registered is metadata about the table
+        // rather than a light property of the block, and charging it to the same counter would make
+        // the counter stop meaning "property reads".
+        assertEquals(1, properties.lookups(), "only the property read counts");
     }
 
     @Test
