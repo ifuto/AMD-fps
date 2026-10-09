@@ -35,6 +35,17 @@ public final class UploadRing {
     private final long[] inFlightUntil;
 
     private int writeIndex;
+
+    /**
+     * True between an {@link #acquire} and the {@link #submit} that closes it.
+     *
+     * <p>Tracking the pairing rather than inferring it from the slice state. The slice state cannot
+     * answer it: submit advances the write index, so a second submit looks at the <em>next</em> slice,
+     * which is legitimately free, and the double submission goes through. What is actually wrong is
+     * that nothing was acquired, and only a flag says so.
+     */
+    private boolean acquired;
+
     private long totalSubmitted;
     private long totalReleased;
     private int stalledFrames;
@@ -91,6 +102,7 @@ public final class UploadRing {
             int index = (this.writeIndex + step) % this.sliceCount;
             if (this.inFlightUntil[index] == -1L) {
                 this.writeIndex = index;
+                this.acquired = true;
                 return (long) index * this.bytesPerSlice;
             }
         }
@@ -107,10 +119,11 @@ public final class UploadRing {
         if (fenceValue < 0) {
             throw new IllegalArgumentException("negative fence value: " + fenceValue);
         }
-        if (this.inFlightUntil[this.writeIndex] != -1L) {
-            throw new IllegalStateException("slice " + this.writeIndex
-                    + " is already in flight; submit called twice without an acquire");
+        if (!this.acquired) {
+            throw new IllegalStateException("submit without a matching acquire; slice "
+                    + this.writeIndex + " was never handed out");
         }
+        this.acquired = false;
         this.inFlightUntil[this.writeIndex] = fenceValue;
         this.totalSubmitted++;
         this.writeIndex = (this.writeIndex + 1) % this.sliceCount;
@@ -173,5 +186,10 @@ public final class UploadRing {
      */
     public boolean isIdle() {
         return inFlightCount() == 0;
+    }
+
+    /** True when a slice has been acquired but not yet submitted. */
+    public boolean hasPendingAcquire() {
+        return this.acquired;
     }
 }

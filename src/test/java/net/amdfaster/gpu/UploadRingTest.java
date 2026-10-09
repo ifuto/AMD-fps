@@ -115,13 +115,24 @@ class UploadRingTest {
     }
 
     @Test
-    void submitTwiceWithoutAcquireIsRefused() {
-        // Silent double submission would mark one slice in flight twice and lose track of the other,
-        // so the ring would eventually overwrite a slice the GPU is reading.
+    void submitWithoutAMatchingAcquireIsRefused() {
+        // The check has to be on the acquire/submit pairing, not on the slice's state. submit advances
+        // the write index, so a second submit inspects the *next* slice, which is legitimately free --
+        // testing inFlightUntil[writeIndex] there passes and the double submission goes through, which
+        // was exactly the bug this test was written to catch and did not.
         UploadRing ring = new UploadRing(3, 1000);
+        assertFalse(ring.hasPendingAcquire());
+
         ring.acquire(0);
+        assertTrue(ring.hasPendingAcquire(), "an acquire leaves the ring owing a submit");
         ring.submit(1);
-        assertThrows(IllegalStateException.class, () -> ring.submit(2));
+        assertFalse(ring.hasPendingAcquire());
+
+        assertThrows(IllegalStateException.class, () -> ring.submit(2),
+                "nothing was acquired, so there is no slice to mark in flight");
+        assertThrows(IllegalStateException.class, () -> ring.submit(3));
+        assertEquals(1, ring.totalSubmitted(), "and the rejected submits recorded nothing");
+        assertEquals(1, ring.inFlightCount());
     }
 
     @Test
