@@ -135,9 +135,16 @@ public final class LightEngine {
         if (level <= 0) {
             return;
         }
-        if (this.field.set(x, y, z, level)) {
-            this.updatesApplied++;
+        // The guard is what makes this monotonic. A source only ever raises what it reaches, so a
+        // dimmer source placed where a brighter one already is must not touch the field at all -- and
+        // writing unconditionally would, because the field does not know which source produced the
+        // value it holds. It would drop the cell to the new level and then leave it there, since the
+        // following flood fill only raises.
+        if (level <= this.field.get(x, y, z)) {
+            return;
         }
+        this.field.set(x, y, z, level);
+        this.updatesApplied++;
         this.queue.push(level, SectionCoord.key(x, y, z));
         propagate(opacity);
     }
@@ -166,14 +173,20 @@ public final class LightEngine {
                 if (candidate <= 0) {
                     continue;
                 }
-                if (candidate > this.field.get(nx, ny, nz)) {
-                    this.field.set(nx, ny, nz, candidate);
+                // The write's return value decides, not the comparison alone. A cell outside the
+                // field reads as 0, so "brighter than what is there" is true of every out-of-bounds
+                // neighbour for any positive candidate -- and enqueueing those sends the fill off
+                // exploring phantom space around the volume, a ball fifteen cells wide in every
+                // direction, doing work for cells that do not exist. Measured on a 24-cell corridor:
+                // 43843 updates applied instead of 15. Gating on the write means a cell is only
+                // enqueued if the field actually took the value, which out-of-bounds never does.
+                if (candidate > this.field.get(nx, ny, nz) && this.field.set(nx, ny, nz, candidate)) {
                     this.updatesApplied++;
                     this.queue.push(candidate, SectionCoord.key(nx, ny, nz));
                 } else {
                     // The overwhelming majority of a flood fill's neighbour tests land here: the cell
-                    // is already at least this bright. Counting them separately is what makes it
-                    // visible that the early exit is doing its job.
+                    // is already at least this bright, or is outside the field. Counting them
+                    // separately is what makes it visible that the early exit is doing its job.
                     this.updatesSkippedUnchanged++;
                 }
             }

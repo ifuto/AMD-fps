@@ -119,10 +119,15 @@ class LightEngineTest {
             assertEquals(Math.max(0, 15 - Math.abs(5 - x)), levelAt(engine, x), "x=" + x);
         }
 
+        long appliedBefore = engine.updatesApplied();
+        long visitedBefore = engine.cellsVisited();
         engine.addSource(5, 0, 0, 3, AIR);
+        assertEquals(appliedBefore, engine.updatesApplied(),
+                "a dimmer source is rejected before it touches anything");
+        assertEquals(visitedBefore, engine.cellsVisited(), "and starts no flood fill");
         for (int x = 0; x < LENGTH; x++) {
-            assertTrue(levelAt(engine, x) >= Math.max(0, 15 - Math.abs(5 - x)),
-                    "a dimmer source must not darken x=" + x);
+            assertEquals(Math.max(0, 15 - Math.abs(5 - x)), levelAt(engine, x),
+                    "every cell still holds the brighter source's value at x=" + x);
         }
     }
 
@@ -138,19 +143,53 @@ class LightEngineTest {
     }
 
     @Test
-    void mostNeighbourTestsChangeNothingAndThatIsThePoint() {
-        // The early exit is what makes a light update cheap, so its effectiveness is worth asserting
-        // rather than assuming. In a flood fill almost every neighbour is already at least as bright
-        // as the value being offered; if that ratio ever inverts, something is re-lighting cells that
-        // were already correct.
+    void theFillTouchesOnlyCellsThatExistAndEachOneOnce() {
+        // Pinned to exact numbers because the failure mode this replaces was not a wrong answer, it
+        // was an answer reached by doing three thousand times the work. A cell outside the field reads
+        // as 0, so "brighter than what is there" was true of every out-of-bounds neighbour, and the
+        // fill duly enqueued and explored a ball fifteen cells wide in every direction around a
+        // one-block-tall corridor -- 43843 updates applied to light 15 cells.
         LightEngine engine = corridor();
         engine.addSource(0, 0, 0, 15, AIR);
 
-        assertTrue(engine.updatesSkippedUnchanged() > engine.updatesApplied(),
+        assertEquals(15, engine.updatesApplied(), "the source plus the fourteen cells it reaches");
+        assertEquals(15, engine.cellsVisited(), "each lit cell is polled exactly once");
+        assertEquals(70, engine.updatesSkippedUnchanged(),
+                "fifteen cells times six directions, less the fourteen that landed");
+        assertEquals(15, engine.field().litCellCount());
+    }
+
+    @Test
+    void mostNeighbourTestsChangeNothingAndThatIsThePoint() {
+        // The early exit is what makes a light update cheap, so its effectiveness is worth asserting
+        // rather than assuming. In a flood fill almost every neighbour is already at least as bright
+        // as the value being offered, or is outside the field entirely; if that ratio ever inverts,
+        // something is re-lighting cells that were already correct.
+        LightEngine engine = corridor();
+        engine.addSource(0, 0, 0, 15, AIR);
+
+        assertTrue(engine.updatesSkippedUnchanged() > engine.updatesApplied() * 4,
                 "skipped " + engine.updatesSkippedUnchanged()
                         + " versus applied " + engine.updatesApplied());
-        assertTrue(engine.cellsVisited() < engine.field().cellCount() * 2,
-                "the fill visits each cell a small number of times, not once per neighbour");
+        assertTrue(engine.cellsVisited() < engine.field().cellCount(),
+                "the fill visits each cell once, not once per neighbour");
+    }
+
+    @Test
+    void aNarrowFieldDoesNotCauseWorkProportionalToTheSpaceAroundIt() {
+        // The same update in a field one cell tall and one cell deep. The volume of phantom space the
+        // buggy version explored was unchanged by how thin the real field was, so this is the case
+        // where the blow-up was most extreme: three cells lit, and the work should be about three
+        // cells' worth rather than a sphere's.
+        LightEngine engine = new LightEngine(new LightField(0, 0, 0, 3, 1, 1));
+        engine.addSource(1, 0, 0, 15, AIR);
+
+        assertEquals(3, engine.field().litCellCount());
+        assertEquals(3, engine.updatesApplied());
+        assertEquals(3, engine.cellsVisited());
+        assertTrue(engine.updatesSkippedUnchanged() < 30,
+                "eighteen neighbour tests for three cells, so well under thirty: "
+                        + engine.updatesSkippedUnchanged());
     }
 
     @Test
@@ -171,9 +210,10 @@ class LightEngineTest {
         for (int x = 0; x < LENGTH; x++) {
             assertEquals(levelAt(perSource, x), levelAt(batched, x), "same result at x=" + x);
         }
-        assertTrue(batched.cellsVisited() < perSource.cellsVisited(),
-                "batched visited " + batched.cellsVisited()
-                        + " cells, per source visited " + perSource.cellsVisited());
+        // Both numbers from a model of the same algorithm. The three sources overlap heavily, so
+        // propagating them separately redoes the shared ground three times.
+        assertEquals(24, batched.cellsVisited());
+        assertEquals(40, perSource.cellsVisited());
     }
 
     @Test
