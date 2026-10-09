@@ -36,6 +36,20 @@ public final class LevelBlockSampler implements RegionVoxelView.BlockSampler {
     private final BlockFaceSource faces;
     private final int minBuildHeight;
     private final int maxBuildHeightExclusive;
+    private final BlockStateCache states = new BlockStateCache();
+
+    /**
+     * One mutable position, reused for every read.
+     *
+     * <p>The code this replaced allocated a {@code BlockPos} per lookup, and meshing a section does
+     * tens of thousands of lookups. These are short-lived enough that the generational collector
+     * reclaims them cheaply, but they are not free: allocating at that rate inside the hottest loop
+     * of a rebuild is what makes a rebuild cost more than the geometry it produces.
+     *
+     * <p>Safe to reuse because {@code getBlockState} reads the position and returns a
+     * {@code BlockState}, which does not retain it.
+     */
+    private final BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
 
     /**
      * @param level                 the world to read
@@ -82,10 +96,45 @@ public final class LevelBlockSampler implements RegionVoxelView.BlockSampler {
         return this.level.hasChunk(SectionCoords.sectionOf(x), SectionCoords.sectionOf(z));
     }
 
+    /**
+     * Drops the cached block flags. Must be called before each rebuild of a section.
+     *
+     * <p>Without it a block that changed since the last read would keep meshing from its old state,
+     * and because nothing else dirties the section the wrong mesh would persist. See
+     * {@link BlockStateCache}.
+     */
+    public void invalidate() {
+        this.states.clear();
+    }
+
+    /** Cached flag lookups since the last {@link #invalidate()}; exposed so the hit rate is testable. */
+    public int cacheHits() {
+        return this.states.hits();
+    }
+
+    /** Level lookups since the last {@link #invalidate()}. */
+    public int cacheMisses() {
+        return this.states.misses();
+    }
+
+    /**
+     * Resolves the three facts meshing needs about a block, through the cache.
+     *
+     * <p>Opacity is {@code isSolid() && !useShapeForLightOcclusion()}: a slab is solid but uses its
+     * shape for light occlusion, so it must not hide a neighbour's face. Deriving it from the two
+     * primitives rather than a ready-made predicate keeps the rule visible here.
+     */
+    private int flags(int x, int y, int z) {
+        return this.states.flags(x, y, z, (bx, by, bz) -> {
+            BlockState state = this.level.getBlockState(this.cursor.set(bx, by, bz));
+            boolean opaque = state.isSolid() && !state.useShapeForLightOcclusion();
+            return BlockStateCache.pack(state.isAir(), opaque, state.getLightEmission());
+        });
+    }
+
     @Override
     public boolean isOpaque(int x, int y, int z) {
-        BlockState state = this.level.getBlockState(new BlockPos(x, y, z));
-        return state.isSolid() && !state.useShapeForLightOcclusion();
+        return BlockStateCache.isOpaque(flags(x, y, z));
     }
 
     @Override
@@ -94,15 +143,15 @@ public final class LevelBlockSampler implements RegionVoxelView.BlockSampler {
         if (sprite < 0) {
             return VoxelView.NO_GEOMETRY;
         }
-        BlockState state = this.level.getBlockState(new BlockPos(x, y, z));
-        if (state.isAir()) {
+        int flags = flags(x, y, z);
+        if (BlockStateCache.isAir(flags)) {
             return VoxelView.NO_GEOMETRY;
         }
         return BlockKeys.encode(sprite,
                 this.faces.blockLight(x, y, z),
                 this.faces.skyLight(x, y, z),
                 this.faces.tint(x, y, z, orientation),
-                state.getLightEmission(),
+                BlockStateCache.lightEmission(flags),
                 this.faces.isCutout(x, y, z, orientation));
     }
 }
