@@ -32,6 +32,30 @@ public final class AmdFasterClient implements ClientModInitializer {
         report.writeToFile();
 
         AmdFasterCommand.register();
+
+        // The runtime is what makes the rest of the mod do anything. Everything else in this codebase
+        // is a component that waits to be called; this is the thing that calls it.
+        net.amdfaster.runtime.AmdFasterRuntime.install(configDirectory());
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STOPPING
+                .register(client -> net.amdfaster.runtime.AmdFasterRuntime.shutdown());
+    }
+
+    /**
+     * Where the config file lives.
+     *
+     * <p>Resolved lazily rather than at class load, because the client entry point runs before
+     * {@link Minecraft#getInstance()} is guaranteed to exist on every load path.
+     */
+    private static java.nio.file.Path configDirectory() {
+        try {
+            net.minecraft.client.Minecraft client = net.minecraft.client.Minecraft.getInstance();
+            if (client != null && client.gameDirectory != null) {
+                return client.gameDirectory.toPath();
+            }
+        } catch (Throwable t) {
+            // Fall through to a config-less default rather than failing to start.
+        }
+        return null;
     }
 
     /** @return the probe result, or {@code null} before initialisation has completed. */
