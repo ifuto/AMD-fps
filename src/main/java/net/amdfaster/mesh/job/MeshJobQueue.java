@@ -40,8 +40,8 @@ public final class MeshJobQueue {
 
     private final int workerCount;
     private final long[][] keys;
-    private final int[] kinds;
-    private final long[] generations;
+    private final int[][] kinds;
+    private final long[][] generations;
     private final boolean[][] cancelled;
 
     private final int[] head;
