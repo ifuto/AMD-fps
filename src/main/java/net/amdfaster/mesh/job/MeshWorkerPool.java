@@ -97,7 +97,7 @@ public final class MeshWorkerPool {
                 }
             }
             if (didWork) {
-                this.builder.build(key, this.queue.lastKind());
+                this.builder.build(key, this.queue.lastKind(id));
                 synchronized (this) {
                     this.buildsCompleted++;
                 }

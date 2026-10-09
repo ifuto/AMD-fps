@@ -101,7 +101,12 @@ class MeshJobQueueTest {
         assertEquals(1001, queue.resident(), "plus the thousand stale slots still waiting to be passed");
         assertEquals(SectionCoord.key(0, 9, 0), queue.poll(0), "a new job surfaces, not a stale one");
         assertEquals(0, queue.pending(), "and that was the only live one");
-        assertEquals(1000, queue.droppedStale(), "every stale slot was stepped over to reach it");
+        // 250, not 1000: a thousand jobs round-robin over four workers is 250 per deque, and polling
+        // worker 0 only steps over worker 0's. The other 750 stale slots are still resident on workers
+        // 1 to 3, and they cost nothing until something polls past them -- which is the property that
+        // makes a bulk cancel one write instead of a walk over the backlog.
+        assertEquals(250, queue.droppedStale(), "worker 0's share was stepped over");
+        assertEquals(750, queue.resident(), "the other three deques still hold theirs");
     }
 
     @Test
@@ -192,9 +197,13 @@ class MeshJobQueueTest {
         queue.push(2, 4, 2, MeshJobQueue.KIND_LIGHT);
 
         queue.poll(0);
-        assertEquals(MeshJobQueue.KIND_GEOMETRY, queue.lastKind());
+        assertEquals(MeshJobQueue.KIND_GEOMETRY, queue.lastKind(0));
         queue.poll(1);
-        assertEquals(MeshJobQueue.KIND_LIGHT, queue.lastKind());
+        // Worker 1's slot, not worker 0's. A single shared slot would have served whichever worker
+        // polled last, so a worker would regularly get another worker's kind back -- and building
+        // geometry when light was asked for produces a mesh with stale lighting that nothing reports.
+        assertEquals(MeshJobQueue.KIND_LIGHT, queue.lastKind(1));
+        assertEquals(MeshJobQueue.KIND_GEOMETRY, queue.lastKind(0), "worker 0 still sees its own");
     }
 
     @Test
@@ -208,7 +217,7 @@ class MeshJobQueueTest {
         queue.poll(0);
         assertEquals(-1L, queue.poll(0));
         queue.steal(0);
-        assertEquals(MeshJobQueue.KIND_LIGHT, queue.lastKind(), "a stolen job keeps its kind");
+        assertEquals(MeshJobQueue.KIND_LIGHT, queue.lastKind(0), "a stolen job keeps its kind");
     }
 
     @Test
