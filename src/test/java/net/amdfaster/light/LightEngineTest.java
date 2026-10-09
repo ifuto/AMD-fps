@@ -31,7 +31,9 @@ class LightEngineTest {
         for (int x = 0; x < LENGTH; x++) {
             assertEquals(Math.max(0, 15 - x), levelAt(engine, x), "level at x=" + x);
         }
-        assertEquals(16, engine.field().litCellCount(), "fifteen levels plus the source itself");
+        // The source holds 15 and each step away costs one, so the last lit cell is fourteen blocks
+        // out: fifteen cells in total, not sixteen.
+        assertEquals(15, engine.field().litCellCount(), "the source plus the fourteen cells it reaches");
     }
 
     @Test
@@ -55,14 +57,14 @@ class LightEngineTest {
     void removingTheOnlySourceDarkensEverythingItLit() {
         LightEngine engine = corridor();
         engine.addSource(0, 0, 0, 15, AIR);
-        assertTrue(engine.field().litCellCount() > 0);
+        assertTrue(engine.field().litCellCount() > 0, "L60");
 
         engine.removeSource(0, 0, 0, AIR);
 
         for (int x = 0; x < LENGTH; x++) {
             assertEquals(0, levelAt(engine, x), "dark at x=" + x);
         }
-        assertEquals(0, engine.field().litCellCount());
+        assertEquals(0, engine.field().litCellCount(), "L67");
     }
 
     @Test
@@ -76,9 +78,9 @@ class LightEngineTest {
         engine.addSource(10, 0, 0, 15, AIR);
 
         // The overlap peaks between them: max(15 - x, 15 - (10 - x)).
-        assertEquals(15, levelAt(engine, 0));
+        assertEquals(15, levelAt(engine, 0), "L81");
         assertEquals(11, levelAt(engine, 6), "lit by the source at 10, not the one at 0");
-        assertEquals(15, levelAt(engine, 10));
+        assertEquals(15, levelAt(engine, 10), "L83");
 
         engine.removeSource(0, 0, 0, AIR);
 
@@ -93,15 +95,21 @@ class LightEngineTest {
         LightEngine engine = new LightEngine(new LightField(0, 0, 0, 7, 7, 7));
         engine.addSource(3, 3, 3, 10, AIR);
 
-        assertEquals(10, engine.field().get(3, 3, 3));
+        assertEquals(10, engine.field().get(3, 3, 3), "L98");
         assertEquals(9, engine.field().get(4, 3, 3), "+x");
         assertEquals(9, engine.field().get(2, 3, 3), "-x");
         assertEquals(9, engine.field().get(3, 4, 3), "+y");
         assertEquals(9, engine.field().get(3, 2, 3), "-y");
         assertEquals(9, engine.field().get(3, 3, 4), "+z");
         assertEquals(9, engine.field().get(3, 3, 2), "-z");
-        assertEquals(6, engine.field().get(6, 3, 3), "three blocks along +x");
-        assertEquals(0, engine.field().get(0, 0, 0), "a corner is six blocks away, beyond level 10");
+        assertEquals(7, engine.field().get(6, 3, 3), "three blocks along +x, so three levels down");
+        assertEquals(1, engine.field().get(0, 0, 0),
+                "the far corner is nine blocks away by Manhattan distance, which is one short of the "
+                        + "source's reach of ten, so it holds the last level rather than nothing");
+        assertEquals(1, engine.field().get(6, 6, 6),
+                "the opposite corner is also nine away and so also holds the last level");
+        assertEquals(0, engine.field().get(6, 6, 0),
+                "six blocks away in two axes is twelve total, past the reach of a level-10 source");
     }
 
     @Test
@@ -135,7 +143,7 @@ class LightEngineTest {
     void aZeroLevelSourceDoesNothing() {
         LightEngine engine = corridor();
         engine.addSource(4, 0, 0, 0, AIR);
-        assertEquals(0, engine.field().litCellCount());
+        assertEquals(0, engine.field().litCellCount(), "L144");
         assertEquals(0, engine.cellsVisited(), "and it does not even start a flood fill");
 
         engine.removeSource(4, 0, 0, AIR);
@@ -156,7 +164,7 @@ class LightEngineTest {
         assertEquals(15, engine.cellsVisited(), "each lit cell is polled exactly once");
         assertEquals(70, engine.updatesSkippedUnchanged(),
                 "fifteen cells times six directions, less the fourteen that landed");
-        assertEquals(15, engine.field().litCellCount());
+        assertEquals(15, engine.field().litCellCount(), "L165");
     }
 
     @Test
@@ -184,9 +192,9 @@ class LightEngineTest {
         LightEngine engine = new LightEngine(new LightField(0, 0, 0, 3, 1, 1));
         engine.addSource(1, 0, 0, 15, AIR);
 
-        assertEquals(3, engine.field().litCellCount());
-        assertEquals(3, engine.updatesApplied());
-        assertEquals(3, engine.cellsVisited());
+        assertEquals(3, engine.field().litCellCount(), "L193");
+        assertEquals(3, engine.updatesApplied(), "L194");
+        assertEquals(3, engine.cellsVisited(), "L195");
         assertTrue(engine.updatesSkippedUnchanged() < 30,
                 "eighteen neighbour tests for three cells, so well under thirty: "
                         + engine.updatesSkippedUnchanged());
@@ -202,9 +210,12 @@ class LightEngineTest {
         perSource.addSource(14, 0, 0, 12, AIR);
 
         LightEngine batched = corridor();
-        batched.field().set(2, 0, 0, 12);
-        batched.field().set(8, 0, 0, 12);
-        batched.field().set(14, 0, 0, 12);
+        // Staged, not written straight to the field. Writing the level directly enqueues nothing, so a
+        // following propagate finds an empty queue and does no work at all -- the sources sit there
+        // unspread, which is exactly what this comparison would have been measuring.
+        batched.stageSource(2, 0, 0, 12);
+        batched.stageSource(8, 0, 0, 12);
+        batched.stageSource(14, 0, 0, 12);
         batched.propagate(AIR);
 
         for (int x = 0; x < LENGTH; x++) {
@@ -212,8 +223,8 @@ class LightEngineTest {
         }
         // Both numbers from a model of the same algorithm. The three sources overlap heavily, so
         // propagating them separately redoes the shared ground three times.
-        assertEquals(24, batched.cellsVisited());
-        assertEquals(40, perSource.cellsVisited());
+        assertEquals(24, batched.cellsVisited(), "L224");
+        assertEquals(40, perSource.cellsVisited(), "L225");
     }
 
     @Test
@@ -222,7 +233,7 @@ class LightEngineTest {
         engine.addSource(0, 0, 0, 15, AIR);
         engine.clear();
 
-        assertEquals(0, engine.field().litCellCount());
+        assertEquals(0, engine.field().litCellCount(), "L234");
         engine.addSource(0, 0, 0, 15, AIR);
         assertEquals(15, levelAt(engine, 0), "and it works again afterwards");
     }
@@ -235,11 +246,11 @@ class LightEngineTest {
         LightEngine engine = new LightEngine(new LightField(0, 0, 0, 3, 1, 1));
         engine.addSource(1, 0, 0, 15, AIR);
 
-        assertEquals(15, engine.field().get(1, 0, 0));
-        assertEquals(14, engine.field().get(0, 0, 0));
-        assertEquals(14, engine.field().get(2, 0, 0));
+        assertEquals(15, engine.field().get(1, 0, 0), "L247");
+        assertEquals(14, engine.field().get(0, 0, 0), "L248");
+        assertEquals(14, engine.field().get(2, 0, 0), "L249");
         assertEquals(0, engine.field().get(-1, 0, 0), "outside reads as no light");
-        assertEquals(0, engine.field().get(3, 0, 0));
+        assertEquals(0, engine.field().get(3, 0, 0), "L251");
         assertFalse(engine.field().set(-1, 0, 0, 15), "and writes outside are ignored");
     }
 }

@@ -12,10 +12,10 @@ class VertexLightPackingTest {
     void theOcclusionLevelSitsInBitsTheLightmapLeavesFree() {
         // The whole reason this fits in one word: the lightmap coordinate occupies bits 4..7 and
         // 20..23, so bits 24..31 are unused and two of them hold the occlusion level.
-        assertEquals(0x00000000, VertexLight.packLight(LightValue.dark(), 0));
-        assertEquals(0x00F000F0, VertexLight.packLight(LightValue.fullBright(), 0));
-        assertEquals(0x01000000, VertexLight.packLight(LightValue.dark(), 1));
-        assertEquals(0x03F000F0, VertexLight.packLight(LightValue.fullBright(), 3));
+        assertEquals(0x00000000, VertexLight.packLight(LightValue.dark(), 0), "L15");
+        assertEquals(0x00F000F0, VertexLight.packLight(LightValue.fullBright(), 0), "L16");
+        assertEquals(0x01000000, VertexLight.packLight(LightValue.dark(), 1), "L17");
+        assertEquals(0x03F000F0, VertexLight.packLight(LightValue.fullBright(), 3), "L18");
     }
 
     @Test
@@ -30,8 +30,8 @@ class VertexLightPackingTest {
                     assertEquals(ao, VertexLight.unpackAo(packed), "ao=" + ao);
 
                     VertexLight back = VertexLight.unpack(packed);
-                    assertEquals(light, back.light());
-                    assertEquals(ao, back.ao());
+                    assertEquals(light, back.light(), "L33");
+                    assertEquals(ao, back.ao(), "L34");
                     assertEquals(packed, back.packed(), "repacking is stable");
                 }
             }
@@ -41,15 +41,15 @@ class VertexLightPackingTest {
     @Test
     void packedAgreesWithTheStaticForm() {
         VertexLight vertex = new VertexLight(LightValue.pack(4, 11), 2);
-        assertEquals(VertexLight.packLight(vertex.light(), vertex.ao()), vertex.packed());
-        assertEquals(vertex, VertexLight.unpack(vertex.packed()));
+        assertEquals(VertexLight.packLight(vertex.light(), vertex.ao()), vertex.packed(), "L44");
+        assertEquals(vertex, VertexLight.unpack(vertex.packed()), "L45");
     }
 
     @Test
     void theOcclusionLevelChangesTheWordButNotTheLight() {
         int light = LightValue.pack(7, 9);
         for (int ao = VertexLight.AO_MIN; ao <= VertexLight.AO_MAX; ao++) {
-            assertEquals(light, VertexLight.unpackLight(VertexLight.packLight(light, ao)));
+            assertEquals(light, VertexLight.unpackLight(VertexLight.packLight(light, ao)), "L52");
         }
         // And the words are distinct, or the shader could not tell the corners apart.
         assertEquals(4, java.util.stream.IntStream.rangeClosed(VertexLight.AO_MIN, VertexLight.AO_MAX)
@@ -67,8 +67,8 @@ class VertexLightPackingTest {
     @Test
     void fullBrightUnoccludedIsTheBrightestWord() {
         int packed = VertexLight.fullBright().packed();
-        assertEquals(LightValue.fullBright(), VertexLight.unpackLight(packed));
-        assertEquals(VertexLight.AO_MAX, VertexLight.unpackAo(packed));
+        assertEquals(LightValue.fullBright(), VertexLight.unpackLight(packed), "L70");
+        assertEquals(VertexLight.AO_MAX, VertexLight.unpackAo(packed), "L71");
         for (int block = 0; block <= 15; block++) {
             for (int sky = 0; sky <= 15; sky++) {
                 for (int ao = 0; ao <= 3; ao++) {

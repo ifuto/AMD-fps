@@ -29,10 +29,10 @@ class LightValueTest {
     @Test
     void theChannelsDoNotOverlap() {
         // The twelve zero bits between the fields are load bearing: average4 relies on them.
-        assertEquals(0xF0, LightValue.pack(LightValue.MAX, 0));
-        assertEquals(0xF00000, LightValue.pack(0, LightValue.MAX));
-        assertEquals(0xF000F0, LightValue.fullBright());
-        assertEquals(0, LightValue.dark());
+        assertEquals(0xF0, LightValue.pack(LightValue.MAX, 0), "L32");
+        assertEquals(0xF00000, LightValue.pack(0, LightValue.MAX), "L33");
+        assertEquals(0xF000F0, LightValue.fullBright(), "L34");
+        assertEquals(0, LightValue.dark(), "L35");
     }
 
     @Test
@@ -60,7 +60,7 @@ class LightValueTest {
         for (int block = 0; block <= 15; block++) {
             for (int sky = 0; sky <= 15; sky++) {
                 int packed = LightValue.pack(block, sky);
-                assertEquals(packed, LightValue.average4(packed, packed, packed, packed));
+                assertEquals(packed, LightValue.average4(packed, packed, packed, packed), "L63");
             }
         }
     }
@@ -72,24 +72,24 @@ class LightValueTest {
         int dark = LightValue.pack(0, 0);
         int bright = LightValue.pack(15, 15);
         int avg = LightValue.average4(dark, dark, dark, bright);
-        assertEquals(3, LightValue.block(avg));
-        assertEquals(3, LightValue.sky(avg));
+        assertEquals(3, LightValue.block(avg), "L75");
+        assertEquals(3, LightValue.sky(avg), "L76");
     }
 
     @Test
     void emissionRaisesTheBlockChannelAndNeverLowersIt() {
         int lit = LightValue.pack(12, 4);
-        assertEquals(12, LightValue.block(LightValue.withEmission(lit, 5)));
-        assertEquals(15, LightValue.block(LightValue.withEmission(lit, 15)));
+        assertEquals(12, LightValue.block(LightValue.withEmission(lit, 5)), "L82");
+        assertEquals(15, LightValue.block(LightValue.withEmission(lit, 15)), "L83");
         assertEquals(4, LightValue.sky(LightValue.withEmission(lit, 15)), "sky must be untouched");
-        assertEquals(lit, LightValue.withEmission(lit, 0));
-        assertEquals(lit, LightValue.withEmission(lit, -3));
+        assertEquals(lit, LightValue.withEmission(lit, 0), "L85");
+        assertEquals(lit, LightValue.withEmission(lit, -3), "L86");
     }
 
     @Test
     void theLightmapCoordinateSitsInTheMiddleOfItsTexel() {
-        assertEquals(0.5f / 16.0f, LightValue.lightmapCoord(0), 1e-6f);
-        assertEquals(15.5f / 16.0f, LightValue.lightmapCoord(15), 1e-6f);
+        assertEquals(0.5f / 16.0f, LightValue.lightmapCoord(0), 1e-6f, "L91");
+        assertEquals(15.5f / 16.0f, LightValue.lightmapCoord(15), 1e-6f, "L92");
         assertEquals(LightValue.lightmapCoord(0), LightValue.lightmapCoord(-4), "clamped low");
         assertEquals(LightValue.lightmapCoord(15), LightValue.lightmapCoord(99), "clamped high");
     }
@@ -97,7 +97,7 @@ class LightValueTest {
     @Test
     void consecutiveLevelsLandInDistinctTexels() {
         for (int level = 0; level < 15; level++) {
-            assertTrue(LightValue.lightmapCoord(level + 1) > LightValue.lightmapCoord(level));
+            assertTrue(LightValue.lightmapCoord(level + 1) > LightValue.lightmapCoord(level), "L100");
         }
     }
 }

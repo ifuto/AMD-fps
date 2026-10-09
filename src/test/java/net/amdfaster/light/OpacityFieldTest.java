@@ -15,10 +15,10 @@ class OpacityFieldTest {
         // times per cell it visits, so this array is read constantly; making it eight times smaller
         // than a byte-per-cell opacity map is what keeps those reads in cache.
         OpacityField field = OpacityField.forSection(0, 0, 0);
-        assertEquals(OpacityField.CELL_COUNT, field.cellCount());
+        assertEquals(OpacityField.CELL_COUNT, field.cellCount(), "L18");
         assertEquals(512, field.bitsetBytes(), "4096 cells at one bit each");
         assertEquals(2048, field.attenuationBytes(), "and the exact costs, two per byte");
-        assertEquals(field.bitsetBytes() * 8, field.cellCount());
+        assertEquals(field.bitsetBytes() * 8, field.cellCount(), "L21");
     }
 
     @Test
@@ -45,24 +45,26 @@ class OpacityFieldTest {
         // make light travel further through glass than through air, which is not what Minecraft does.
         OpacityField field = OpacityField.forSection(0, 0, 0);
         field.set(0, 0, 0, 0);
-        assertEquals(1, field.costOf(0, 0, 0));
-        assertFalse(field.isOpaque(0, 0, 0));
+        assertEquals(1, field.costOf(0, 0, 0), "L48");
+        assertFalse(field.isOpaque(0, 0, 0), "L49");
     }
 
     @Test
-    void setReportsOnlyClassificationChanges() {
-        // Going from attenuation 2 to 3 changes the stored cost but not whether light is blocked, so
-        // it is not a change a light update has to react to. Only crossing the opaque threshold is.
+    void setReportsAnyChangeToTheStoredAttenuation() {
+        // Not just the crossing into opaque. A block going from clear to filtering changes the step
+        // cost, and the light already propagated through that cell was computed with the old one, so
+        // the update has to react. Reporting only the opaque crossing would let that go unnoticed --
+        // which is what the first version of this did, and it made 0 -> 3 report false.
         OpacityField field = OpacityField.forSection(0, 0, 0);
         assertFalse(field.set(0, 0, 0, 0), "0 was already the stored value");
-        assertTrue(field.set(0, 0, 0, 3), "clear to filtering is a classification change");
-        assertFalse(field.set(0, 0, 0, 5), "still filtering, just more");
-        assertTrue(field.set(0, 0, 0, 15), "and crossing into opaque is one");
-        assertFalse(field.set(0, 0, 0, 15));
+        assertTrue(field.set(0, 0, 0, 3), "clear to filtering changes the step cost");
+        assertTrue(field.set(0, 0, 0, 5), "and so does filtering more");
+        assertTrue(field.set(0, 0, 0, 15), "and crossing into opaque");
+        assertFalse(field.set(0, 0, 0, 15), "writing the same value back is not a change");
         assertEquals(OpacityField.OPAQUE, field.costOf(0, 0, 0), "and the cost follows the last write");
 
-        field.set(0, 0, 0, 3);
-        assertEquals(3, field.costOf(0, 0, 0), "as does coming back out of opaque");
+        assertTrue(field.set(0, 0, 0, 3), "coming back out of opaque is a change too");
+        assertEquals(3, field.costOf(0, 0, 0), "L67");
         assertEquals(1, field.costOf(0, 1, 0), "without touching the neighbour");
     }
 
@@ -76,12 +78,12 @@ class OpacityFieldTest {
                 }
             }
         }
-        assertEquals(4 * 256, field.opaqueCells());
+        assertEquals(4 * 256, field.opaqueCells(), "L81");
         assertEquals(0, field.filteringCells(), "a solid floor has no filtering cells");
 
         field.set(0, 0, 0, 3);
         assertEquals(4 * 256 - 1, field.opaqueCells(), "clearing one cell updates the count");
-        assertEquals(1, field.filteringCells());
+        assertEquals(1, field.filteringCells(), "L86");
     }
 
     @Test
@@ -89,25 +91,25 @@ class OpacityFieldTest {
         // The flood fill walks off the edge of whatever volume it was given, and light must stop there
         // rather than leak. Treating outside as opaque does that with no bounds check at the call site.
         OpacityField field = OpacityField.forSection(0, 0, 0);
-        assertTrue(field.isOpaque(-1, 0, 0));
-        assertTrue(field.isOpaque(0, 16, 0));
-        assertTrue(field.isOpaque(0, 0, 16));
-        assertEquals(OpacityField.OPAQUE, field.costOf(-1, 0, 0));
-        assertEquals(OpacityField.OPAQUE, field.costOf(0, 0, 16));
-        assertFalse(field.contains(-1, 0, 0));
-        assertTrue(field.contains(0, 0, 0));
-        assertTrue(field.contains(15, 15, 15));
+        assertTrue(field.isOpaque(-1, 0, 0), "L94");
+        assertTrue(field.isOpaque(0, 16, 0), "L95");
+        assertTrue(field.isOpaque(0, 0, 16), "L96");
+        assertEquals(OpacityField.OPAQUE, field.costOf(-1, 0, 0), "L97");
+        assertEquals(OpacityField.OPAQUE, field.costOf(0, 0, 16), "L98");
+        assertFalse(field.contains(-1, 0, 0), "L99");
+        assertTrue(field.contains(0, 0, 0), "L100");
+        assertTrue(field.contains(15, 15, 15), "L101");
     }
 
     @Test
     void aNegativeOriginWorksLikeAnyOther() {
         OpacityField field = OpacityField.forSection(-3, -1, -2);
-        assertEquals(-48, field.originX());
-        assertEquals(-16, field.originY());
-        assertEquals(-32, field.originZ());
-        assertTrue(field.contains(-48, -16, -32));
-        assertTrue(field.set(-48, -16, -32, 15));
-        assertTrue(field.isOpaque(-48, -16, -32));
+        assertEquals(-48, field.originX(), "L107");
+        assertEquals(-16, field.originY(), "L108");
+        assertEquals(-32, field.originZ(), "L109");
+        assertTrue(field.contains(-48, -16, -32), "L110");
+        assertTrue(field.set(-48, -16, -32, 15), "L111");
+        assertTrue(field.isOpaque(-48, -16, -32), "L112");
         assertTrue(field.isOpaque(-49, -16, -32), "one block west is outside");
     }
 
@@ -117,12 +119,12 @@ class OpacityFieldTest {
         for (int i = 0; i < 100; i++) {
             field.set(i & 15, (i >> 4) & 15, 0, 15);
         }
-        assertTrue(field.opaqueCells() > 0);
+        assertTrue(field.opaqueCells() > 0, "L122");
 
         field.clear();
-        assertEquals(0, field.opaqueCells());
-        assertEquals(0, field.filteringCells());
-        assertFalse(field.isOpaque(0, 0, 0));
+        assertEquals(0, field.opaqueCells(), "L125");
+        assertEquals(0, field.filteringCells(), "L126");
+        assertFalse(field.isOpaque(0, 0, 0), "L127");
         assertEquals(1, field.costOf(0, 0, 0), "a cleared cell is air");
     }
 

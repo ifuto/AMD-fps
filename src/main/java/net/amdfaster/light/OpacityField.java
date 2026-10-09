@@ -145,7 +145,11 @@ public final class OpacityField {
     /**
      * Records a block's attenuation.
      *
-     * @return true if the cell's classification changed
+     * @return true if the stored value changed. That is the wider of the two questions a light update
+     *         cares about, and the right one: crossing into opaque obviously matters, but so does a
+     *         block going from clear to filtering, because the step cost changed and the light already
+     *         propagated through this cell was computed with the old one. Reporting only the opaque
+     *         crossing would let an attenuation change go unnoticed.
      */
     public boolean set(int x, int y, int z, int attenuationValue) {
         if (attenuationValue < 0 || attenuationValue > OPAQUE) {
@@ -155,7 +159,12 @@ public final class OpacityField {
         if (index < 0) {
             return false;
         }
-        boolean wasOpaque = (this.opaque[index >>> 6] & (1L << (index & 63))) != 0L;
+        int shift = (index & 1) << 2;
+        int previous = (this.attenuation[index >>> 1] >>> shift) & 0xF;
+        if (previous == attenuationValue) {
+            return false;
+        }
+        boolean wasOpaque = previous >= OPAQUE;
         boolean isOpaque = attenuationValue >= OPAQUE;
         if (wasOpaque != isOpaque) {
             if (isOpaque) {
@@ -166,10 +175,9 @@ public final class OpacityField {
                 this.opaqueCells--;
             }
         }
-        int shift = (index & 1) << 2;
         this.attenuation[index >>> 1] = (byte) ((this.attenuation[index >>> 1] & ~(0xF << shift))
                 | ((attenuationValue & 0xF) << shift));
-        return wasOpaque != isOpaque;
+        return true;
     }
 
     public int opaqueCells() {

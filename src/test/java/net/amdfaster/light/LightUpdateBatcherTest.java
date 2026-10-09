@@ -32,10 +32,10 @@ class LightUpdateBatcherTest {
         for (int i = 0; i < 300; i++) {
             batcher.addChange(i, 64, 0, 0, 0);
         }
-        assertEquals(300, batcher.changesReceived());
-        assertEquals(300, batcher.updatesCoalesced());
-        assertEquals(0, batcher.pendingCount());
-        assertTrue(batcher.isEmpty());
+        assertEquals(300, batcher.changesReceived(), "L35");
+        assertEquals(300, batcher.updatesCoalesced(), "L36");
+        assertEquals(0, batcher.pendingCount(), "L37");
+        assertTrue(batcher.isEmpty(), "L38");
     }
 
     @Test
@@ -48,8 +48,8 @@ class LightUpdateBatcherTest {
         batcher.addChange(5, 0, 0, 14, 9);
         batcher.addChange(5, 0, 0, 9, 11);
 
-        assertEquals(3, batcher.changesReceived());
-        assertEquals(2, batcher.updatesCoalesced());
+        assertEquals(3, batcher.changesReceived(), "L51");
+        assertEquals(2, batcher.updatesCoalesced(), "L52");
         assertEquals(1, batcher.pendingCount(), "three changes to one block are one update");
     }
 
@@ -72,7 +72,7 @@ class LightUpdateBatcherTest {
         dimmed.process(engine, AIR);
 
         assertEquals(4, reachOf(engine, 20), "the dimmer source's own reach, not the old one's");
-        assertEquals(5, engine.field().get(20, 0, 0));
+        assertEquals(5, engine.field().get(20, 0, 0), "L75");
         assertEquals(0, engine.field().get(26, 0, 0), "and the old reach is genuinely gone");
     }
 
@@ -87,18 +87,19 @@ class LightUpdateBatcherTest {
         for (int i = 0; i < 6; i++) {
             batcher.addChange(i * 3, 0, 0, 0, 14);
         }
-        assertEquals(6, batcher.pendingCount());
+        assertEquals(6, batcher.pendingCount(), "L90");
 
         int completed = batcher.process(engine, AIR);
         assertEquals(1, completed, "one column per call once the budget is spent");
         assertEquals(5, batcher.pendingCount(), "the rest waits for the next frame");
-        // Every call but the last stopped with work still waiting, so each of those counted.
-        assertEquals(5, batcher.budgetExhausted());
+        assertEquals(1, batcher.budgetExhausted(), "one call so far, and it stopped with work waiting");
 
         while (!batcher.isEmpty()) {
             batcher.process(engine, AIR);
         }
-        assertEquals(0, batcher.pendingCount());
+        assertEquals(0, batcher.pendingCount(), "L100");
+        // Five of the six calls stopped with something still queued; the sixth drained the last one.
+        assertEquals(5, batcher.budgetExhausted(), "every call but the last was cut short");
         for (int i = 0; i < 6; i++) {
             assertEquals(14, engine.field().get(i * 3, 0, 0), "every source was eventually placed at " + i);
         }
@@ -108,9 +109,9 @@ class LightUpdateBatcherTest {
     void processingAnEmptyQueueDoesNothing() {
         LightEngine engine = corridor();
         LightUpdateBatcher batcher = new LightUpdateBatcher();
-        assertEquals(0, batcher.process(engine, AIR));
-        assertEquals(0, batcher.batchesStarted());
-        assertEquals(0, batcher.cellsPropagated());
+        assertEquals(0, batcher.process(engine, AIR), "L112");
+        assertEquals(0, batcher.batchesStarted(), "L113");
+        assertEquals(0, batcher.cellsPropagated(), "L114");
     }
 
     @Test
@@ -120,7 +121,7 @@ class LightUpdateBatcherTest {
         batcher.addChange(20, 0, 0, 0, 15);
         batcher.process(engine, AIR);
 
-        assertTrue(batcher.cellsPropagated() > 0);
+        assertTrue(batcher.cellsPropagated() > 0, "L124");
         assertEquals(batcher.cellsPropagated(), engine.cellsVisited(),
                 "the batcher's accounting agrees with the engine's");
     }
@@ -136,9 +137,9 @@ class LightUpdateBatcherTest {
         }
 
         LightEngine together = corridor();
-        // Set every source first, then propagate once, which is what coalescing amounts to.
+        // Stage every source first, then propagate once, which is what coalescing amounts to.
         for (int i = 0; i < 6; i++) {
-            together.field().set(i * 3, 0, 0, 14);
+            assertTrue(together.stageSource(i * 3, 0, 0, 14), "source " + i + " was placed");
         }
         together.propagate(AIR);
 
@@ -151,12 +152,12 @@ class LightUpdateBatcherTest {
 
     @Test
     void aColumnKeyGroupsTheBlocksThatShareAnUpdate() {
-        assertEquals(LightUpdateBatcher.columnOf(0, 0), LightUpdateBatcher.columnOf(15, 15));
+        assertEquals(LightUpdateBatcher.columnOf(0, 0), LightUpdateBatcher.columnOf(15, 15), "L155");
         // -1 >> 4 is -1, so block -1 lives in section -1 and not section 0; -16 is the first block
         // of that same section. Getting the shift wrong would fold the negative octant into one.
-        assertEquals(LightUpdateBatcher.columnOf(-1, -1), LightUpdateBatcher.columnOf(-16, -16));
-        assertTrue(LightUpdateBatcher.columnOf(0, 0) != LightUpdateBatcher.columnOf(-1, -1));
-        assertTrue(LightUpdateBatcher.columnOf(0, 0) != LightUpdateBatcher.columnOf(16, 0));
+        assertEquals(LightUpdateBatcher.columnOf(-1, -1), LightUpdateBatcher.columnOf(-16, -16), "L158");
+        assertTrue(LightUpdateBatcher.columnOf(0, 0) != LightUpdateBatcher.columnOf(-1, -1), "L159");
+        assertTrue(LightUpdateBatcher.columnOf(0, 0) != LightUpdateBatcher.columnOf(16, 0), "L160");
     }
 
     @Test
@@ -164,10 +165,10 @@ class LightUpdateBatcherTest {
         LightUpdateBatcher batcher = new LightUpdateBatcher();
         batcher.addChange(0, 0, 0, 0, 9);
         batcher.clear();
-        assertTrue(batcher.isEmpty());
+        assertTrue(batcher.isEmpty(), "L168");
         assertEquals(1, batcher.changesReceived(), "the run's totals survive");
 
         assertThrows(IllegalArgumentException.class, () -> new LightUpdateBatcher(0));
-        assertEquals(LightUpdateBatcher.DEFAULT_BUDGET, new LightUpdateBatcher().budget());
+        assertEquals(LightUpdateBatcher.DEFAULT_BUDGET, new LightUpdateBatcher().budget(), "L172");
     }
 }

@@ -72,9 +72,9 @@ class SmoothLightTest {
     void anOpenCornerIsFullyLitAndUnoccluded() {
         VertexLight[] corners = SmoothLight.face(open(), topFace());
         for (VertexLight corner : corners) {
-            assertEquals(LightValue.pack(0, 15), corner.light());
-            assertEquals(3, corner.ao());
-            assertEquals(1.0f, corner.shade(), 1e-6f);
+            assertEquals(LightValue.pack(0, 15), corner.light(), "L75");
+            assertEquals(3, corner.ao(), "L76");
+            assertEquals(1.0f, corner.shade(), 1e-6f, "L77");
         }
     }
 
@@ -87,7 +87,7 @@ class SmoothLightTest {
         // Order is (minU,minV), (maxU,minV), (maxU,maxV), (minU,maxV).
         assertEquals(2, corners[0].ao(), "(0,0) touches the occluder along U");
         assertEquals(3, corners[1].ao(), "(1,0) is at the other end of the face");
-        assertEquals(3, corners[2].ao());
+        assertEquals(3, corners[2].ao(), "L90");
         assertEquals(2, corners[3].ao(), "(0,1) still touches it along U");
     }
 
@@ -100,10 +100,10 @@ class SmoothLightTest {
 
         VertexLight[] corners = SmoothLight.face(cache, topFace());
         assertEquals(0, corners[0].ao(), "both edges solid, so the corner is shut");
-        assertEquals(2, corners[1].ao());
-        assertEquals(3, corners[2].ao());
-        assertEquals(2, corners[3].ao());
-        assertEquals(0.2f, corners[0].shade(), 1e-6f);
+        assertEquals(2, corners[1].ao(), "L103");
+        assertEquals(3, corners[2].ao(), "L104");
+        assertEquals(2, corners[3].ao(), "L105");
+        assertEquals(0.2f, corners[0].shade(), 1e-6f, "L106");
     }
 
     @Test
@@ -113,9 +113,9 @@ class SmoothLightTest {
 
         VertexLight[] corners = SmoothLight.face(cache, topFace());
         assertEquals(2, corners[0].ao(), "diagonal counts as one of the three");
-        assertEquals(3, corners[1].ao());
-        assertEquals(3, corners[2].ao());
-        assertEquals(3, corners[3].ao());
+        assertEquals(3, corners[1].ao(), "L116");
+        assertEquals(3, corners[2].ao(), "L117");
+        assertEquals(3, corners[3].ao(), "L118");
     }
 
     @Test
@@ -130,8 +130,8 @@ class SmoothLightTest {
 
         VertexLight[] corners = SmoothLight.face(cache, topFace());
         assertEquals(0, LightValue.block(corners[0].light()), "the solid block's light must not leak");
-        assertEquals(0, LightValue.sky(corners[0].light()));
-        assertEquals(2, corners[0].ao());
+        assertEquals(0, LightValue.sky(corners[0].light()), "L133");
+        assertEquals(2, corners[0].ao(), "L134");
     }
 
     @Test
@@ -144,21 +144,21 @@ class SmoothLightTest {
 
         VertexLight[] corners = SmoothLight.face(cache, new FaceRef(1, true, 16, 0, 2, 0, 2));
         assertEquals(2, corners[0].ao(), "only (0,0) has the occluder as its diagonal");
-        assertEquals(3, corners[1].ao());
-        assertEquals(3, corners[2].ao());
-        assertEquals(3, corners[3].ao());
+        assertEquals(3, corners[1].ao(), "L147");
+        assertEquals(3, corners[2].ao(), "L148");
+        assertEquals(3, corners[3].ao(), "L149");
     }
 
     @Test
     void aNegativeFaceSamplesTheBlockBelowItsPlane() {
-        assertEquals(-1, new FaceRef(1, false, 0, 0, 1, 0, 1).frontBlock());
-        assertEquals(16, new FaceRef(1, true, 16, 0, 1, 0, 1).frontBlock());
+        assertEquals(-1, new FaceRef(1, false, 0, 0, 1, 0, 1).frontBlock(), "L154");
+        assertEquals(16, new FaceRef(1, true, 16, 0, 1, 0, 1).frontBlock(), "L155");
 
         // Everything open, so the only thing this proves is that the samples land inside the cache
         // rather than throwing on an out-of-range coordinate.
         VertexLight[] corners = SmoothLight.face(open(), new FaceRef(1, false, 0, 0, 1, 0, 1));
         for (VertexLight corner : corners) {
-            assertEquals(3, corner.ao());
+            assertEquals(3, corner.ao(), "L161");
         }
     }
 
@@ -170,10 +170,10 @@ class SmoothLightTest {
         cache.fill(new MapSampler(15, 0).put(16, 0, -1, 0, 15, true), 0, 0, 0);
 
         VertexLight[] corners = SmoothLight.face(cache, new FaceRef(0, true, 16, 0, 1, 0, 1));
-        assertEquals(2, corners[0].ao());
-        assertEquals(2, corners[1].ao());
-        assertEquals(3, corners[2].ao());
-        assertEquals(3, corners[3].ao());
+        assertEquals(2, corners[0].ao(), "L173");
+        assertEquals(2, corners[1].ao(), "L174");
+        assertEquals(3, corners[2].ao(), "L175");
+        assertEquals(3, corners[3].ao(), "L176");
     }
 
     @Test
@@ -183,7 +183,7 @@ class SmoothLightTest {
         assertEquals(1, face.x(1, 2, 5), "axis 2: x is u");
         assertEquals(2, face.y(1, 2, 5), "axis 2: y is v");
         assertEquals(5, face.z(1, 2, 5), "axis 2: z is the plane");
-        assertEquals(5, face.frontBlock());
+        assertEquals(5, face.frontBlock(), "L186");
 
         FaceRef onX = new FaceRef(0, false, 9, 1, 3, 2, 4);
         assertEquals(9, onX.x(1, 2, 9), "axis 0: x is the plane");
@@ -200,14 +200,14 @@ class SmoothLightTest {
     @Test
     void baseAndSideBlockIndicesStraddleTheFootprint() {
         FaceRef face = new FaceRef(1, true, 16, 2, 5, 3, 7);
-        assertEquals(2, face.baseU(2));
-        assertEquals(1, face.sideU(2));
-        assertEquals(4, face.baseU(5));
-        assertEquals(5, face.sideU(5));
-        assertEquals(3, face.baseV(3));
-        assertEquals(2, face.sideV(3));
-        assertEquals(6, face.baseV(7));
-        assertEquals(7, face.sideV(7));
+        assertEquals(2, face.baseU(2), "L203");
+        assertEquals(1, face.sideU(2), "L204");
+        assertEquals(4, face.baseU(5), "L205");
+        assertEquals(5, face.sideU(5), "L206");
+        assertEquals(3, face.baseV(3), "L207");
+        assertEquals(2, face.sideV(3), "L208");
+        assertEquals(6, face.baseV(7), "L209");
+        assertEquals(7, face.sideV(7), "L210");
     }
 
     @Test
@@ -227,10 +227,10 @@ class SmoothLightTest {
 
     @Test
     void theShadeCurveIsMinecraftsAndIsNotEvenlySpaced() {
-        assertEquals(0.2f, VertexLight.shadeFor(0), 1e-6f);
-        assertEquals(0.6f, VertexLight.shadeFor(1), 1e-6f);
-        assertEquals(0.8f, VertexLight.shadeFor(2), 1e-6f);
-        assertEquals(1.0f, VertexLight.shadeFor(3), 1e-6f);
+        assertEquals(0.2f, VertexLight.shadeFor(0), 1e-6f, "L230");
+        assertEquals(0.6f, VertexLight.shadeFor(1), 1e-6f, "L231");
+        assertEquals(0.8f, VertexLight.shadeFor(2), 1e-6f, "L232");
+        assertEquals(1.0f, VertexLight.shadeFor(3), 1e-6f, "L233");
         // The first step is four times the others on purpose: a sealed corner has to read as dark.
         assertTrue(VertexLight.shadeFor(1) - VertexLight.shadeFor(0)
                 > VertexLight.shadeFor(2) - VertexLight.shadeFor(1));
@@ -239,10 +239,10 @@ class SmoothLightTest {
     @Test
     void theLightmapCoordinatesFollowTheLightValue() {
         VertexLight vertex = new VertexLight(LightValue.pack(4, 11), 3);
-        assertEquals(LightValue.lightmapCoord(4), vertex.lightmapU(), 1e-6f);
-        assertEquals(LightValue.lightmapCoord(11), vertex.lightmapV(), 1e-6f);
-        assertEquals(LightValue.fullBright(), VertexLight.fullBright().light());
-        assertEquals(3, VertexLight.fullBright().ao());
+        assertEquals(LightValue.lightmapCoord(4), vertex.lightmapU(), 1e-6f, "L242");
+        assertEquals(LightValue.lightmapCoord(11), vertex.lightmapV(), 1e-6f, "L243");
+        assertEquals(LightValue.fullBright(), VertexLight.fullBright().light(), "L244");
+        assertEquals(3, VertexLight.fullBright().ao(), "L245");
     }
 
     @Test

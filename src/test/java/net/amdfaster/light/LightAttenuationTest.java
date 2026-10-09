@@ -35,9 +35,9 @@ class LightAttenuationTest {
         // makes leaves cost two and halves the reach through every tree in the game.
         assertEquals(14, reachThrough(0), "air");
         assertEquals(14, reachThrough(1), "leaves: attenuates, but no worse than air");
-        assertEquals(7, reachThrough(2));
+        assertEquals(7, reachThrough(2), "L38");
         assertEquals(4, reachThrough(3), "water");
-        assertEquals(2, reachThrough(7));
+        assertEquals(2, reachThrough(7), "L40");
     }
 
     @Test
@@ -45,7 +45,7 @@ class LightAttenuationTest {
         // The case where the two formulations disagree outright. level - 1 - 14 is 0, which reads as
         // "fully blocked"; max(1, 14) subtracted from 15 is 1, which is one dim block of light. A block
         // at attenuation 14 must let a little through.
-        assertEquals(1, reachThrough(14));
+        assertEquals(1, reachThrough(14), "L48");
     }
 
     @Test
@@ -83,9 +83,9 @@ class LightAttenuationTest {
         LightEngine.OpacitySource leaves = (x, y, z) -> 1;
         LightEngine sky = new LightEngine(new LightField(0, 0, 0, 1, 16, 1), LightEngine.Mode.SKY);
         sky.addSource(0, 15, 0, LightEngine.MAX_LEVEL, leaves);
-        assertEquals(LightEngine.MAX_LEVEL, sky.field().get(0, 15, 0));
+        assertEquals(LightEngine.MAX_LEVEL, sky.field().get(0, 15, 0), "L86");
         assertEquals(14, sky.field().get(0, 14, 0), "through leaves the free fall does not apply");
-        assertEquals(13, sky.field().get(0, 13, 0));
+        assertEquals(13, sky.field().get(0, 13, 0), "L88");
     }
 
     @Test
@@ -98,7 +98,7 @@ class LightAttenuationTest {
         sky.addSource(0, 15, 0, LightEngine.MAX_LEVEL, roof);
 
         // Column 1 is open, so it is lit to the bottom at full level.
-        assertEquals(LightEngine.MAX_LEVEL, sky.field().get(1, 0, 0));
+        assertEquals(LightEngine.MAX_LEVEL, sky.field().get(1, 0, 0), "L101");
         // Column 0 is roofed from y=8 up, so it gets no skylight from above. Every cell below the roof
         // is lit from the side instead, and because column 1 is open it holds 15 at every height -- so
         // each roofed cell receives 14 from its own horizontal neighbour rather than inheriting from the
@@ -111,12 +111,16 @@ class LightAttenuationTest {
 
     @Test
     void theAttenuationHelperIsPackageVisibleForExactlyThisReason() {
-        assertEquals(14, LightEngine.attenuatedLevel(15, 0));
-        assertEquals(14, LightEngine.attenuatedLevel(15, 1));
-        assertEquals(12, LightEngine.attenuatedLevel(15, 3));
-        assertEquals(1, LightEngine.attenuatedLevel(15, 14));
-        assertEquals(0, LightEngine.attenuatedLevel(15, 15));
-        assertEquals(1, LightEngine.attenuatedLevel(2, 15), "and it never goes negative");
+        assertEquals(14, LightEngine.attenuatedLevel(15, 0), "L114");
+        assertEquals(14, LightEngine.attenuatedLevel(15, 1), "L115");
+        assertEquals(12, LightEngine.attenuatedLevel(15, 3), "L116");
+        assertEquals(1, LightEngine.attenuatedLevel(15, 14), "L117");
+        assertEquals(0, LightEngine.attenuatedLevel(15, 15), "L118");
+        // The helper deliberately does not clamp: 2 - 15 is -13, and it is the caller that rejects
+        // anything at or below zero. Clamping here would hide that a step was impossible, and the
+        // comparison against zero is what stops the fill. Clamping to 1 instead would propagate.
+        assertEquals(-13, LightEngine.attenuatedLevel(2, 15), "unclamped, so the caller can reject it");
+        assertTrue(LightEngine.attenuatedLevel(2, 15) <= 0, "and a dim source cannot pass opaque");
         assertTrue(LightEngine.attenuatedLevel(0, 0) <= 0, "nothing propagates from a dark cell");
     }
 }

@@ -52,20 +52,20 @@ class LightCacheTest {
 
     @Test
     void theCacheIsEighteenCubedWithAOneBlockBorder() {
-        assertEquals(18, LightCache.SIDE);
-        assertEquals(1, LightCache.BORDER);
-        assertEquals(5832, LightCache.CELLS);
-        assertEquals(-1, LightCache.MIN);
-        assertEquals(16, LightCache.MAX_INCLUSIVE);
+        assertEquals(18, LightCache.SIDE, "L55");
+        assertEquals(1, LightCache.BORDER, "L56");
+        assertEquals(5832, LightCache.CELLS, "L57");
+        assertEquals(-1, LightCache.MIN, "L58");
+        assertEquals(16, LightCache.MAX_INCLUSIVE, "L59");
     }
 
     @Test
     void theBorderIsReachableAndOneBeyondItIsNot() {
-        assertTrue(LightCache.inCache(-1, -1, -1));
-        assertTrue(LightCache.inCache(16, 16, 16));
-        assertFalse(LightCache.inCache(-2, 0, 0));
-        assertFalse(LightCache.inCache(17, 0, 0));
-        assertFalse(LightCache.inCache(0, 17, 0));
+        assertTrue(LightCache.inCache(-1, -1, -1), "L64");
+        assertTrue(LightCache.inCache(16, 16, 16), "L65");
+        assertFalse(LightCache.inCache(-2, 0, 0), "L66");
+        assertFalse(LightCache.inCache(17, 0, 0), "L67");
+        assertFalse(LightCache.inCache(0, 17, 0), "L68");
     }
 
     @Test
@@ -101,7 +101,7 @@ class LightCacheTest {
             }
         };
         new LightCache().fill(counting, 100, 200, 300);
-        assertEquals(5832, calls[0]);
+        assertEquals(5832, calls[0], "L104");
         assertEquals(99, minX[0], "the border reaches one block below the section origin");
         assertEquals(116, maxX[0], "and one block past its far edge");
     }
@@ -113,10 +113,10 @@ class LightCacheTest {
         LightCache cache = new LightCache();
         cache.fill(sampler, 0, 0, 0);
 
-        assertEquals(11, cache.block(3, 4, 5));
-        assertEquals(9, cache.sky(3, 4, 5));
-        assertTrue(cache.occludes(3, 4, 5));
-        assertEquals(LightValue.pack(11, 9), cache.light(3, 4, 5));
+        assertEquals(11, cache.block(3, 4, 5), "L116");
+        assertEquals(9, cache.sky(3, 4, 5), "L117");
+        assertTrue(cache.occludes(3, 4, 5), "L118");
+        assertEquals(LightValue.pack(11, 9), cache.light(3, 4, 5), "L119");
     }
 
     @Test
@@ -126,13 +126,13 @@ class LightCacheTest {
         LightCache cache = new LightCache();
         cache.fill(sampler, 8, 16, 24);
 
-        assertEquals(8, cache.originX());
-        assertEquals(16, cache.originY());
-        assertEquals(24, cache.originZ());
+        assertEquals(8, cache.originX(), "L129");
+        assertEquals(16, cache.originY(), "L130");
+        assertEquals(24, cache.originZ(), "L131");
         // World (10,20,30) is local (2,4,6).
-        assertEquals(6, cache.block(2, 4, 6));
-        assertEquals(8, cache.sky(2, 4, 6));
-        assertTrue(cache.occludes(2, 4, 6));
+        assertEquals(6, cache.block(2, 4, 6), "L133");
+        assertEquals(8, cache.sky(2, 4, 6), "L134");
+        assertTrue(cache.occludes(2, 4, 6), "L135");
     }
 
     @Test
@@ -154,19 +154,19 @@ class LightCacheTest {
                 return false;
             }
         }, 0, 0, 0);
-        assertEquals(15, cache.sky(0, 0, 0));
-        assertEquals(0, cache.block(0, 0, 0));
+        assertEquals(15, cache.sky(0, 0, 0), "L157");
+        assertEquals(0, cache.block(0, 0, 0), "L158");
     }
 
     @Test
     void uniformDetectsASectionWithNothingAroundIt() {
         LightCache uniform = new LightCache();
         uniform.fill(new MapSampler(15), 0, 0, 0);
-        assertTrue(uniform.isUniform());
+        assertTrue(uniform.isUniform(), "L165");
 
         LightCache not = new LightCache();
         not.fill(new MapSampler(15).put(0, 0, 0, 0, 15, true), 0, 0, 0);
-        assertFalse(not.isUniform());
+        assertFalse(not.isUniform(), "L169");
     }
 
     @Test
@@ -179,10 +179,10 @@ class LightCacheTest {
 
         for (int[] p : new int[][] {{1, 2, 3}, {4, 5, 6}, {0, 0, 0}}) {
             int cell = cache.sample(p[0], p[1], p[2]);
-            assertEquals(cache.block(p[0], p[1], p[2]), LightCache.blockOf(cell));
-            assertEquals(cache.sky(p[0], p[1], p[2]), LightCache.skyOf(cell));
-            assertEquals(cache.occludes(p[0], p[1], p[2]), LightCache.occludesOf(cell));
-            assertEquals(cache.light(p[0], p[1], p[2]), LightCache.lightOf(cell));
+            assertEquals(cache.block(p[0], p[1], p[2]), LightCache.blockOf(cell), "L182");
+            assertEquals(cache.sky(p[0], p[1], p[2]), LightCache.skyOf(cell), "L183");
+            assertEquals(cache.occludes(p[0], p[1], p[2]), LightCache.occludesOf(cell), "L184");
+            assertEquals(cache.light(p[0], p[1], p[2]), LightCache.lightOf(cell), "L185");
         }
     }
 
@@ -197,9 +197,9 @@ class LightCacheTest {
                     int cell = block | (sky << 4) | (occludes ? 256 : 0);
                     assertEquals(LightValue.pack(block, sky), LightCache.lightOf(cell),
                             "block=" + block + " sky=" + sky + " occludes=" + occludes);
-                    assertEquals(block, LightCache.blockOf(cell));
-                    assertEquals(sky, LightCache.skyOf(cell));
-                    assertEquals(occludes, LightCache.occludesOf(cell));
+                    assertEquals(block, LightCache.blockOf(cell), "L200");
+                    assertEquals(sky, LightCache.skyOf(cell), "L201");
+                    assertEquals(occludes, LightCache.occludesOf(cell), "L202");
                 }
             }
         }
@@ -209,10 +209,10 @@ class LightCacheTest {
     void aCacheCanBeRefilledForANewSection() {
         LightCache cache = new LightCache();
         cache.fill(new MapSampler(15), 0, 0, 0);
-        assertEquals(15, cache.sky(0, 0, 0));
+        assertEquals(15, cache.sky(0, 0, 0), "L212");
 
         cache.fill(new MapSampler(0), 16, 0, 0);
-        assertEquals(0, cache.sky(0, 0, 0));
-        assertEquals(16, cache.originX());
+        assertEquals(0, cache.sky(0, 0, 0), "L215");
+        assertEquals(16, cache.originX(), "L216");
     }
 }

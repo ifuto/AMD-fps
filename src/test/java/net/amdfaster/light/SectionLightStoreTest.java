@@ -21,11 +21,11 @@ class SectionLightStoreTest {
         // the 2048 bytes of nibbles that storing 4096 zeros would.
         SectionLightStore store = new SectionLightStore();
         for (int i = 0; i < 1000; i++) {
-            assertEquals(0, store.get(i, 64, 0));
+            assertEquals(0, store.get(i, 64, 0), "L24");
         }
-        assertEquals(0, store.sectionCount());
-        assertEquals(0, store.allocatedBytes());
-        assertNull(store.fieldOrNull(0, 4, 0));
+        assertEquals(0, store.sectionCount(), "L26");
+        assertEquals(0, store.allocatedBytes(), "L27");
+        assertNull(store.fieldOrNull(0, 4, 0), "L28");
     }
 
     @Test
@@ -34,19 +34,19 @@ class SectionLightStoreTest {
         // touches far more sections than it lights, and allocating for each of them would use more
         // memory for the sections that end up dark than for the ones that end up lit.
         SectionLightStore store = new SectionLightStore();
-        assertFalse(store.set(5, 64, 5, 0));
-        assertEquals(0, store.sectionCount());
-        assertEquals(0, store.allocatedBytes());
+        assertFalse(store.set(5, 64, 5, 0), "L37");
+        assertEquals(0, store.sectionCount(), "L38");
+        assertEquals(0, store.allocatedBytes(), "L39");
     }
 
     @Test
     void theFirstRealLevelAllocatesTheSection() {
         SectionLightStore store = new SectionLightStore();
-        assertTrue(store.set(5, 64, 5, 12));
-        assertEquals(1, store.sectionCount());
-        assertEquals(LightField.SECTION_BYTES, store.allocatedBytes());
-        assertNotNull(store.fieldOrNull(0, 4, 0));
-        assertEquals(12, store.get(5, 64, 5));
+        assertTrue(store.set(5, 64, 5, 12), "L45");
+        assertEquals(1, store.sectionCount(), "L46");
+        assertEquals(LightField.SECTION_BYTES, store.allocatedBytes(), "L47");
+        assertNotNull(store.fieldOrNull(0, 4, 0), "L48");
+        assertEquals(12, store.get(5, 64, 5), "L49");
         assertEquals(0, store.get(6, 64, 5), "and its neighbours are still dark");
 
         assertFalse(store.set(5, 64, 5, 12), "writing the same level again is not a change");
@@ -59,10 +59,10 @@ class SectionLightStoreTest {
         SectionLightStore store = new SectionLightStore();
         store.set(0, 64, 0, 9);
         store.set(0, 80, 0, 9);
-        assertEquals(2, store.sectionCount());
-        assertEquals(9, store.get(0, 64, 0));
-        assertEquals(9, store.get(0, 80, 0));
-        assertNull(store.fieldOrNull(0, 5, 0));
+        assertEquals(2, store.sectionCount(), "L62");
+        assertEquals(9, store.get(0, 64, 0), "L63");
+        assertEquals(9, store.get(0, 80, 0), "L64");
+        assertNull(store.fieldOrNull(0, 5, 0), "L65");
     }
 
     @Test
@@ -79,11 +79,11 @@ class SectionLightStoreTest {
         long lazy = store.allocatedBytes();
         long eager = store.bytesIfEager(33, 16);
 
-        assertEquals(24 * LightField.SECTION_BYTES, lazy);
-        assertEquals(33L * 33 * 16 * LightField.SECTION_BYTES, eager);
+        assertEquals(24 * LightField.SECTION_BYTES, lazy, "L82");
+        assertEquals(33L * 33 * 16 * LightField.SECTION_BYTES, eager, "L83");
         assertTrue(lazy * 100 < eager,
                 "lit " + lazy + " bytes against " + eager + " for eager allocation");
-        assertEquals(24, store.peakSections());
+        assertEquals(24, store.peakSections(), "L86");
     }
 
     @Test
@@ -92,15 +92,15 @@ class SectionLightStoreTest {
         // over, and it reaches fifteen blocks, which is further than a column is wide. Marking only the
         // changed column is what leaves dark seams at borders that persist until the player leaves.
         SectionLightStore store = new SectionLightStore();
-        assertEquals(9, store.markColumnAffected(4, 4));
-        assertEquals(9, store.pendingColumnCount());
+        assertEquals(9, store.markColumnAffected(4, 4), "L95");
+        assertEquals(9, store.pendingColumnCount(), "L96");
 
         assertEquals(0, store.markColumnAffected(4, 4), "already pending");
-        assertEquals(9, store.pendingColumnCount());
+        assertEquals(9, store.pendingColumnCount(), "L99");
 
         // A neighbour column overlaps, so only the new part is added.
-        assertEquals(6, store.markColumnAffected(5, 4));
-        assertEquals(15, store.pendingColumnCount());
+        assertEquals(6, store.markColumnAffected(5, 4), "L102");
+        assertEquals(15, store.pendingColumnCount(), "L103");
     }
 
     @Test
@@ -109,9 +109,9 @@ class SectionLightStoreTest {
         store.markColumnAffected(0, 0);
         List<long[]> drained = store.drainAffectedColumns();
 
-        assertEquals(9, drained.size());
-        assertEquals(0, store.pendingColumnCount());
-        assertTrue(store.drainAffectedColumns().isEmpty());
+        assertEquals(9, drained.size(), "L112");
+        assertEquals(0, store.pendingColumnCount(), "L113");
+        assertTrue(store.drainAffectedColumns().isEmpty(), "L114");
 
         boolean foundCentre = false;
         boolean foundCorner = false;
@@ -133,8 +133,8 @@ class SectionLightStoreTest {
         // without relighting, the border facing the late arrival stays dark permanently.
         SectionLightStore store = new SectionLightStore();
         store.markRelitForLateNeighbour(2, 2);
-        assertEquals(9, store.relightsCausedByLateNeighbour());
-        assertEquals(9, store.pendingColumnCount());
+        assertEquals(9, store.relightsCausedByLateNeighbour(), "L136");
+        assertEquals(9, store.pendingColumnCount(), "L137");
 
         store.markRelitForLateNeighbour(2, 2);
         assertEquals(9, store.relightsCausedByLateNeighbour(), "the same arrival twice counts once");
@@ -147,11 +147,11 @@ class SectionLightStoreTest {
         // octant into one section.
         SectionLightStore store = new SectionLightStore();
         store.set(-1, -1, -1, 7);
-        assertEquals(7, store.get(-1, -1, -1));
+        assertEquals(7, store.get(-1, -1, -1), "L150");
         assertEquals(0, store.get(-16, -1, -1), "the next section west is untouched");
-        assertNotNull(store.fieldOrNull(-1, -1, -1));
-        assertNull(store.fieldOrNull(0, 0, 0));
-        assertEquals(1, store.sectionCount());
+        assertNotNull(store.fieldOrNull(-1, -1, -1), "L152");
+        assertNull(store.fieldOrNull(0, 0, 0), "L153");
+        assertEquals(1, store.sectionCount(), "L154");
     }
 
     @Test
@@ -161,7 +161,7 @@ class SectionLightStoreTest {
         first.raise(3, 70, 3);
 
         assertSame(first, store.heightmap(1, 1), "the same column gets the same map");
-        assertEquals(70, store.heightmap(1, 1).heightAt(3, 3));
+        assertEquals(70, store.heightmap(1, 1).heightAt(3, 3), "L164");
         assertEquals(SkyHeightmap.EMPTY, store.heightmap(1, 2).heightAt(3, 3), "a different column does not");
     }
 
@@ -169,12 +169,12 @@ class SectionLightStoreTest {
     void removeSectionDropsItsArray() {
         SectionLightStore store = new SectionLightStore();
         store.set(0, 64, 0, 9);
-        assertEquals(1, store.sectionCount());
+        assertEquals(1, store.sectionCount(), "L172");
 
         store.removeSection(0, 4, 0);
-        assertEquals(0, store.sectionCount());
-        assertEquals(0, store.get(0, 64, 0));
-        assertEquals(0, store.allocatedBytes());
+        assertEquals(0, store.sectionCount(), "L175");
+        assertEquals(0, store.get(0, 64, 0), "L176");
+        assertEquals(0, store.allocatedBytes(), "L177");
     }
 
     @Test
@@ -185,9 +185,9 @@ class SectionLightStoreTest {
         store.heightmap(0, 0).raise(0, 70, 0);
 
         store.clear();
-        assertEquals(0, store.sectionCount());
-        assertEquals(0, store.pendingColumnCount());
-        assertEquals(SkyHeightmap.EMPTY, store.heightmap(0, 0).heightAt(0, 0));
+        assertEquals(0, store.sectionCount(), "L188");
+        assertEquals(0, store.pendingColumnCount(), "L189");
+        assertEquals(SkyHeightmap.EMPTY, store.heightmap(0, 0).heightAt(0, 0), "L190");
     }
 
 }

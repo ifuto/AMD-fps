@@ -20,14 +20,14 @@ class LightQueueTest {
         queue.push(9, SectionCoord.key(1, 0, 0));
         queue.push(6, SectionCoord.key(2, 0, 0));
 
-        assertEquals(9, queue.peekLevel());
-        assertEquals(SectionCoord.key(1, 0, 0), queue.poll());
-        assertEquals(6, queue.peekLevel());
-        assertEquals(SectionCoord.key(2, 0, 0), queue.poll());
-        assertEquals(3, queue.peekLevel());
-        assertEquals(SectionCoord.key(0, 0, 0), queue.poll());
-        assertTrue(queue.isEmpty());
-        assertEquals(-1, queue.peekLevel());
+        assertEquals(9, queue.peekLevel(), "L23");
+        assertEquals(SectionCoord.key(1, 0, 0), queue.poll(), "L24");
+        assertEquals(6, queue.peekLevel(), "L25");
+        assertEquals(SectionCoord.key(2, 0, 0), queue.poll(), "L26");
+        assertEquals(3, queue.peekLevel(), "L27");
+        assertEquals(SectionCoord.key(0, 0, 0), queue.poll(), "L28");
+        assertTrue(queue.isEmpty(), "L29");
+        assertEquals(-1, queue.peekLevel(), "L30");
     }
 
     @Test
@@ -38,15 +38,15 @@ class LightQueueTest {
         LightQueue queue = new LightQueue();
         long here = SectionCoord.key(4, 4, 4);
 
-        assertTrue(queue.push(7, here));
+        assertTrue(queue.push(7, here), "L41");
         assertFalse(queue.push(7, here), "already queued");
         assertFalse(queue.push(3, here), "even at a different level");
-        assertEquals(1, queue.size());
-        assertEquals(2, queue.rejectedDuplicates());
+        assertEquals(1, queue.size(), "L44");
+        assertEquals(2, queue.rejectedDuplicates(), "L45");
 
-        assertEquals(here, queue.poll());
+        assertEquals(here, queue.poll(), "L47");
         assertTrue(queue.push(7, here), "and it can be queued again once it has been processed");
-        assertEquals(0, queue.rejectedDuplicates() - 2);
+        assertEquals(0, queue.rejectedDuplicates() - 2, "L49");
     }
 
     @Test
@@ -58,10 +58,10 @@ class LightQueueTest {
         assertEquals(0L, minimum, "this is exactly the coordinate that would break a sentinel scheme");
 
         LightQueue queue = new LightQueue();
-        assertTrue(queue.push(5, minimum));
+        assertTrue(queue.push(5, minimum), "L61");
         assertFalse(queue.push(5, minimum), "and it is still recognised as present");
-        assertEquals(minimum, queue.poll());
-        assertTrue(queue.isEmpty());
+        assertEquals(minimum, queue.poll(), "L63");
+        assertTrue(queue.isEmpty(), "L64");
         assertTrue(queue.push(5, minimum), "and it can be re-queued after being processed");
     }
 
@@ -74,7 +74,7 @@ class LightQueueTest {
         for (int i = 0; i < 2000; i++) {
             queue.push(i % 16, SectionCoord.key(i, i * 3, -i));
         }
-        assertEquals(2000, queue.size());
+        assertEquals(2000, queue.size(), "L77");
 
         int polled = 0;
         while (!queue.isEmpty()) {
@@ -87,7 +87,7 @@ class LightQueueTest {
         for (int i = 0; i < 500; i++) {
             assertTrue(queue.push(8, SectionCoord.key(i, 0, 0)), "entry " + i);
         }
-        assertEquals(500, queue.size());
+        assertEquals(500, queue.size(), "L90");
     }
 
     @Test
@@ -112,10 +112,10 @@ class LightQueueTest {
         }
         queue.clear();
 
-        assertTrue(queue.isEmpty());
-        assertEquals(0, queue.size());
-        assertEquals(0, queue.rejectedDuplicates());
-        assertEquals(-1, queue.peekLevel());
+        assertTrue(queue.isEmpty(), "L115");
+        assertEquals(0, queue.size(), "L116");
+        assertEquals(0, queue.rejectedDuplicates(), "L117");
+        assertEquals(-1, queue.peekLevel(), "L118");
         assertTrue(queue.push(10, SectionCoord.key(0, 0, 0)), "and it works again");
     }
 

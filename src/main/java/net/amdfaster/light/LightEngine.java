@@ -150,6 +150,27 @@ public final class LightEngine {
     }
 
     /**
+     * Places a light source without flooding.
+     *
+     * <p>This is the other half of the batched path, and without it the documented way of loading a
+     * section does not work. Setting a level on the field directly does not enqueue anything, so a
+     * following {@link #propagate} has an empty queue and does nothing at all -- the field ends up
+     * holding the sources and nothing else. Staging sets the level and enqueues it, leaving the flood
+     * for the caller to trigger once every source in the section is in place.
+     *
+     * @return true if the cell was raised
+     */
+    public boolean stageSource(int x, int y, int z, int level) {
+        if (level <= 0 || level <= this.field.get(x, y, z)) {
+            return false;
+        }
+        this.field.set(x, y, z, level);
+        this.updatesApplied++;
+        this.queue.push(level, SectionCoord.key(x, y, z));
+        return true;
+    }
+
+    /**
      * Drains the queue, spreading light outward until nothing improves.
      *
      * <p>Exposed separately from {@link #addSource} so a caller that has set many sources -- a section
