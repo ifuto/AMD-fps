@@ -59,7 +59,9 @@ class BlockStateCacheTest {
         assertTrue(BlockStateCache.isOpaque(flags), "the origin is opaque");
         assertEquals(3, BlockStateCache.lightEmission(flags));
 
-        assertEquals(1, cache.flags(0, 0, 0, resolver), "second read of the origin");
+        // flags() returns the packed flags, not a hit indicator -- the first version of this
+        // assertion compared it against 1 and so was checking nothing about caching at all.
+        assertEquals(flags, cache.flags(0, 0, 0, resolver), "the second read agrees with the first");
         assertEquals(1, resolver.calls, "and it must come from the cache the second time");
     }
 
