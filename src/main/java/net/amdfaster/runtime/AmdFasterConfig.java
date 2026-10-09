@@ -1,7 +1,6 @@
 package net.amdfaster.runtime;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -82,8 +81,11 @@ public final class AmdFasterConfig {
                 }
                 config.loadedFromDisk = true;
             }
-        } catch (IOException | UncheckedIOException | RuntimeException e) {
+        } catch (RuntimeException | IOException e) {
             // Keep whatever parsed before the bad line and fall back to defaults for the rest.
+            // UncheckedIOException is not listed alongside IOException because it is a subclass of
+            // RuntimeException and a multi-catch may not name both a type and its supertype; catching
+            // RuntimeException covers it.
         }
         return config;
     }
