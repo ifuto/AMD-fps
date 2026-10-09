@@ -44,10 +44,10 @@ class OccupancyModelTest {
         // reveals that, because the achieved occupancy looks perfectly reasonable.
         assertEquals(1, OccupancyModel.registersToShedForNextWave(RDNA4, 121),
                 "shedding one register at 121 buys two more waves");
+        assertEquals(1, OccupancyModel.registersToShedForNextWave(RDNA4, 97),
+                "and at 97 the same single register buys four, because 96 is the full-occupancy line");
         assertEquals(0, OccupancyModel.registersToShedForNextWave(RDNA4, 96),
                 "at full occupancy there is no next rung to reach");
-        assertTrue(OccupancyModel.registersToShedForNextWave(RDNA4, 97) > 1,
-                "at 97 the next step is further away than one register");
     }
 
     @Test
@@ -106,7 +106,11 @@ class OccupancyModelTest {
         // Waves per SIMD is not comparable -- the slot counts differ. The fraction of slots is.
         assertEquals(1.0, OccupancyModel.occupancy(RDNA4, 96), 1e-9);
         assertEquals(0.75, OccupancyModel.occupancy(RDNA4, 97), 1e-9, "twelve of sixteen slots");
-        assertEquals(0.5, OccupancyModel.occupancy(RDNA1_TO_3, 128), 1e-9, "ten of twenty");
+        // Eight of twenty, not ten: 1024 registers divided by a 128-register allocation is 8 waves,
+        // and the older generation has twenty slots to fill rather than sixteen, so the same fraction
+        // of the file is a smaller fraction of the machine.
+        assertEquals(0.4, OccupancyModel.occupancy(RDNA1_TO_3, 128), 1e-9, "eight of twenty slots");
+        assertEquals(1.0, OccupancyModel.occupancy(RDNA1_TO_3, 48), 1e-9, "and its own full line is 48");
     }
 
     @Test
