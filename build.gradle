@@ -71,6 +71,50 @@ test {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Name the tests that failed, from the XML reports, whenever the test task ends -- including when
+// it ends by failing.
+//
+// testLogging above does print failures, but the CI workflow greps the build log for a fixed set of
+// patterns and annotates only the first fifteen matches, so a failure whose text does not contain
+// one of them is invisible: the build reports "There were failing tests" and nothing else, which
+// turns a one-line diagnosis into guesswork. This prints each failing test as
+// "error: test <class>.<method> failed -> <type>: <message>", and the leading "error:" is
+// deliberately one of the patterns the workflow looks for.
+//
+// It is a finalizer rather than a doLast on test, because a doLast does not run when the task it
+// belongs to fails -- exactly the case this exists for.
+// ---------------------------------------------------------------------------------------------
+tasks.register("reportTestFailures") {
+    notCompatibleWithConfigurationCache("reads build outputs")
+    mustRunAfter(tasks.named("test"))
+    doLast {
+        def resultsDir = layout.buildDirectory.dir("test-results/test").get().asFile
+        def suites = resultsDir.isDirectory()
+                ? (resultsDir.listFiles()?.findAll { it.name.endsWith(".xml") }?.sort() ?: [])
+                : []
+        int reported = 0
+        suites.each { File f ->
+            def root = new groovy.xml.XmlSlurper().parse(f)
+            root.testcase.each { tc ->
+                def bad = tc.failure.size() > 0 ? tc.failure[0] : (tc.error.size() > 0 ? tc.error[0] : null)
+                if (bad != null) {
+                    reported++
+                    def message = bad.@message.text().readLines().take(4).join(" / ")
+                    println("error: test " + tc.@classname.text() + "." + tc.@name.text()
+                            + " failed -> " + bad.@type.text() + ": " + message)
+                }
+            }
+        }
+        if (reported == 0) {
+            println("reportTestFailures: no failing test cases in " + suites.size() + " suites")
+        }
+    }
+}
+tasks.named("test") {
+    finalizedBy(tasks.named("reportTestFailures"))
+}
+
+// ---------------------------------------------------------------------------------------------
 // GLSL -> SPIR-V. The shaders are checked by ShaderCompileTest as well, but that only proves they
 // compile; this is what puts the result in the jar. Both matter: without this task the mod would
 // ship GLSL and need a compiler at runtime, and without the test the failure mode is a Gradle
