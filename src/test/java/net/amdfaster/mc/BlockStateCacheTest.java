@@ -18,8 +18,16 @@ class BlockStateCacheTest {
         int calls;
         private final Map<Long, Integer> truth = new HashMap<>();
 
-        int put(int x, int y, int z, int flags) {
-            return this.truth.put(BlockStateCache.positionKey(x, y, z), flags);
+        /**
+         * Records what the level would say about a coordinate.
+         *
+         * <p>Returns nothing, and that is the fix rather than a style choice: this used to
+         * {@code return this.truth.put(...)}, and {@code Map.put} returns the *previous* value,
+         * which is null for a key being inserted for the first time. Unboxing that null to the
+         * declared {@code int} threw NullPointerException from every test that seeded the map.
+         */
+        void put(int x, int y, int z, int flags) {
+            this.truth.put(BlockStateCache.positionKey(x, y, z), flags);
         }
 
         /** What the resolver holds, read straight from the map so it bypasses the cache. */
