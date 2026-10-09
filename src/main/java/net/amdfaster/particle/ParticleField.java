@@ -271,6 +271,17 @@ public final class ParticleField {
         return this.z[index];
     }
 
+    /**
+     * Vertical velocity.
+     *
+     * <p>Exposed because stretched billboards need it, and because the drag calculation is only
+     * checkable against a value rather than against a position delta that includes one further frame of
+     * gravity.
+     */
+    public float velocityYOf(int index) {
+        return this.velocityY[index];
+    }
+
     public float sizeOf(int index) {
         return this.size[index];
     }

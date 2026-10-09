@@ -89,10 +89,10 @@ class ParticleFieldTest {
         for (int i = 0; i < frames; i++) {
             field.advance(dt, ParticleField.DEFAULT_GRAVITY);
         }
-        // Recover velocity from the position delta of one more frame.
-        float before = field.yOf(0);
-        field.advance(dt, ParticleField.DEFAULT_GRAVITY);
-        return (field.yOf(0) - before) / dt;
+        // Read directly rather than recovering it from a position delta. The delta over one more frame
+        // includes that frame's gravity, which is 0.1635 of a block per second at 60 Hz -- enough to
+        // make the two frame rates look like they disagree when they do not.
+        return field.velocityYOf(0);
     }
 
     @Test

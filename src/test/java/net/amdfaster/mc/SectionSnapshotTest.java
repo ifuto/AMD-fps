@@ -96,11 +96,22 @@ class SectionSnapshotTest {
         SectionSnapshot snapshot = SectionSnapshot.forSection(0, 4, 0);
         snapshot.capture((x, y, z) -> STONE);
 
-        assertEquals(SectionSnapshot.MISSING, snapshot.idAt(-1, 64, 0));
-        assertEquals(SectionSnapshot.MISSING, snapshot.idAt(0, 63, 0));
-        assertEquals(SectionSnapshot.MISSING, snapshot.idAt(0, 80, 0));
-        assertEquals(SectionSnapshot.MISSING, snapshot.idAt(16, 64, 0));
+        assertEquals(SectionSnapshot.MISSING, snapshot.idAt(-1, 64, 0), "one block west");
+        assertEquals(SectionSnapshot.MISSING, snapshot.idAt(0, 63, 0), "one block below");
+        assertEquals(SectionSnapshot.MISSING, snapshot.idAt(0, 80, 0), "one block above");
+        assertEquals(SectionSnapshot.MISSING, snapshot.idAt(16, 64, 0), "one block east");
+        assertEquals(SectionSnapshot.MISSING, snapshot.idAt(900, 64, 900),
+                "and far outside -- a uniform section must not answer for the whole world");
         assertTrue(snapshot.idAt(0, 64, 0) != SectionSnapshot.MISSING, "inside is fine");
+
+        // The uniform path is the one that needs this, because it has no array to index and so nothing
+        // else would stop it. Meshing reaches past the border on every face it tests, so a uniform
+        // section answering everywhere would make every border face look hidden and emit no geometry.
+        SectionSnapshot uniformAir = SectionSnapshot.forSection(0, 4, 0);
+        uniformAir.capture((x, y, z) -> AIR);
+        assertEquals(AIR, uniformAir.idAt(0, 64, 0), "inside, it is air");
+        assertEquals(SectionSnapshot.MISSING, uniformAir.idAt(0, 63, 0),
+                "outside, it says nothing rather than claiming the world is air");
     }
 
     @Test

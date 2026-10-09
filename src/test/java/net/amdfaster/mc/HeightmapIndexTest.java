@@ -124,7 +124,10 @@ class HeightmapIndexTest {
         for (int x = 0; x < 16; x++) {
             assertEquals(HeightmapIndex.NONE, index.heightAt(x, 0), "column " + x);
         }
-        assertEquals(256 * 320, index.scanCells(), "every column scanned the full height and found nothing");
+        // 256 columns times the 384 heights from WORLD_MIN_Y to WORLD_MAX_Y inclusive. This is the
+        // number that was 549 755 895 296 before the scan was bounded by the world floor.
+        assertEquals(256 * (HeightmapIndex.WORLD_MAX_Y - HeightmapIndex.WORLD_MIN_Y + 1), index.scanCells(),
+                "every column scanned the full height and found nothing");
     }
 
     @Test

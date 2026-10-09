@@ -175,16 +175,20 @@ public final class SectionSnapshot {
      */
     public int idAt(int x, int y, int z) {
         this.idReads++;
+        int lx = x - this.originX;
+        int ly = y - this.originY;
+        int lz = z - this.originZ;
+        // Bounds first, and this order is not a style choice. A uniform section has no array to index,
+        // so returning its id without checking would answer for every coordinate in the world -- the
+        // whole planet reads as stone. Meshing reaches one block past the border on every face it
+        // tests, so it would conclude that every border face is hidden and emit nothing at all.
+        if (((lx | ly | lz) < 0) || lx >= SIZE || ly >= SIZE || lz >= SIZE) {
+            return MISSING;
+        }
         if (this.uniform) {
             return this.uniformId;
         }
         if (this.ids == null) {
-            return MISSING;
-        }
-        int lx = x - this.originX;
-        int ly = y - this.originY;
-        int lz = z - this.originZ;
-        if (((lx | ly | lz) < 0) || lx >= SIZE || ly >= SIZE || lz >= SIZE) {
             return MISSING;
         }
         return this.ids[(ly * SIZE + lz) * SIZE + lx];

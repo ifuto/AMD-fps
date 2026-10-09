@@ -22,6 +22,9 @@ public final class SkyHeightmap {
     /** Height below the world floor, meaning nothing in the column blocks light. */
     public static final int EMPTY = Integer.MIN_VALUE;
 
+    /** Lowest y a column scan will examine. Without it a scan of an empty column never terminates. */
+    public static final int WORLD_MIN_Y = -64;
+
     private final int originX;
     private final int originZ;
     private final int columnsX;
@@ -127,8 +130,11 @@ public final class SkyHeightmap {
             this.height[index] = EMPTY;
             return true;
         }
+        // Bounded by the world floor rather than by EMPTY. A stop condition of "while above EMPTY"
+        // means "while above Integer.MIN_VALUE", so a column with nothing below the removed block runs
+        // two billion iterations to conclude that it is empty.
         int found = EMPTY;
-        for (int scanY = y - 1; scanY > EMPTY + 1; scanY--) {
+        for (int scanY = y - 1; scanY >= WORLD_MIN_Y; scanY--) {
             if (rescan.affectsSkylight(x, scanY, z)) {
                 found = scanY;
                 break;

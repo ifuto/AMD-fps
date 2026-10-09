@@ -25,6 +25,20 @@ public final class HeightmapIndex {
     /** Nothing in the column blocks light. */
     public static final int NONE = Integer.MIN_VALUE;
 
+    /**
+     * Lowest and highest y a column scan will examine.
+     *
+     * <p>These bounds are load bearing. A scan whose stop condition is "keep going while above NONE"
+     * does not stop at the world floor, it stops at {@code Integer.MIN_VALUE}, so a column with nothing
+     * in it -- which is every column of an empty chunk, and every column above the surface -- runs two
+     * billion iterations instead of a few hundred. Measured: 549 755 895 296 scan cells for one empty
+     * chunk rebuild, where the real answer is 81 920.
+     */
+    public static final int WORLD_MIN_Y = -64;
+
+    /** Highest y a scan starts from. */
+    public static final int WORLD_MAX_Y = 319;
+
     /** Blocks per chunk edge. */
     public static final int SIZE = 16;
 
@@ -136,7 +150,7 @@ public final class HeightmapIndex {
             return true;
         }
         int found = NONE;
-        for (int scanY = y - 1; scanY > NONE + 1; scanY--) {
+        for (int scanY = y - 1; scanY >= WORLD_MIN_Y; scanY--) {
             this.scansCells++;
             if (scan.blocksLight(x, scanY, z)) {
                 found = scanY;
@@ -165,7 +179,7 @@ public final class HeightmapIndex {
                 int x = this.originX + lx;
                 int z = this.originZ + lz;
                 int found = NONE;
-                for (int y = 319; y > NONE + 1; y--) {
+                for (int y = WORLD_MAX_Y; y >= WORLD_MIN_Y; y--) {
                     this.scansCells++;
                     if (scan.blocksLight(x, y, z)) {
                         found = y;
