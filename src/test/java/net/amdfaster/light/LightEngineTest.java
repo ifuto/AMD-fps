@@ -108,8 +108,12 @@ class LightEngineTest {
                         + "source's reach of ten, so it holds the last level rather than nothing");
         assertEquals(1, engine.field().get(6, 6, 6),
                 "the opposite corner is also nine away and so also holds the last level");
-        assertEquals(0, engine.field().get(6, 6, 0),
-                "six blocks away in two axes is twelve total, past the reach of a level-10 source");
+        assertEquals(1, engine.field().get(6, 6, 0),
+                "and so is this one: 3 + 3 + 3, the same as any other corner");
+        // The farthest cell in a 7x7x7 cube from its centre is nine blocks away, which is inside a
+        // level-10 source's reach. So there is no unlit cell to point at here -- every one of the 343
+        // is reached, and that is the stronger statement anyway.
+        assertEquals(343, engine.field().litCellCount(), "the whole volume, all 7x7x7 of it");
     }
 
     @Test
