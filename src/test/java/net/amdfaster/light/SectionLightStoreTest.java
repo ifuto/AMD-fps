@@ -62,7 +62,11 @@ class SectionLightStoreTest {
         assertEquals(2, store.sectionCount(), "L62");
         assertEquals(9, store.get(0, 64, 0), "L63");
         assertEquals(9, store.get(0, 80, 0), "L64");
-        assertNull(store.fieldOrNull(0, 5, 0), "L65");
+        // 80 >> 4 is 5, so the second write landed in section 5 and allocated it. The sections that are
+        // genuinely absent are the ones nobody wrote to.
+        assertNotNull(store.fieldOrNull(0, 5, 0), "the block at y=80 is in section 5");
+        assertNull(store.fieldOrNull(0, 6, 0), "and section 6 was never touched");
+        assertNull(store.fieldOrNull(0, 3, 0), "nor section 3");
     }
 
     @Test
@@ -98,9 +102,10 @@ class SectionLightStoreTest {
         assertEquals(0, store.markColumnAffected(4, 4), "already pending");
         assertEquals(9, store.pendingColumnCount(), "L99");
 
-        // A neighbour column overlaps, so only the new part is added.
-        assertEquals(6, store.markColumnAffected(5, 4), "L102");
-        assertEquals(15, store.pendingColumnCount(), "L103");
+        // A neighbour column overlaps. Shifting one column over brings in exactly one new column of
+        // the three, across the three rows it spans: three new marks, not six, for twelve pending.
+        assertEquals(3, store.markColumnAffected(5, 4), "one new column across three rows");
+        assertEquals(12, store.pendingColumnCount(), "nine plus the three new ones");
     }
 
     @Test
@@ -158,10 +163,14 @@ class SectionLightStoreTest {
     void heightmapsAreCreatedPerColumnAndReused() {
         SectionLightStore store = new SectionLightStore();
         SkyHeightmap first = store.heightmap(1, 1);
-        first.raise(3, 70, 3);
+        // Section (1,1) starts at block (16,16), so its columns run 16..31. Raising at block (3,3)
+        // would be outside it, silently do nothing, and read back as empty.
+        first.raise(19, 70, 19);
 
         assertSame(first, store.heightmap(1, 1), "the same column gets the same map");
-        assertEquals(70, store.heightmap(1, 1).heightAt(3, 3), "L164");
+        assertEquals(70, store.heightmap(1, 1).heightAt(19, 19), "the block coordinates are section-local");
+        assertEquals(SkyHeightmap.EMPTY, store.heightmap(1, 1).heightAt(3, 3),
+                "block (3,3) belongs to section (0,0) and reads as empty here");
         assertEquals(SkyHeightmap.EMPTY, store.heightmap(1, 2).heightAt(3, 3), "a different column does not");
     }
 

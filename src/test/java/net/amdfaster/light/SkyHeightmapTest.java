@@ -60,7 +60,8 @@ class SkyHeightmapTest {
         blockers[68] = true;
         blockers[64] = true;
 
-        assertTrue(map.lower(2, 70, 2, (x, y, z) -> y >= 0 && y < 128 && blockers[y]), "L63");
+        assertTrue(map.lower(2, 70, 2, (x, y, z) -> y >= 0 && y < 128 && blockers[y]),
+                "removing the topmost blocker lowers the column");
         assertEquals(68, map.heightAt(2, 2), "the next blocker down becomes the new top");
         assertEquals(1, map.rescannedColumns(), "L65");
 

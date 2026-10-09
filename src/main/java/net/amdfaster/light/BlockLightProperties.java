@@ -42,7 +42,23 @@ public final class BlockLightProperties {
      */
     private static final int USE_SHAPE_BIT = 1 << 9;
 
-    /** Default for a block that has not been registered: fully opaque, emits nothing. */
+    /**
+     * Whether an entry has been registered at all. Bit 10.
+     *
+     * <p>This bit is not optional and its absence was a real bug. A plain opaque block -- stone, dirt,
+     * most of the world -- packs to exactly fifteen: attenuation 15, no emission, no flags. That is
+     * also the value the table is filled with for ids nobody has registered, so the two were
+     * indistinguishable and every ordinary solid block reported itself as unknown. The properties
+     * cannot carry their own presence; they need a bit that says so.
+     */
+    private static final int PRESENT_BIT = 1 << 10;
+
+    /**
+     * The raw value held for a block that has not been registered: fully opaque, emits nothing, and
+     * with the presence bit clear. Blocking is the safe default -- assuming an unknown block lets light
+     * through would light caves that should be dark, which is visible and wrong, whereas assuming it
+     * blocks costs nothing visible.
+     */
     public static final int UNREGISTERED = OpacityField.OPAQUE;
 
     private final int[] properties;
@@ -88,7 +104,8 @@ public final class BlockLightProperties {
         this.properties[blockId] = (attenuation & ATTENUATION_MASK)
                 | ((emission & EMISSION_MASK) << EMISSION_SHIFT)
                 | (filtersSky ? FILTERS_SKY_BIT : 0)
-                | (usesShape ? USE_SHAPE_BIT : 0);
+                | (usesShape ? USE_SHAPE_BIT : 0)
+                | PRESENT_BIT;
         this.highestId = Math.max(this.highestId, blockId);
     }
 
@@ -161,7 +178,7 @@ public final class BlockLightProperties {
     }
 
     public boolean isRegistered(int blockId) {
-        return inRange(blockId) && this.properties[blockId] != UNREGISTERED;
+        return inRange(blockId) && (this.properties[blockId] & PRESENT_BIT) != 0;
     }
 
     public void clear() {

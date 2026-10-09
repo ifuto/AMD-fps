@@ -93,15 +93,18 @@ class BlockLightPropertiesTest {
         // be dark, which is visible and wrong; assuming it blocks costs nothing visible, because an
         // unregistered block is a mod the light table has not been told about.
         BlockLightProperties properties = populated();
-        assertTrue(properties.isOpaque(4000), "L96");
-        assertEquals(15, properties.attenuationOf(4000), "L97");
-        assertEquals(0, properties.emissionOf(4000), "L98");
-        assertFalse(properties.isRegistered(4000), "L99");
-        assertTrue(properties.isRegistered(STONE), "L100");
+        assertTrue(properties.isOpaque(4000), "an id inside the table that nobody registered");
+        assertEquals(15, properties.attenuationOf(4000), "and it reads as fully opaque");
+        assertEquals(0, properties.emissionOf(4000), "emitting nothing");
+        assertFalse(properties.isRegistered(4000), "but it is known to be unregistered");
+        // The assertion that caught the bug. Stone packs to attenuation 15 with no emission and no
+        // flags, which is bit-for-bit the unregistered default, so without a presence bit an ordinary
+        // solid block was indistinguishable from an unknown one.
+        assertTrue(properties.isRegistered(STONE), "a registered opaque block is still registered");
 
         assertEquals(BlockLightProperties.UNREGISTERED, properties.rawOf(-1),
                 "and a negative id, which cannot happen but must not index the array");
-        assertFalse(properties.isRegistered(-1), "L104");
+        assertFalse(properties.isRegistered(-1), "and is not reported as registered either");
     }
 
     @Test
@@ -140,10 +143,15 @@ class BlockLightPropertiesTest {
     void clearRestoresTheOpaqueDefault() {
         BlockLightProperties properties = populated();
         properties.clear();
-        assertEquals(0, properties.highestRegisteredId(), "L143");
-        assertTrue(properties.isOpaque(STONE), "L144");
-        assertFalse(properties.isRegistered(AIR), "L145");
-        assertEquals(0, properties.lookups(), "L146");
+        assertEquals(0, properties.highestRegisteredId(), "the id high water mark is reset");
+        assertEquals(0, properties.lookups(), "and so is the counter, before anything reads again");
+
+        // Past this point lookups is no longer zero: the two reads below each count, which is what the
+        // counter is for. Checking it before them rather than after is the difference between testing
+        // the reset and testing how many assertions happened to run.
+        assertTrue(properties.isOpaque(STONE), "an unregistered block is opaque by default");
+        assertFalse(properties.isRegistered(AIR), "and clearing dropped the registration");
+        assertEquals(2, properties.lookups(), "one lookup per property read above");
     }
 
     @Test

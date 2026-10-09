@@ -24,7 +24,10 @@ class LightFieldTest {
     void everyLevelRoundTripsInBothNibbles() {
         // Even indices go in the low nibble and odd in the high, so a level has to survive in both
         // positions. Writing one and clobbering the other is the failure this catches.
-        LightField field = new LightField(0, 0, 0, 16, 1, 1);
+        // Thirty-two cells, not sixteen: the odd index below is level + 16, which runs to 31 and is
+        // out of range in a sixteen-wide field. Writes there are ignored and reads return zero, so
+        // every odd-index assertion would fail for a reason that has nothing to do with nibble packing.
+        LightField field = new LightField(0, 0, 0, 32, 1, 1);
         for (int level = 1; level <= 15; level++) {
             // Starting at 1: writing 0 into a fresh field is not a change, so set correctly reports
             // false there, and asserting true would be testing the wrong thing.
