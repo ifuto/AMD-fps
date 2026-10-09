@@ -80,7 +80,8 @@ class ModelCacheTest {
         ModelCache<String> cache = new ModelCache<>(4);
 
         cache.acquire(1, loader);
-        assertFalse(cache.release(1), "held by nobody else, so now releasable");
+        assertTrue(cache.release(1), "one reference taken, one released, so it is now releasable");
+        assertEquals(0, cache.referenceCount(1));
         cache.acquire(1, loader);
         cache.acquire(1, loader);
         cache.release(1);

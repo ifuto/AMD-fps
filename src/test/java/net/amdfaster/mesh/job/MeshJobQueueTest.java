@@ -50,12 +50,20 @@ class MeshJobQueueTest {
         assertEquals(-1L, queue.poll(0), "worker 0 has nothing left");
 
         // Longest deque because that is where the imbalance is; stealing from a short one moves the
-        // problem around instead of solving it.
+        // problem around instead of solving it. Round robin over four workers put 1,5 on w1, 2,6 on w2
+        // and 3,7 on w3, so the first three steals each take the newest job off a deque of two.
         assertEquals(SectionCoord.key(5, 4, 0), queue.steal(0), "from worker 1");
         assertEquals(SectionCoord.key(6, 4, 0), queue.steal(0), "then worker 2");
         assertEquals(SectionCoord.key(7, 4, 0), queue.steal(0), "then worker 3");
-        assertEquals(-1L, queue.steal(0), "and then there is nothing anywhere");
-        assertEquals(3, queue.stolen());
+        // Those three deques now hold one job each, so three more steals are needed before the queue is
+        // actually empty. Asserting -1 here instead would have passed on a pool that silently dropped
+        // half the backlog.
+        assertEquals(SectionCoord.key(1, 4, 0), queue.steal(0), "worker 1's remaining job");
+        assertEquals(SectionCoord.key(2, 4, 0), queue.steal(0), "worker 2's");
+        assertEquals(SectionCoord.key(3, 4, 0), queue.steal(0), "worker 3's");
+        assertEquals(-1L, queue.steal(0), "and only now is there nothing anywhere");
+        assertEquals(6, queue.stolen());
+        assertEquals(0, queue.pending());
     }
 
     @Test
@@ -89,8 +97,11 @@ class MeshJobQueueTest {
         assertEquals(1000, queue.resident(), "but the slots are still occupied until polled past");
 
         queue.push(0, 9, 0, MeshJobQueue.KIND_GEOMETRY);
+        assertEquals(1, queue.pending(), "the one new job is live");
+        assertEquals(1001, queue.resident(), "plus the thousand stale slots still waiting to be passed");
         assertEquals(SectionCoord.key(0, 9, 0), queue.poll(0), "a new job surfaces, not a stale one");
-        assertEquals(1, queue.pending());
+        assertEquals(0, queue.pending(), "and that was the only live one");
+        assertEquals(1000, queue.droppedStale(), "every stale slot was stepped over to reach it");
     }
 
     @Test
