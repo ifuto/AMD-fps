@@ -28,6 +28,14 @@ public final class Meshlet {
     public static final int MAX_VERTICES = 256;
 
     /**
+     * Bytes per entry in the cull data buffer: the packed bounds plus the section origin.
+     *
+     * <p>Kept here rather than read from {@code CullBindings} so this class does not depend on the
+     * gpu package, and pinned against it by a test.
+     */
+    public static final int CULL_RECORD_BYTES = 16;
+
+    /**
      * Bytes per vertex in the position stream: {@code short x, short y, short z, short flags}.
      *
      * <p>8 bytes keeps eight vertices in one 128-byte cache line, which is the line size RDNA
@@ -288,6 +296,41 @@ public final class Meshlet {
             out.putShort(this.positions[i * 3 + 2]);
             out.putShort((short) 0);
         }
+    }
+
+    /**
+     * Writes the {@value #CULL_RECORD_BYTES}-byte cull record the compute shader reads at slot
+     * {@code i}: the packed bounds, then the section origin as three float bit patterns.
+     *
+     * <p>The origin is float bits and not the integer it came from, because a section origin is
+     * negative for any section west or north of the world origin and the shader recovers it with
+     * {@code uintBitsToFloat}. Writing the raw integer would read a negative origin as roughly four
+     * billion, which puts the box so far away that the frustum test rejects it -- so the failure
+     * would be half the world silently missing rather than a crash. A section origin is a multiple
+     * of {@code 16}, comfortably inside the 24-bit exact range of a float, so nothing is lost.
+     *
+     * <p>Sequential, for the same reason as the other writers: this lands in host-visible memory
+     * and that memory is write-combined.
+     */
+    public void writeRecord(ByteBuffer out, int originX, int originY, int originZ) {
+        requireOrder(out);
+        out.putInt(this.packedBounds());
+        out.putInt(Float.floatToRawIntBits((float) originX));
+        out.putInt(Float.floatToRawIntBits((float) originY));
+        out.putInt(Float.floatToRawIntBits((float) originZ));
+    }
+
+    /**
+     * Writes this meshlet's orientation bucket: its {@link Orientation#ordinal()}, 0 to 5.
+     *
+     * <p>A separate buffer rather than three more bits in the packed bounds word. The word has two
+     * spare bits and a bucket needs three, so it would not fit without widening the record -- and
+     * the cull shader reads this buffer only for meshlets that survived the frustum test, so
+     * keeping it out of the record also keeps the record it does read unconditionally smaller.
+     */
+    public void writeOrientation(ByteBuffer out) {
+        requireOrder(out);
+        out.putInt(this.orientation.ordinal());
     }
 
     /** Writes the attribute stream. */

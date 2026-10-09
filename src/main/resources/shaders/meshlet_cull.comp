@@ -34,7 +34,11 @@ layout(std140, binding = 0) uniform Frame {
     uint  _pad0;
 };
 
-// x = packed bounds (six 5-bit fields, section-local), yzw = the section's origin in blocks.
+// x = packed bounds (six 5-bit fields, section-local), yzw = the section's origin in blocks as
+// float bits. Float bits rather than the raw uint: a section origin is negative for any
+// section west or north of the world origin, and converting a two's-complement negative
+// through uint-to-float reads it as roughly four billion. A section origin is a multiple of
+// 16, so it is exactly representable and nothing is lost.
 layout(std430, binding = 1) readonly buffer MeshletData {
     uvec4 meshlets[];
 };
@@ -97,7 +101,7 @@ void main() {
     if (inRange) {
         uvec4 record = meshlets[index];
         uint packed = record.x;
-        vec3 origin = vec3(record.yzw) - cameraOrigin.xyz;
+        vec3 origin = uintBitsToFloat(record.yzw) - cameraOrigin.xyz;
 
         vec3 boxMin = origin + decodeTriple(packed, 0u);
         vec3 boxMax = origin + decodeTriple(packed, 15u);

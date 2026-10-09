@@ -49,6 +49,41 @@ public record MeshletGpuLayout(int meshletCount, int[] runStart, int[] runCount)
         return cursor == 0 ? EMPTY : new MeshletGpuLayout(cursor, starts, counts);
     }
 
+    /**
+     * Writes the cull record and the orientation bucket of every meshlet in {@code mesh}, in the
+     * slot order {@link #forSection} assigns.
+     *
+     * <p>The order here is the order the shader assumes. A meshlet at slot {@code i} draws from
+     * {@code i * }{@value #INDICES_PER_MESHLET}{@code } indices and {@code i * }
+     * {@value #VERTICES_PER_MESHLET}{@code } vertices, and its orientation is the one entry
+     * {@code orientations[i]} holds -- so a slot mismatch between the two buffers would pair a
+     * meshlet's bounds with another orientation's normal and back-face cull the wrong geometry.
+     * Both buffers are written in one walk for exactly that reason.
+     *
+     * <p>The walk ends by asserting it wrote as many slots as the layout counts. A mismatch means
+     * the section was re-meshed between building the layout and packing it, and shipping it would
+     * leave the tail of the buffer holding the previous section's data.
+     *
+     * @param records      the cull data buffer, positioned at this section's first record
+     * @param orientations the orientation buffer, positioned at this section's first entry
+     */
+    public void writeCullData(SectionMesh mesh, java.nio.ByteBuffer records,
+                              java.nio.ByteBuffer orientations) {
+        int slot = 0;
+        for (Orientation o : Orientation.values()) {
+            for (Meshlet meshlet : mesh.meshlets(o)) {
+                meshlet.writeRecord(records, mesh.originX(), mesh.originY(), mesh.originZ());
+                meshlet.writeOrientation(orientations);
+                slot++;
+            }
+        }
+        if (slot != this.meshletCount) {
+            throw new IllegalStateException("layout counts " + this.meshletCount
+                    + " meshlets but the section now has " + slot
+                    + "; it was re-meshed after the layout was built");
+        }
+    }
+
     public boolean isEmpty() {
         return this.meshletCount == 0;
     }

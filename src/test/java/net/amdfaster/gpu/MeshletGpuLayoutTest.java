@@ -7,6 +7,9 @@ import net.amdfaster.mesh.voxel.ArrayVoxelView;
 import net.amdfaster.mesh.voxel.SectionMesher;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -14,9 +17,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MeshletGpuLayoutTest {
 
     private static SectionMesh singleBlock() {
+        return singleBlock(0, 0, 0);
+    }
+
+    private static SectionMesh singleBlock(int originX, int originY, int originZ) {
         ArrayVoxelView view = new ArrayVoxelView(16, 16, 16);
         view.set(4, 4, 4, 1, true);
-        return SectionMesher.mesh(view, 0, 0, 0);
+        return SectionMesher.mesh(view, originX, originY, originZ);
     }
 
     @Test
@@ -38,6 +45,77 @@ class MeshletGpuLayoutTest {
         assertFalse(layout.isEmpty());
         for (Orientation o : Orientation.values()) {
             assertEquals(1, layout.runCount(o), o + " holds one meshlet");
+        }
+    }
+
+    @Test
+    void packingRoundTripsThroughTheLayoutTheShaderReads() {
+        // A negative origin on every axis: half of Minecraft's world has one, and it is the case a
+        // uint-to-float conversion silently destroys.
+        int originX = -1040;
+        int originY = -16;
+        int originZ = -48;
+        SectionMesh mesh = singleBlock(originX, originY, originZ);
+        MeshletGpuLayout layout = MeshletGpuLayout.forSection(mesh);
+
+        ByteBuffer records = ByteBuffer.allocateDirect(layout.cullDataBytes())
+                .order(ByteOrder.LITTLE_ENDIAN);
+        ByteBuffer orientations = ByteBuffer.allocateDirect(layout.orientationBytes())
+                .order(ByteOrder.LITTLE_ENDIAN);
+
+        layout.writeCullData(mesh, records, orientations);
+
+        assertEquals(layout.cullDataBytes(), records.position(), "every record byte was written");
+        assertEquals(layout.orientationBytes(), orientations.position(),
+                "every orientation entry was written");
+
+        records.rewind();
+        orientations.rewind();
+
+        int slot = 0;
+        for (Orientation o : Orientation.values()) {
+            for (Meshlet meshlet : mesh.meshlets(o)) {
+                int base = slot * MeshletGpuLayout.RECORD_BYTES;
+                int packed = records.getInt(base);
+                float x = Float.intBitsToFloat(records.getInt(base + 4));
+                float y = Float.intBitsToFloat(records.getInt(base + 8));
+                float z = Float.intBitsToFloat(records.getInt(base + 12));
+                int orientation = orientations.getInt(slot * CullBindings.ORIENTATION_BYTES_PER_MESHLET);
+
+                assertEquals(meshlet.minX(), Meshlet.unpackMinX(packed), "slot " + slot + " minX");
+                assertEquals(meshlet.minY(), Meshlet.unpackMinY(packed), "slot " + slot + " minY");
+                assertEquals(meshlet.minZ(), Meshlet.unpackMinZ(packed), "slot " + slot + " minZ");
+                assertEquals(meshlet.maxX(), Meshlet.unpackMaxX(packed), "slot " + slot + " maxX");
+                assertEquals(meshlet.maxY(), Meshlet.unpackMaxY(packed), "slot " + slot + " maxY");
+                assertEquals(meshlet.maxZ(), Meshlet.unpackMaxZ(packed), "slot " + slot + " maxZ");
+
+                assertEquals((float) originX, x, 0f, "slot " + slot + " origin X");
+                assertEquals((float) originY, y, 0f, "slot " + slot + " origin Y");
+                assertEquals((float) originZ, z, 0f, "slot " + slot + " origin Z");
+
+                // The pairing the back-face test depends on: this record's bounds must go with this
+                // record's normal. Pairing them wrong back-face culls the wrong geometry, and it
+                // only shows up as faces missing from certain angles.
+                assertEquals(o.ordinal(), orientation, "slot " + slot + " orientation");
+                assertEquals(meshlet.orientation(), o, "the walk must visit " + o + " together");
+
+                slot++;
+            }
+        }
+        assertEquals(layout.meshletCount(), slot, "the walk covered every slot");
+    }
+
+    @Test
+    void aNegativeOriginSurvivesTheFloatEncoding() {
+        // Pinned separately from the round trip, because the round trip would also pass with a
+        // positive origin and the bug it is guarding against only exists for negative ones.
+        for (int origin : new int[]{-1048576, -16, -1, 0, 1, 1048560}) {
+            int bits = Float.floatToRawIntBits((float) origin);
+            assertEquals((float) origin, Float.intBitsToFloat(bits), 0f,
+                    "origin " + origin + " must survive the encoding exactly");
+            // What the shader would read if the writer stored the integer instead.
+            assertTrue(Float.intBitsToFloat(bits) <= 0f || origin > 0,
+                    "a negative origin must not come back positive");
         }
     }
 
