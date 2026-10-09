@@ -80,7 +80,7 @@ class MeshletGpuLayoutTest {
                 float x = Float.intBitsToFloat(records.getInt(base + 4));
                 float y = Float.intBitsToFloat(records.getInt(base + 8));
                 float z = Float.intBitsToFloat(records.getInt(base + 12));
-                int orientation = orientations.getInt(slot * CullBindings.ORIENTATION_BYTES_PER_MESHLET);
+                int sideData = orientations.getInt(slot * CullBindings.ORIENTATION_BYTES_PER_MESHLET);
 
                 assertEquals(meshlet.minX(), Meshlet.unpackMinX(packed), "slot " + slot + " minX");
                 assertEquals(meshlet.minY(), Meshlet.unpackMinY(packed), "slot " + slot + " minY");
@@ -95,8 +95,13 @@ class MeshletGpuLayoutTest {
 
                 // The pairing the back-face test depends on: this record's bounds must go with this
                 // record's normal. Pairing them wrong back-face culls the wrong geometry, and it
-                // only shows up as faces missing from certain angles.
-                assertEquals(o.ordinal(), orientation, "slot " + slot + " orientation");
+                // only shows up as faces missing from certain angles. The bucket is the low three
+                // bits; the quad count rides above it, so reading the whole word as an ordinal
+                // gives 8 for a one-quad meshlet rather than 0.
+                assertEquals(o.ordinal(), Meshlet.sideDataOrientation(sideData),
+                        "slot " + slot + " orientation");
+                assertEquals(meshlet.quadCount(), Meshlet.sideDataQuads(sideData),
+                        "slot " + slot + " quad count");
                 assertEquals(meshlet.orientation(), o, "the walk must visit " + o + " together");
 
                 slot++;
