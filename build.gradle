@@ -337,6 +337,10 @@ tasks.register("verifyJar") {
                         "net/amdfaster/particle/ParticleField.class",
                         "net/amdfaster/mc/LevelBlockSampler.class",
                         "net/amdfaster/mesh/voxel/SectionMesher.class",
+                        "net/amdfaster/mesh/job/MeshJobQueue.class",
+                        "net/amdfaster/mesh/job/MeshWorkerPool.class",
+                        "net/amdfaster/mesh/GeometryCache.class",
+                        "net/amdfaster/mc/ModelCache.class",
                         "net/amdfaster/gpu/BlockBindings.class",
                         // The packing layer between a section mesh and a mapped GPU buffer. It is
                         // asserted because a wrong fixed stride here is not a crash: it misaligns
