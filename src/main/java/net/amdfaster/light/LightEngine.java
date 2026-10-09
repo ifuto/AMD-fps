@@ -16,12 +16,20 @@ import net.amdfaster.dirty.SectionCoord;
  * as "recompute the whole section" is what makes a torch being placed or broken cost as much as
  * loading the section, which is the single most common light update there is.
  *
- * <p>Attenuation is {@code level - 1 - opacity}, matching Minecraft: one level per block of distance,
- * plus whatever the block itself absorbs. Glass attenuates by 0 and so costs only the distance; a
- * slab costs more. Reading opacity per neighbour rather than per cell is deliberate -- the same block
- * attenuates differently depending on nothing, but the neighbour's own opacity is what matters for
- * light entering it, and caching it per BlockState is a separate concern (see the backlog item on
- * BlockState light property caching).
+ * <p>Attenuation is {@code level - max(1, opacity)}, which is Minecraft's rule and not the obvious
+ * one. The floor of 1 is what makes glass cost the same as air rather than less than air, and it is
+ * also what makes opacity 1 -- leaves -- cost the same as air. Writing this as {@code level - 1 -
+ * opacity} instead is the natural mistake, and it is wrong for every block that is neither fully
+ * transparent nor fully opaque: it makes leaves attenuate twice as fast, so light reaches seven
+ * blocks through a tree instead of fourteen, and it makes an opacity-14 block fully opaque when it
+ * actually passes one level. Measured against a model of both rules: through water (opacity 3) the
+ * correct rule reaches four blocks from a level-15 source and the wrong one reaches three.
+ *
+ * <p>Cost also depends on the direction, which is the second non-obvious part. Skylight at level 15
+ * travelling <em>downward</em> into a non-filtering block loses nothing -- that is what makes an open
+ * field uniformly lit rather than dimming with depth. Every other direction, and every level below
+ * 15, attenuates normally. So the neighbour loop is not six identical tests; the downward one is
+ * specialised, and {@link Mode} selects the rule.
  *
  * <p>The engine holds no Minecraft type. The opacity source is a one-method interface, so the whole
  * propagation algorithm is testable on a synthetic volume, which is the only way to check the removal
@@ -37,12 +45,44 @@ public final class LightEngine {
         int opacity(int x, int y, int z);
     }
 
+    /**
+     * Which attenuation rule a field obeys.
+     *
+     * <p>The two differ in exactly one place: level-15 skylight falling into a clear block. Everything
+     * else -- every horizontal step, every upward step, every level below 15 -- is identical, which is
+     * why this is a mode rather than two engines.
+     */
+    public enum Mode {
+        /** Torches, glowstone, lava. Symmetric in all six directions. */
+        BLOCK,
+
+        /** The sky. Level 15 falls without attenuation; everything else behaves like block light. */
+        SKY
+    }
+
+    /**
+     * Cost of light entering a block, with the floor that makes glass and leaves cost the same as air.
+     *
+     * <p>Named rather than inlined because getting the floor wrong is silent: the light looks
+     * plausible, just darker through foliage, and nothing reports it.
+     */
+    static int attenuatedLevel(int sourceLevel, int opacity) {
+        return sourceLevel - Math.max(1, opacity);
+    }
+
     /** Direction offsets as flat deltas in x, y, z. */
     private static final int[] DX = {1, -1, 0, 0, 0, 0};
     private static final int[] DY = {0, 0, 1, -1, 0, 0};
     private static final int[] DZ = {0, 0, 0, 0, 1, -1};
 
+    /** Index of the downward direction in the offset arrays above. */
+    private static final int DOWN = 3;
+
+    /** The brightest light level Minecraft represents. Above this a nibble cannot hold it. */
+    public static final int MAX_LEVEL = 15;
+
     private final LightField field;
+    private final Mode mode;
     private final LightQueue queue;
 
     /** Cells cleared during removal that need re-propagating into. Reused across updates. */
@@ -53,12 +93,35 @@ public final class LightEngine {
     private long updatesSkippedUnchanged;
 
     public LightEngine(LightField field) {
+        this(field, Mode.BLOCK);
+    }
+
+    public LightEngine(LightField field, Mode mode) {
         this.field = field;
+        this.mode = mode;
         this.queue = new LightQueue(field.cellCount());
     }
 
     public LightField field() {
         return this.field;
+    }
+
+    public Mode mode() {
+        return this.mode;
+    }
+
+    /**
+     * Cost of stepping from a cell at {@code level} into the neighbour at the given offsets.
+     *
+     * <p>This is the per-direction part of the rule, and it is the whole reason the neighbour loop is
+     * not six copies of the same expression. Direction index 3 is -y; for skylight at the maximum
+     * level entering a block that does not filter, the step is free.
+     */
+    private int stepLevel(int level, int direction, int opacity) {
+        if (this.mode == Mode.SKY && level == MAX_LEVEL && direction == DOWN && opacity == 0) {
+            return MAX_LEVEL;
+        }
+        return attenuatedLevel(level, opacity);
     }
 
     /**
@@ -99,7 +162,7 @@ public final class LightEngine {
                 int nx = x + DX[direction];
                 int ny = y + DY[direction];
                 int nz = z + DZ[direction];
-                int candidate = level - 1 - opacity.opacity(nx, ny, nz);
+                int candidate = stepLevel(level, direction, opacity.opacity(nx, ny, nz));
                 if (candidate <= 0) {
                     continue;
                 }

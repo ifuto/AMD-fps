@@ -54,9 +54,33 @@ public final class LightField {
         this.nibbles = new byte[(cells + 1) >>> 1];
     }
 
+    /** Blocks per section edge. Minecraft's chunk section is a 16x16x16 cube. */
+    public static final int SIZE = 16;
+
+    /** Cells in one section. */
+    public static final int SECTION_CELLS = SIZE * SIZE * SIZE;
+
+    /** Bytes one section's light costs: one nibble per cell. */
+    public static final int SECTION_BYTES = SECTION_CELLS >>> 1;
+
     /** A field covering one 16x16x16 section at the given section origin in blocks. */
     public static LightField forSection(int sectionX, int sectionY, int sectionZ) {
-        return new LightField(sectionX << 4, sectionY << 4, sectionZ << 4, 16, 16, 16);
+        return new LightField(sectionX << 4, sectionY << 4, sectionZ << 4, SIZE, SIZE, SIZE);
+    }
+
+    /** Lowest world x this field covers. */
+    public int originX() {
+        return this.originX;
+    }
+
+    /** Lowest world y this field covers. */
+    public int originY() {
+        return this.originY;
+    }
+
+    /** Lowest world z this field covers. */
+    public int originZ() {
+        return this.originZ;
     }
 
     public int sizeX() {
