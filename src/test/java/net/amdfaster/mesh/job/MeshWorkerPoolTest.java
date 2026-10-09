@@ -58,6 +58,11 @@ class MeshWorkerPoolTest {
     void workIsSpreadAcrossThreadsRatherThanDoneByOne() throws InterruptedException {
         // The point of the pool. If one worker did everything, the others would sit idle and the queue
         // would be no better than a serial loop with extra threads attached.
+        //
+        // The jobs have to take measurable time. With jobs that return immediately, the first worker to
+        // wake can drain the whole backlog before the others come out of their park -- which is stealing
+        // working correctly, not a bug, but it means the test would be measuring a race instead of the
+        // distribution. Making each job cost something is what forces more than one worker to take part.
         int cores = 5;
         int jobs = 200;
         Set<String> threadNames = Collections.newSetFromMap(new ConcurrentHashMap<>());
@@ -65,6 +70,10 @@ class MeshWorkerPoolTest {
 
         MeshWorkerPool pool = MeshWorkerPool.forCores(cores, (key, kind) -> {
             threadNames.add(Thread.currentThread().getName());
+            long until = System.nanoTime() + 200_000L;
+            while (System.nanoTime() < until) {
+                Thread.onSpinWait();
+            }
             done.countDown();
         });
         try {
