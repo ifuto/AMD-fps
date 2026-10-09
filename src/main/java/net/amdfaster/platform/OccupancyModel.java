@@ -44,9 +44,19 @@ public final class OccupancyModel {
     public record Arch(String name, int waveSize, int fileVgprsWave32, int waveSlots, int vgprGranule,
             int maxVgprsPerWave, int ldsBytesPerCu, int ldsBlockBytes) {
 
-        /** Registers a wave actually occupies once the allocator rounds up. */
+        /**
+         * Registers a wave actually occupies once the allocator rounds up.
+         *
+         * <p>Note the ceiling division. The usual idiom for it is negating a negated floor division,
+         * which works in languages whose integer division floors -- and silently does the wrong thing in
+         * Java, where division truncates toward zero, so a 97-VGPR shader at a 24-register granule comes
+         * out as four blocks of 96 rather than five of 120 and the model reports sixteen waves where the
+         * hardware gives twelve. Every rounding-up division in this class is spelled
+         * {@code (a + b - 1) / b}.
+         */
         public int allocatedVgprs(int vgprsRequested) {
-            int blocks = -(-Math.max(1, vgprsRequested) / this.vgprGranule);
+            int requested = Math.max(1, vgprsRequested);
+            int blocks = (requested + this.vgprGranule - 1) / this.vgprGranule;
             return Math.min(blocks * this.vgprGranule, this.maxVgprsPerWave + this.vgprGranule);
         }
 
@@ -156,7 +166,7 @@ public final class OccupancyModel {
         // work-group processor are all four-wide. Written out rather than per-arch because a ternary
         // that returns 4 on both branches is not a choice, it is a place for a wrong number to hide.
         int simdsPerCu = 4;
-        int wavesPerGroup = -(-threadsPerGroup / arch.waveSize());
+        int wavesPerGroup = (threadsPerGroup + arch.waveSize() - 1) / arch.waveSize();
 
         // The per-SIMD ceiling. Registers first, then the slot count, whichever is smaller. This is
         // unaffected by LDS, because LDS constrains how many groups fit rather than how many waves a
@@ -178,7 +188,8 @@ public final class OccupancyModel {
         // runs perfectly well.
         int groupsFromWaves = waves * simdsPerCu / wavesPerGroup;
         int ldsBlock = arch.ldsBlockBytes();
-        int ldsRounded = ldsBytesPerGroup <= 0 ? 0 : -(-ldsBytesPerGroup / ldsBlock) * ldsBlock;
+        int ldsRounded = ldsBytesPerGroup <= 0 ? 0
+                : (ldsBytesPerGroup + ldsBlock - 1) / ldsBlock * ldsBlock;
         int groupsFromLds = ldsRounded <= 0 ? Integer.MAX_VALUE : arch.ldsBytesPerCu() / ldsRounded;
 
         int groupsPerCu = groupsFromWaves;
