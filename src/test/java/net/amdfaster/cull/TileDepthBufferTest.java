@@ -222,8 +222,11 @@ class TileDepthBufferTest {
         buffer.resetCounters();
         assertEquals(0, buffer.occlusionTests());
         assertEquals(0, buffer.occludedTests());
-        assertEquals(TileDepthBuffer.EMPTY, buffer.subDepthAt(3, 7), 0.0f,
-                "resetting counters does not touch the buffer");
+        assertEquals(10.0f, buffer.subDepthAt(3, 7), 0.0f,
+                "resetting the counters leaves the buffer alone -- the last sub-tile of the last tile "
+                        + "still holds what was rasterised into it");
+        assertEquals(0, buffer.rasterisedSubtiles() - 32,
+                "and the rasterise count is not a query counter, so it is left alone too");
     }
 
     @Test
