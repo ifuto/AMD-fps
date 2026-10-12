@@ -114,7 +114,8 @@ class FramePacerTest {
 
         assertEquals(3L, pacer.discardedMeasurements());
         assertEquals(10_000_000L, pacer.smoothedWallNanos(), "the average is untouched");
-        assertEquals(3L, pacer.framesNoted(), "but they still count as frames seen");
+        assertEquals(4L, pacer.framesNoted(),
+                "all four calls are frames seen -- the one usable sample plus the three rejected");
     }
 
     @Test
