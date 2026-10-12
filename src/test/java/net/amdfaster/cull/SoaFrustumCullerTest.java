@@ -48,7 +48,7 @@ class SoaFrustumCullerTest {
 
         assertEquals(5, kept, "five of the eight overlap [0,10]^3");
         assertArrayEquals(
-                new boolean[] {true, false, true, true, true, true, false, true},
+                new boolean[] {true, false, true, false, true, true, false, true},
                 visible,
                 "0,2,4,5,7 are visible; 1,3,6 are not");
     }
@@ -142,7 +142,8 @@ class SoaFrustumCullerTest {
         // submitted as visible, and the frame budget would be spent on geometry that does not exist.
         long[] mask = new long[] {-1L, -1L};
         assertEquals(64, SoaFrustumCuller.countVisible(mask, 64), "a full word is all real");
-        assertEquals(64, SoaFrustumCuller.countVisible(mask, 65) - 63, "only the first bit of word 1 counts");
+        assertEquals(65, SoaFrustumCuller.countVisible(mask, 65),
+                "word 0 in full plus exactly one bit of word 1");
         assertEquals(100, SoaFrustumCuller.countVisible(mask, 100), "100 submitted, 100 counted");
         assertEquals(1, SoaFrustumCuller.countVisible(mask, 1), "one submitted, one counted");
     }

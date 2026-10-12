@@ -62,7 +62,8 @@ class SimdSupportTest {
                 new SimdSupport.Resolution(SimdSupport.Backend.VECTOR, 512, 16, "test");
         assertTrue(resolution.isVector());
         assertEquals(16, resolution.intLanes());
-        assertEquals(4, SimdSupport.scalarChunkElements(resolution, 4), "16 lanes of 4 bytes over 16 bytes");
+        assertEquals(16, SimdSupport.scalarChunkElements(resolution, 4),
+                "512 bits is 64 bytes, which is sixteen four-byte elements");
         assertTrue(SimdSupport.needsLatencyHiding(resolution),
                 "Zen 5 raised 512-bit minimum latency from one cycle to two");
     }
