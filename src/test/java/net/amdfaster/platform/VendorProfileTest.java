@@ -46,12 +46,36 @@ class VendorProfileTest {
     }
 
     @Test
-    void aTileNeverComesOutSmallerThanOneEvenWithAbsurdInputs() {
-        // Zero buffers or a huge texel format must not produce a zero edge, which would make every loop
-        // over the tile run zero times and silently render nothing.
-        assertEquals(1, VendorProfile.AMD_RDNA.maxSquareTile(1024, 1), "a texel bigger than the LDS");
-        assertEquals(1, VendorProfile.AMD_RDNA.maxSquareTile(4, 0), "zero buffers clamps to one");
-        assertEquals(1, VendorProfile.AMD_RDNA.maxSquareTile(0, 1), "zero floats per texel clamps to one");
+    void aTileNeverComesOutSmallerThanOneEvenWhenNothingFits() {
+        // The clamp matters because an edge of zero would make every loop over the tile run zero times
+        // and silently render nothing rather than report that shared memory was too small.
+        assertEquals(1, VendorProfile.AMD_RDNA.maxSquareTile(8192, 1),
+                "one texel already fills the LDS, so a 1x1 tile is all that fits");
+        assertEquals(1, VendorProfile.CONSERVATIVE.maxSquareTile(4096, 1),
+                "and on the conservative profile it happens sooner");
+        assertEquals(1, VendorProfile.CONSERVATIVE.maxSquareTile(100000, 1),
+                "a texel larger than the whole of shared memory still yields a tile, not zero");
+    }
+
+    @Test
+    void nonsenseDivisorsAreTreatedAsOneRatherThanDividingByZero() {
+        // Zero buffers and zero floats per texel are both nonsense, and the reading of them that keeps
+        // the result usable is "treat the divisor as one". Throwing would be defensible; returning zero
+        // would not be, because zero would propagate into a loop bound.
+        assertEquals(64, VendorProfile.AMD_RDNA.maxSquareTile(4, 0), "zero buffers means one buffer");
+        assertEquals(256, VendorProfile.AMD_RDNA.maxSquareTile(0, 1), "zero floats means one float");
+        assertEquals(VendorProfile.AMD_RDNA.maxSquareTile(4, 1),
+                VendorProfile.AMD_RDNA.maxSquareTile(4, 0),
+                "which is the same answer as asking for one buffer outright");
+    }
+
+    @Test
+    void aTexelThatFitsComfortablyStillLeavesRoomForMoreThanOne() {
+        // 1024 floats is 4 KB, which is a sixteenth of the 64 KB LDS, so sixteen texels fit along an
+        // edge and the square root of that is four. This is the case the earlier version of this test
+        // mislabelled as a texel larger than the LDS.
+        assertEquals(4, VendorProfile.AMD_RDNA.maxSquareTile(1024, 1));
+        assertEquals(2, VendorProfile.AMD_RDNA.maxSquareTile(4096, 1));
     }
 
     @Test
