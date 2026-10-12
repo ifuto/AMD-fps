@@ -154,8 +154,8 @@ class CanonicalizerTest {
             }
             if (step % 2500 == 0) {
                 assertEquals(reference.size(), dedup.size(), "size at step " + step);
-                for (String key : reference.keySet()) {
-                    assertTrue(dedup.contains(key), "missing " + key + " at step " + step);
+                for (String expected : reference.keySet()) {
+                    assertTrue(dedup.contains(expected), "missing " + expected + " at step " + step);
                 }
             }
         }
@@ -163,8 +163,8 @@ class CanonicalizerTest {
         assertEquals(reference.size(), dedup.size());
         assertTrue(inserts > 10000, "the test exercised inserts, got " + inserts);
         assertTrue(deletes > 1000, "and deletes, got " + deletes);
-        for (String key : reference.keySet()) {
-            assertNotNull(dedup.canonical(key), key);
+        for (String expected : reference.keySet()) {
+            assertNotNull(dedup.canonical(expected), expected);
         }
     }
 
