@@ -347,6 +347,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/cull/SoaFrustumCuller.class",
                         "net/amdfaster/platform/VendorProfile.class",
                         "net/amdfaster/cull/TileDepthBuffer.class",
+                        "net/amdfaster/cull/SoftwareRasterizer.class",
                         "net/amdfaster/mc/ModelCache.class",
                         "net/amdfaster/gpu/BlockBindings.class",
                         // The packing layer between a section mesh and a mapped GPU buffer. It is
