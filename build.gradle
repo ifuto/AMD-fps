@@ -352,6 +352,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/cull/SectionBoundaryMask.class",
                         "net/amdfaster/entity/BlockEntityCuller.class",
                         "net/amdfaster/particle/ParticleLod.class",
+                        "net/amdfaster/draw/DrawBatchOrder.class",
                         "net/amdfaster/mc/ModelCache.class",
                         "net/amdfaster/gpu/BlockBindings.class",
                         // The packing layer between a section mesh and a mapped GPU buffer. It is
