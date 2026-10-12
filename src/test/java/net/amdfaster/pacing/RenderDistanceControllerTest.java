@@ -89,14 +89,19 @@ class RenderDistanceControllerTest {
         // does not yet reflect the change.
         RenderDistanceController controller = new RenderDistanceController(FPS_60, 16);
 
-        for (int frame = 0; frame < RenderDistanceController.SETTLE_FRAMES; frame++) {
+        // The counter is incremented before the test, so the 30th call sees framesSinceChange == 30 and
+        // is no longer inside the window. Twenty-nine calls are suppressed and the thirtieth acts.
+        for (int frame = 0; frame < RenderDistanceController.SETTLE_FRAMES - 1; frame++) {
             controller.onFrame(10 * FPS_60);
             assertEquals(16, controller.distance(), "frame " + frame);
         }
-        assertEquals(RenderDistanceController.SETTLE_FRAMES, controller.suppressedBySettling());
+        assertEquals(RenderDistanceController.SETTLE_FRAMES - 1, controller.suppressedBySettling());
 
         controller.onFrame(10 * FPS_60);
         assertEquals(14, controller.distance(), "and it acts on the first frame after settling");
+
+        controller.onFrame(10 * FPS_60);
+        assertEquals(14, controller.distance(), "then the window starts again");
     }
 
     @Test
