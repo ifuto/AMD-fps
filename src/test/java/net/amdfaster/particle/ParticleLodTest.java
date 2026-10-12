@@ -157,8 +157,10 @@ class ParticleLodTest {
         // The point of implementing the interface: the field's own cull builds the draw list and
         // estimates overdraw, and this decides membership.
         ParticleField field = ParticleField.forClient();
-        field.spawn(5.0f, 5.0f, 5.0f, 0, 0, 0, 10.0f, 0.2f);
-        field.spawn(500.0f, 500.0f, 500.0f, 0, 0, 0, 10.0f, 0.2f);
+        assertTrue(field.spawn(5.0f, 5.0f, 5.0f, 0.0f, 0.0f, 0.0f, 10.0f, 0.2f, 0),
+                "the near particle is accepted");
+        assertTrue(field.spawn(500.0f, 500.0f, 500.0f, 0.0f, 0.0f, 0.0f, 10.0f, 0.2f, 0),
+                "and so is the far one, which the frustum test then rejects");
 
         ParticleLod lod = withBoxFrustum();
         int visible = field.cull(lod, 8.0f);
