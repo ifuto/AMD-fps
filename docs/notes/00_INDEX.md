@@ -113,3 +113,4 @@ jar-in-jar されている」を **assert** し、1 つでも外せばビルド�
 `fetched_content/` に取得済み**で、`10` で照合済み。
 | 21 | [21_fps_technique_plan.md](21_fps_technique_plan.md) | 新規調査した FPS 向上技術（メッシュ生成 / AO / オクルージョン / 即時モード / メモリ / キャッシュ / Vulkan） |
 | 22 | [22_amd_cpu_and_sodium_addon.md](22_amd_cpu_and_sodium_addon.md) | AMD CPU 側（AVX-512 / 3D V-Cache / CPU カリング）、バックエンドプロセス方式の根拠、Sodium Add-on 化 |
+| 23 | [23_intel_native_and_compute.md](23_intel_native_and_compute.md) | Intel ネイティブ（Xe-HPG/Xe2、Thread Director）、XeSS 2/XeLL、計算系（ワールド生成・ノイズ・エンティティ AI・衝突）の軽量化、拡大したベースライン |
