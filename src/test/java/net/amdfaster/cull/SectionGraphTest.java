@@ -74,8 +74,10 @@ class SectionGraphTest {
         int count = graph.walk(world, 0, 0, 0, (x, y, z, depth) -> { });
 
         assertEquals(3, count);
-        assertEquals(4, graph.blockedBySealedFace(), "the Y and Z faces of the middle section");
-        assertEquals(8, graph.blockedByUnloaded(), "four faces at each end of the corridor");
+        // Every section in the corridor refuses its four non-X faces, so the total is four per section
+        // rather than four overall. Only the two faces pointing off the ends find no neighbour.
+        assertEquals(12, graph.blockedBySealedFace(), "four non-X faces on each of the three sections");
+        assertEquals(2, graph.blockedByUnloaded(), "one at each end of the corridor");
     }
 
     @Test
