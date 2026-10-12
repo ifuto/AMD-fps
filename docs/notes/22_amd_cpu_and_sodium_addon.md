@@ -209,10 +209,16 @@ Sodium が居る場合は独立レンダラを起動せず、**Sodium の処理�
 | 1 | SoA フラストムカリング ＋ AVX-512 バックエンド | 未測定 | **実装済み（差分テスト緑）** |
 | 2 | `CacheTopology`（V-Cache 検出と予算） | 未測定 | **実装済み** |
 | 3 | `SimdSupport`（probe ＋ 解決ラダー） | 未測定 | **実装済み** |
-| 4 | `TileDepthBuffer` ＋ `SoftwareRasterizer` | **98% カリング / 4ms** | 未着手 |
+| 4 | `TileDepthBuffer` ＋ `SoftwareRasterizer` | **98% カリング / 4ms** | **実装済み（31テスト緑）** |
+| 4b | `cull/SectionBoundaryMask` ＋ `cull/SectionGraph`（項目32・27） | 未測定 | **実装済み** |
+| 4c | `entity/BlockEntityCuller`（項目28・36） | **400チェストで1.20×** | **実装済み** |
+| 4d | `draw/DrawBatchOrder`（項目35） | 未測定 | **実装済み** |
 | 5 | バックエンドの IPC プロトコルとライフサイクル | — | 未着手 |
 | 6 | `NativeBundle`（JAR からバイナリ展開） | — | 未着手 |
 | 7 | `SodiumPresence` ＋ `SodiumMixinPlugin` | — | 未着手 |
 | 8 | ワーカーの CCD アフィニティ | 未測定 | 未着手 |
+
+**この表の 1-4 は実装済みだが、いずれも未配線である。** 配線は後回しにするという指示による。
+効果を測るには先に配線が要る、という順序は変わっていない。
 
 **全項目、導入前に必ず測定する。** 論文の数字を Minecraft にそのまま持ち込まない。

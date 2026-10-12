@@ -216,7 +216,9 @@ Arc は mesh shader 対応なので、**Intel 経路でここを埋められる*
 | 順 | 項目 | ベンダー | 期待効果 |
 |---|---|---|---|
 | 1 | ベンダー検出層（`CacheTopology` を Intel 形状にも対応） | 両方 | 前提 |
-| 2 | XeLL 相当のフレームペーシング（CPU 作業を GPU の背後に隠す） | 両方 | **レイテンシ 45%** |
+| 2 | XeLL 相当のフレームペーシング（CPU 作業を GPU の背後に隠す） | 両方 | **レイテンシ 45%** → `pacing/FramePacer` **実装済み** |
+| 2b | 描画距離の動的調整（項目17） | 両方 | 16→4 を6段で収束 → `pacing/RenderDistanceController` **実装済み** |
+| 2c | パーティクルの間引き（項目34） | 両方 | 50万パーティクルで2.81ms→0.71ms → `particle/ParticleLod` **実装済み** |
 | 3 | エンティティへの raster occlusion 適用（21 §3 のバッファを共用） | 両方 | **20〜60%** |
 | 4 | density function の AST 化＋共通部分式削除 | 両方 | 未測定 |
 | 5 | CPU 側 AVX2/AVX-512 ノイズ評価（**FP64 必須**） | Intel/AMD | 未測定 |
