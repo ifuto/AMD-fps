@@ -114,3 +114,4 @@ jar-in-jar されている」を **assert** し、1 つでも外せばビルド�
 | 21 | [21_fps_technique_plan.md](21_fps_technique_plan.md) | 新規調査した FPS 向上技術（メッシュ生成 / AO / オクルージョン / 即時モード / メモリ / キャッシュ / Vulkan） |
 | 22 | [22_amd_cpu_and_sodium_addon.md](22_amd_cpu_and_sodium_addon.md) | AMD CPU 側（AVX-512 / 3D V-Cache / CPU カリング）、バックエンドプロセス方式の根拠、Sodium Add-on 化 |
 | 23 | [23_intel_native_and_compute.md](23_intel_native_and_compute.md) | Intel ネイティブ（Xe-HPG/Xe2、Thread Director）、XeSS 2/XeLL、計算系（ワールド生成・ノイズ・エンティティ AI・衝突）の軽量化、拡大したベースライン |
+| 24 | インスタンス化エンティティ描画（Rentities 方式）と AMD での勝ち筋 | `24_instanced_entity_rendering.md` | Rentities 実在確認、**1.21.11 は OpenGL（訂正）**、ボーン行列を頂点ごとでなく体ごとに評価 |
