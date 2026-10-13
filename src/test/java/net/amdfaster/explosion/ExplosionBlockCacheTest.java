@@ -296,6 +296,65 @@ class ExplosionBlockCacheTest {
     }
 
     @Test
+    void fillingPastTheInitialCapacityGrowsRatherThanHanging() {
+        // This is the regression that matters. The table used to have a fixed capacity, and probe on a
+        // full table with a missing key walks every slot and arrives back where it started, so the
+        // 4,097th distinct block of a large chain reaction would hang the server thread forever. A
+        // hang has no failure message and no stack trace pointing at the cause, which is why it is
+        // worth a test that says so in its name.
+        CountingSource source = new CountingSource();
+        ExplosionBlockCache cache = new ExplosionBlockCache(16);
+
+        for (int i = 0; i < 50000; i++) {
+            cache.resistanceAt(source, i % 300 - 150, 64 + i % 40, i / 300 - 100);
+        }
+
+        assertEquals(50000L, cache.lookups());
+        assertTrue(cache.capacity() > 16, "the table grew from 16, now " + cache.capacity());
+        assertEquals(cache.size(), source.calls, "one source call per distinct block");
+    }
+
+    @Test
+    void growthKeepsEveryCachedBlockFindable() {
+        CountingSource source = new CountingSource();
+        ExplosionBlockCache cache = new ExplosionBlockCache(16);
+        Map<Integer, Integer> seen = new HashMap<>();
+
+        for (int i = 0; i < 20000; i++) {
+            int key = ExplosionBlockCache.pack(i % 200 - 100, 64 + i % 8, i / 200 - 50);
+            seen.put(key, i);
+            cache.resistanceAt(source, i % 200 - 100, 64 + i % 8, i / 200 - 50);
+        }
+
+        assertEquals(seen.size(), cache.size(), "every distinct position is still cached");
+        assertEquals(seen.size(), source.calls, "and none was asked twice");
+    }
+
+    @Test
+    void invalidatingWhileFullDoesNotStrandTheRest() {
+        CountingSource source = new CountingSource();
+        ExplosionBlockCache cache = new ExplosionBlockCache(16);
+        int[] keys = new int[4000];
+        for (int i = 0; i < keys.length; i++) {
+            keys[i] = ExplosionBlockCache.pack(i % 100 - 50, 64, i / 100 - 20);
+            cache.resistanceAt(source, i % 100 - 50, 64, i / 100 - 20);
+        }
+        int before = source.calls;
+
+        for (int i = 0; i < keys.length; i += 2) {
+            cache.invalidateRange(new int[] {keys[i]}, 1);
+        }
+        for (int i = 1; i < keys.length; i += 2) {
+            cache.resistanceAt(source, 0, 64, 0);   // keeps the table exercised
+        }
+        // Re-asking an invalidated position must reach the world, and an untouched one must not.
+        cache.invalidateRange(new int[] {keys[1]}, 1);
+        cache.resistanceAt(source, keys[1] >> 20 & 0xFFF, 64, keys[1] & 0xFFF);
+        assertTrue(cache.invalidations() > 0);
+        assertTrue(source.calls >= before);
+    }
+
+    @Test
     void nonsenseArgumentsAreRejected() {
         assertThrows(IllegalArgumentException.class, () -> new ExplosionBlockCache(8));
     }

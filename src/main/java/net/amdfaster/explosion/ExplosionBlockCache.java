@@ -47,10 +47,11 @@ public final class ExplosionBlockCache {
 
     private static final int DEFAULT_CAPACITY = 4096;
 
-    private final int[] keys;
-    private final float[] values;
-    private final boolean[] occupied;
-    private final int capacity;
+    private int[] keys;
+    private float[] values;
+    private boolean[] occupied;
+    private int capacity;
+    private int size;
 
     private long lookups;
     private long hits;
@@ -75,6 +76,17 @@ public final class ExplosionBlockCache {
     }
 
     /**
+     * How full the table is before it doubles.
+     *
+     * <p>Three quarters, the same threshold {@code mem/Canonicalizer} uses. Open addressing degrades
+     * fast past this: probe length grows roughly as 1/(1-load), so going from 0.75 to 0.9 more than
+     * doubles the average probe, and at 1.0 a probe that does not find its key never terminates at
+     * all. That last part is not hypothetical -- it is what this class did before it could grow.
+     */
+    private static final int LOAD_NUMERATOR = 3;
+    private static final int LOAD_DENOMINATOR = 4;
+
+    /**
      * Resolves a block's resistance, asking the world only if it has not been asked already.
      */
     public float resistanceAt(BlockSource source, int x, int y, int z) {
@@ -89,7 +101,41 @@ public final class ExplosionBlockCache {
         this.keys[index] = key;
         this.values[index] = resistance;
         this.occupied[index] = true;
+        this.size++;
+        if (this.size * LOAD_DENOMINATOR >= this.capacity * LOAD_NUMERATOR) {
+            grow();
+        }
         return resistance;
+    }
+
+    /**
+     * Doubles the table and rehashes.
+     *
+     * <p>Without this the table fills, and {@link #probe} on a full table with a missing key walks
+     * every slot and comes back to where it started. A cache that hangs the server thread on the
+     * 4,097th distinct block of a large chain reaction is worse than no cache.
+     */
+    private void grow() {
+        int[] oldKeys = this.keys;
+        float[] oldValues = this.values;
+        boolean[] oldOccupied = this.occupied;
+        int oldCapacity = this.capacity;
+
+        this.capacity = oldCapacity * 2;
+        this.keys = new int[this.capacity];
+        this.values = new float[this.capacity];
+        this.occupied = new boolean[this.capacity];
+        this.size = 0;
+        for (int i = 0; i < oldCapacity; i++) {
+            if (!oldOccupied[i]) {
+                continue;
+            }
+            int index = probe(oldKeys[i]);
+            this.keys[index] = oldKeys[i];
+            this.values[index] = oldValues[i];
+            this.occupied[index] = true;
+            this.size++;
+        }
     }
 
     /**
@@ -107,6 +153,7 @@ public final class ExplosionBlockCache {
             return;
         }
         this.occupied[index] = false;
+        this.size--;
         this.invalidations++;
         backshift(index);
     }
@@ -117,6 +164,7 @@ public final class ExplosionBlockCache {
             int index = probe(packedPositions[i]);
             if (this.occupied[index]) {
                 this.occupied[index] = false;
+                this.size--;
                 this.invalidations++;
                 backshift(index);
             }
@@ -132,6 +180,7 @@ public final class ExplosionBlockCache {
      */
     public void clear() {
         Arrays.fill(this.occupied, false);
+        this.size = 0;
     }
 
     private int probe(int key) {
@@ -193,6 +242,15 @@ public final class ExplosionBlockCache {
         h *= 0x85EBCA6B;
         h ^= h >>> 13;
         return h & 0x7FFFFFFF;
+    }
+
+    /** Distinct blocks currently cached. */
+    public int size() {
+        return this.size;
+    }
+
+    public int capacity() {
+        return this.capacity;
     }
 
     public long lookups() {
