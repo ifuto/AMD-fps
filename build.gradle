@@ -361,6 +361,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/entity/EntitySkinnedMesh.class",
                         "net/amdfaster/entity/EntityAnimation.class",
                         "net/amdfaster/gpu/EntityUploadLayout.class",
+                        "net/amdfaster/explosion/ExplosionBlockCache.class",
                         "net/amdfaster/mc/ModelCache.class",
                         "net/amdfaster/gpu/BlockBindings.class",
                         // The packing layer between a section mesh and a mapped GPU buffer. It is
