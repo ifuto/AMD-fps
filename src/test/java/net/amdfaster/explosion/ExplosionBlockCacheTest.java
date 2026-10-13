@@ -364,13 +364,16 @@ class ExplosionBlockCacheTest {
         }
         assertEquals(keys.length / 2, cache.invalidations());
         assertEquals(before, source.calls, "invalidating does not ask the world anything");
-        // Re-asking a removed position reaches the world; an untouched one does not.
-        cache.resistanceAt(source, 1 % 100 - 50, 64, 1 / 100 - 20);
-        assertEquals(before + 1, source.calls, "position 1 was invalidated, so it is asked again");
+        // Even indices were invalidated, odd ones were not. Re-asking a removed position has to
+        // reach the world and an untouched one has to be answered from the cache.
         cache.resistanceAt(source, 0 % 100 - 50, 64, 0 / 100 - 20);
-        assertEquals(before + 2, source.calls, "and so was position 0");
+        assertEquals(before + 1, source.calls, "position 0 was invalidated, so it is asked again");
+        cache.resistanceAt(source, 2 % 100 - 50, 64, 2 / 100 - 20);
+        assertEquals(before + 2, source.calls, "and so was position 2");
+        cache.resistanceAt(source, 1 % 100 - 50, 64, 1 / 100 - 20);
+        assertEquals(before + 2, source.calls, "position 1 was never invalidated and stays cached");
         cache.resistanceAt(source, 3 % 100 - 50, 64, 3 / 100 - 20);
-        assertEquals(before + 2, source.calls, "position 3 was never invalidated and stays cached");
+        assertEquals(before + 2, source.calls, "nor was position 3");
     }
 
     @Test
