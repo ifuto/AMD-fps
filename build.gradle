@@ -356,6 +356,8 @@ tasks.register("verifyJar") {
                         "net/amdfaster/pacing/RenderDistanceController.class",
                         "net/amdfaster/cull/SectionGraph.class",
                         "net/amdfaster/mem/Canonicalizer.class",
+                        "net/amdfaster/entity/BonePalette.class",
+                        "net/amdfaster/entity/BoneRig.class",
                         "net/amdfaster/mc/ModelCache.class",
                         "net/amdfaster/gpu/BlockBindings.class",
                         // The packing layer between a section mesh and a mapped GPU buffer. It is
