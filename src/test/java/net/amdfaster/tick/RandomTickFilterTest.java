@@ -103,10 +103,15 @@ class RandomTickFilterTest {
             tickable[x & 7][y & 7][z & 7] = now;
             filter.onBlockChanged(x, y, z, was, now);
 
-            long key = RandomTickFilter.sectionKey(x >> 4, y >> 4, z >> 4);
-            reference.merge(key, now ? 1 : -1, Integer::sum);
-            if (reference.get(key) == 0) {
-                reference.remove(key);
+            // The reference has to apply the same rule the filter does: a block that did not change
+            // contributes nothing. Applying a delta unconditionally here made the reference drift by
+            // one on every no-op, which is the filter being right and the test being wrong.
+            if (was != now) {
+                long key = RandomTickFilter.sectionKey(x >> 4, y >> 4, z >> 4);
+                reference.merge(key, now ? 1 : -1, Integer::sum);
+                if (reference.get(key) == 0) {
+                    reference.remove(key);
+                }
             }
 
             if (step % 2000 == 0) {
