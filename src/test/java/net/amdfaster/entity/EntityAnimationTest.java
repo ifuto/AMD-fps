@@ -50,7 +50,7 @@ class EntityAnimationTest {
                 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
         animation.evaluate(pose, QUADRUPED_CHANNELS, angle);
 
-        assertEquals(-0.698222f, angle[3], EPS, "cos(3.1416 * 0.6662) * 1.4");
+        assertEquals(-0.698228f, angle[3], 1e-5f, "cos(3.1416 * 0.6662) * 1.4");
     }
 
     @Test
