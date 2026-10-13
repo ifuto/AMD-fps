@@ -33,6 +33,7 @@ class ExplosionBlockCacheTest {
     @Test
     void theSameBlockIsAskedOnceHoweverManyRaysCrossIt() {
         CountingSource source = new CountingSource();
+        source.set(3, 64, -7, 1.5f);
         ExplosionBlockCache cache = new ExplosionBlockCache();
 
         for (int i = 0; i < 1000; i++) {
@@ -238,27 +239,44 @@ class ExplosionBlockCacheTest {
     void invalidationKeepsEverythingElseFindable() {
         // The backshift case. Removing from an open addressing table strands every entry whose probe
         // walked past the hole, and a later lookup then reports absent for a block that is cached.
+        // Every position is inserted under its own coordinates and re-asked by coordinate, so the
+        // only thing that can make a lookup miss is the table having lost it.
         CountingSource source = new CountingSource();
         ExplosionBlockCache cache = new ExplosionBlockCache();
-        Map<Integer, Integer> packed = new HashMap<>();
-        for (int i = 0; i < 2000; i++) {
-            packed.put(ExplosionBlockCache.pack(i % 40 - 20, 64 + i % 8, i / 40 - 25), i);
+        int[][] positions = new int[2000][3];
+        for (int i = 0; i < positions.length; i++) {
+            positions[i][0] = i % 40 - 20;
+            positions[i][1] = 64 + i % 8;
+            positions[i][2] = i / 40 - 25;
+            cache.resistanceAt(source, positions[i][0], positions[i][1], positions[i][2]);
         }
-        for (int key : packed.keySet()) {
-            cache.resistanceAt(source, 0, 64, 0);   // exercise the table without depending on unpack
-        }
-        assertEquals(packed.size(), source.calls);
+        assertEquals(2000, source.calls, "two thousand distinct positions");
+        assertEquals(2000, cache.size());
 
         Random random = new Random(20261013L);
-        int removed = 0;
-        for (int key : packed.keySet()) {
+        boolean[] removed = new boolean[positions.length];
+        int removedCount = 0;
+        for (int i = 0; i < positions.length; i++) {
             if (random.nextBoolean()) {
-                cache.invalidateRange(new int[] {key}, 1);
-                removed++;
+                cache.invalidate(positions[i][0], positions[i][1], positions[i][2]);
+                removed[i] = true;
+                removedCount++;
             }
         }
-        assertEquals(removed, cache.invalidations());
-        assertTrue(cache.hitRatePercent() > 0.0);
+        assertEquals(removedCount, cache.invalidations());
+        assertEquals(positions.length - removedCount, cache.size());
+
+        for (int i = 0; i < positions.length; i++) {
+            int before = source.calls;
+            cache.resistanceAt(source, positions[i][0], positions[i][1], positions[i][2]);
+            if (removed[i]) {
+                assertEquals(before + 1, source.calls,
+                        "removed position " + i + " must be asked again");
+            } else {
+                assertEquals(before, source.calls,
+                        "surviving position " + i + " must still be cached, so the backshift lost it");
+            }
+        }
     }
 
     @Test
@@ -344,14 +362,15 @@ class ExplosionBlockCacheTest {
         for (int i = 0; i < keys.length; i += 2) {
             cache.invalidateRange(new int[] {keys[i]}, 1);
         }
-        for (int i = 1; i < keys.length; i += 2) {
-            cache.resistanceAt(source, 0, 64, 0);   // keeps the table exercised
-        }
-        // Re-asking an invalidated position must reach the world, and an untouched one must not.
-        cache.invalidateRange(new int[] {keys[1]}, 1);
-        cache.resistanceAt(source, keys[1] >> 20 & 0xFFF, 64, keys[1] & 0xFFF);
-        assertTrue(cache.invalidations() > 0);
-        assertTrue(source.calls >= before);
+        assertEquals(keys.length / 2, cache.invalidations());
+        assertEquals(before, source.calls, "invalidating does not ask the world anything");
+        // Re-asking a removed position reaches the world; an untouched one does not.
+        cache.resistanceAt(source, 1 % 100 - 50, 64, 1 / 100 - 20);
+        assertEquals(before + 1, source.calls, "position 1 was invalidated, so it is asked again");
+        cache.resistanceAt(source, 0 % 100 - 50, 64, 0 / 100 - 20);
+        assertEquals(before + 2, source.calls, "and so was position 0");
+        cache.resistanceAt(source, 3 % 100 - 50, 64, 3 / 100 - 20);
+        assertEquals(before + 2, source.calls, "position 3 was never invalidated and stays cached");
     }
 
     @Test
