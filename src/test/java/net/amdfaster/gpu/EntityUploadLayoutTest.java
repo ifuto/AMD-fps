@@ -63,10 +63,11 @@ class EntityUploadLayoutTest {
             EntityUploadLayout layout = EntityUploadLayout.of(count);
             assertEquals(0, layout.boneOffset() % EntityUploadLayout.BONE_ALIGNMENT,
                     "count " + count + " gives bone offset " + layout.boneOffset());
-            assertEquals(0, layout.boneOffsetOf(0) % EntityUploadLayout.BONE_ALIGNMENT);
             if (count > 0) {
                 // Every instance's palette starts on a 64 byte boundary too, since the stride is a
-                // multiple of the alignment.
+                // multiple of the alignment. Asking for instance 0 of an empty layout throws, which
+                // is correct behaviour and not something this test should trip over.
+                assertEquals(0, layout.boneOffsetOf(0) % EntityUploadLayout.BONE_ALIGNMENT);
                 assertEquals(0, layout.boneOffsetOf(count - 1) % EntityUploadLayout.BONE_ALIGNMENT);
             }
         }
@@ -91,8 +92,11 @@ class EntityUploadLayoutTest {
         assertEquals(0, layout.instanceOffsetOf(0));
         assertEquals(32, layout.instanceOffsetOf(1));
         assertEquals(288, layout.instanceOffsetOf(9));
-        assertEquals(64, layout.boneOffsetOf(0));
-        assertEquals(64 + 1536, layout.boneOffsetOf(1));
+        // Ten instances are 320 bytes, which is already a multiple of 64, so the palette starts
+        // there rather than at the minimum. Read it from the layout rather than assuming.
+        assertEquals(320, layout.boneOffset());
+        assertEquals(320, layout.boneOffsetOf(0));
+        assertEquals(320 + 1536, layout.boneOffsetOf(1));
     }
 
     @Test
