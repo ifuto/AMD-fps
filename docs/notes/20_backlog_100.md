@@ -30,7 +30,7 @@
 | 12 | セクション別ジオメトリ管理 | **完了** | `mesh/SectionMesh`, `gpu/MeshletGpuLayout` |
 | 13 | 差分メッシュ更新 | 部分 | `dirty/SectionSet`, `RebuildScheduler`。セクション内部の差分は無い |
 | 14 | 描画レイヤー別再構築 | 部分 | ライトのみを別ストリームにする設計はあるが実装は無い |
-| 15 | 転送の一括化 | 未 | |
+| 15 | 転送の一括化 | 完了 | `gpu/UploadRing`（常時マップ＋in-flight 追跡）と `gpu/MeshUploadLayout`（セクションの4ストリームを1予約に）。エンティティ側は `gpu/EntityUploadLayout` が同じ規約で担当 |
 | 16 | 材質順の描画ソート | **完了** | `cull/SortKey` = bucket(8)\|depth(32)\|id(24) 符号なし比較 |
 | 17 | テクスチャ切り替え削減 | 完了 | pacing/RenderDistanceController がヒステリシス付きで距離を動かす |
 | 18 | GUI・文字・パーティクルのバッチ描画 | 部分 | `entity/EntityBatcher`, `SpatialEntityBatcher` はエンティティのみ |
