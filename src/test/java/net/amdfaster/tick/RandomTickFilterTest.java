@@ -91,7 +91,10 @@ class RandomTickFilterTest {
         // nothing announces it. So it is checked against a reference on every checkpoint.
         RandomTickFilter filter = new RandomTickFilter();
         Map<Long, Integer> reference = new HashMap<>();
-        boolean[][][] tickable = new boolean[8][8][8];
+        // State per actual block position. An earlier version used a boolean[8][8][8] indexed by the
+        // low three bits while drawing coordinates up to 127, so "was" came back from whichever
+        // other block shared those bits and the filter was told about changes that never happened.
+        Map<Long, Boolean> blockState = new HashMap<>();
         Random random = new Random(20261013L);
 
         for (int step = 0; step < 20000; step++) {
@@ -99,8 +102,9 @@ class RandomTickFilterTest {
             int y = random.nextInt(128);
             int z = random.nextInt(128);
             boolean now = random.nextBoolean();
-            boolean was = tickable[x & 7][y & 7][z & 7];
-            tickable[x & 7][y & 7][z & 7] = now;
+            long blockKey = ((long) x << 42) | ((long) y << 21) | z;
+            boolean was = blockState.getOrDefault(blockKey, false);
+            blockState.put(blockKey, now);
             filter.onBlockChanged(x, y, z, was, now);
 
             // The reference has to apply the same rule the filter does: a block that did not change
