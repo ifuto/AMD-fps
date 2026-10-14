@@ -80,7 +80,8 @@ class VramBudgetTest {
         assertEquals(2457L * VramBudget.TILE_BYTES, budget.uniqueBytes());
         assertEquals(1639L * VramBudget.TILE_BYTES, budget.bytesSaved());
         assertEquals(1_678_336L, budget.bytesSaved());
-        assertEquals(40.0, budget.savedPercent(), 0.01);
+        // 1639 of 4096, which is 40.0146... rather than a round 40.
+        assertEquals(100.0 * 1639 / 4096, budget.savedPercent(), 1e-9);
     }
 
     @Test
