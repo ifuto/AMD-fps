@@ -194,10 +194,11 @@ class PathCacheTest {
             }
         }
         assertEquals(50 * 60 * 32 * 8L, readsWithout, "what vanilla would read");
-        // Each mob searches on the first second and then not again within the 40 tick window, so it
-        // searches on alternating seconds.
-        assertEquals(50 * 30 * 32 * 8L, readsWith, "half of it, from the memo alone");
-        assertEquals(50 * 30L, cache.memoHits());
+        // A memo recorded at tick t is believed while tick - t is 40 or less, so the next search is
+        // at t + 60, not t + 40: the window is inclusive at the far end and the checks land every 20
+        // ticks. Twenty searches a mob over a minute rather than thirty.
+        assertEquals(50 * 20 * 32 * 8L, readsWith, "a third of it, from the memo alone");
+        assertEquals(50 * 40L, cache.memoHits(), "the other forty seconds of checks were answered");
     }
 
     @Test
