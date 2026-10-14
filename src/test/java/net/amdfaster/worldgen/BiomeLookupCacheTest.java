@@ -179,7 +179,9 @@ class BiomeLookupCacheTest {
         BiomeLookupCache cache = new BiomeLookupCache(16, 16);
 
         for (int i = 0; i < 4000; i++) {
-            cache.biomeAt((x, y, z) -> i % 64, i % 64 - 32, 64, i / 64 - 32);
+            // Captured, because a lambda cannot close over a loop variable that is still changing.
+            final int id = i % 64;
+            cache.biomeAt((x, y, z) -> id, i % 64 - 32, 64, i / 64 - 32);
         }
         for (int i = 0; i < 4000; i++) {
             cache.surfaceBlockFor((b, d) -> b + d, i % 256, i % 256);
