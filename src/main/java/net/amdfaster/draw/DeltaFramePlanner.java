@@ -215,7 +215,13 @@ public final class DeltaFramePlanner {
     public Plan plan() {
         this.frames++;
         Plan plan = new Plan();
-        for (int i = 0; i < this.count; i++) {
+        // The whole table, not the first count slots. Entries live wherever the hash put them, so a
+        // section can sit at an index well past the number of sections tracked, and scanning by count
+        // simply did not visit it. Measured: 400 sections and 318 visited.
+        for (int i = 0; i < this.capacity; i++) {
+            if (!this.occupied[i]) {
+                continue;
+            }
             if (this.geometryVersions[i] != this.uploadedGeometry[i]) {
                 add(plan.geometryUploads, plan, 0, this.keys[i]);
                 plan.geometryUploadCount++;

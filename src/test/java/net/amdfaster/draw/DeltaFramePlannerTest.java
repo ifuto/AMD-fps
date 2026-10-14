@@ -257,8 +257,29 @@ class DeltaFramePlannerTest {
             assertTrue(planner.isTracked(i), "section " + i + " survived every rehash");
         }
 
+        // Planned in batches, since a frame caps how many sections it will touch at once.
+        int planned = 0;
+        for (int batch = 0; batch < 3; batch++) {
+            DeltaFramePlanner.Plan plan = planner.plan();
+            planned += plan.drawAddCount;
+            planner.commit(plan);
+        }
+        assertEquals(5000, planned, "every tracked section was visited");
+    }
+
+    @Test
+    void planVisitsEveryTrackedSectionHoweverTheyHash() {
+        // The bug this catches. Entries live wherever the hash put them, so a section can sit at an
+        // index well past the number of sections tracked. Scanning the first count slots visited 318
+        // of 400 and silently skipped the rest.
+        DeltaFramePlanner planner = new DeltaFramePlanner(1024);
+        for (int i = 0; i < 400; i++) {
+            planner.geometryChanged(i);
+        }
+        assertEquals(400, planner.trackedCount());
+
         DeltaFramePlanner.Plan plan = planner.plan();
-        assertEquals(5000, plan.drawAddCount);
+        assertEquals(400, plan.geometryUploadCount, "no section was skipped");
     }
 
     @Test
