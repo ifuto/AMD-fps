@@ -117,19 +117,18 @@ class ChunkStageSchedulerTest {
     }
 
     @Test
-    void aFinishedRegionIsNotDeadlocked() {
+    void deadlockIsReportedOnlyWhenNothingCanMoveAndSomethingIsUnfinished() {
+        // A 3 by 3 tracked block inside a larger region: the centre has all eight neighbours tracked,
+        // so it can keep going, and the set is not stuck. An earlier version of this test asserted the
+        // opposite, having forgotten that the centre of a 3 by 3 block is fully surrounded.
         ChunkStageScheduler scheduler = new ChunkStageScheduler(5, 5);
         for (int z = 1; z < 4; z++) {
             for (int x = 1; x < 4; x++) {
                 scheduler.track(x, z);
             }
         }
-        // Only the interior, so every chunk has all eight neighbours tracked.
         for (int z = 1; z < 4; z++) {
             for (int x = 1; x < 4; x++) {
-                // The interior chunks need neighbours at the region edge, which are untracked, so the
-                // neighbour-requiring stages stay blocked. That is correct, and it is not a deadlock
-                // in the sense this reports, because the requirement is satisfiable in a real world.
                 scheduler.advance(x, z);
             }
         }
@@ -138,8 +137,26 @@ class ChunkStageSchedulerTest {
                 assertEquals(Stage.STRUCTURE_STARTS, scheduler.stageAt(x, z));
             }
         }
-        assertTrue(scheduler.isDeadlocked(),
-                "blocked by untracked neighbours, which is what deadlock detection reports");
+
+        assertTrue(scheduler.canAdvance(2, 2), "the centre has all eight neighbours tracked");
+        assertFalse(scheduler.canAdvance(1, 1), "the corner of the block does not");
+        assertFalse(scheduler.isDeadlocked(), "and so the set is not stuck");
+    }
+
+    @Test
+    void aSetWhereNothingCanMoveIsReportedAsDeadlocked() {
+        // Two chunks side by side: each is missing a neighbour on the far side, so once both reach
+        // STRUCTURE_STARTS neither can go further, and workers would idle with no error anywhere.
+        ChunkStageScheduler scheduler = new ChunkStageScheduler(5, 5);
+        scheduler.track(2, 2);
+        scheduler.track(3, 2);
+        assertTrue(scheduler.advance(2, 2));
+        assertTrue(scheduler.advance(3, 2));
+
+        assertFalse(scheduler.canAdvance(2, 2));
+        assertFalse(scheduler.canAdvance(3, 2));
+        assertTrue(scheduler.isDeadlocked());
+        assertEquals(0, scheduler.finishedCount(), "and nothing got to FULL");
     }
 
     @Test
@@ -189,7 +206,16 @@ class ChunkStageSchedulerTest {
         }
 
         ready = scheduler.collectReady(xs, zs);
-        assertEquals(0, ready, "and then none can, because the neighbours are untracked");
+        // One, not zero. The centre of the 3 by 3 tracked block has all eight neighbours tracked, so
+        // it can move to the reference stage; the eight around it cannot, because their neighbours
+        // reach outside the tracked block.
+        assertEquals(1, ready, "only the fully surrounded centre can go on");
+        assertEquals(2, xs[0]);
+        assertEquals(2, zs[0]);
+        assertTrue(scheduler.advance(xs[0], zs[0]));
+
+        ready = scheduler.collectReady(xs, zs);
+        assertEquals(0, ready, "and then genuinely none can");
     }
 
     @Test
