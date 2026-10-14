@@ -115,64 +115,101 @@ class FrameSlotSchedulerTest {
     }
 
     @Test
-    void aTwoSlotPipelineNeverStallsWhenTheCpuIsFasterThanTheGpu() {
-        // The case that justifies the class. CPU 4 ms against GPU 6 ms: frame N+1 needs the slot frame
-        // N-1 used, which the GPU released at 4(N-1)+6 = 4N+2, and frame N+1's CPU work starts at
-        // 4N+4. The slot is free two milliseconds before it is needed.
-        FrameSlotScheduler scheduler = new FrameSlotScheduler(2);
-        double cpu = 4.0;
-        double gpu = 6.0;
+    void theSlotCountNeededIsOnePlusGpuOverCpu() {
+        // Simulated against the scheduler rather than argued, because the intuition that two slots
+        // always overlap one frame against one is wrong. Frame f's GPU work finishes at (f+1)*cpu+gpu
+        // and frame f+K needs the same slot at (f+K)*cpu, so K*cpu has to reach cpu+gpu.
+        assertEquals(3, FrameSlotScheduler.slotsFor(4_000_000L, 6_000_000L));
+        assertEquals(2, FrameSlotScheduler.slotsFor(6_000_000L, 6_000_000L));
+        assertEquals(2, FrameSlotScheduler.slotsFor(8_000_000L, 3_000_000L));
+        assertEquals(1, FrameSlotScheduler.slotsFor(4_000_000L, 0L));
+        assertEquals(FrameSlotScheduler.MAX_SLOTS,
+                FrameSlotScheduler.slotsFor(1_000_000L, 100_000_000L), "capped");
+    }
 
+    @Test
+    void threeSlotsRunCpuFasterThanGpuWithoutStalling() {
+        FrameSlotScheduler scheduler = new FrameSlotScheduler(
+                FrameSlotScheduler.slotsFor(4_000_000L, 6_000_000L));
+        assertEquals(3, scheduler.slotCount());
+
+        runFrames(scheduler, 3, 4.0, 6.0, 200);
+
+        assertEquals(0L, scheduler.stalls(), "never had to wait");
+        assertEquals(0.0, scheduler.stallRatePercent());
+        assertEquals(200L, scheduler.submits());
+    }
+
+    @Test
+    void twoSlotsAreNotEnoughWhenTheGpuIsSlowerThanTheCpu() {
+        // The correction. At 4 ms of CPU against 6 ms of GPU, frame 2 wants the slot frame 0 used, but
+        // that slot's GPU work does not finish until t = 10 and frame 2 starts at t = 8.
+        FrameSlotScheduler scheduler = new FrameSlotScheduler(2);
+
+        runFrames(scheduler, 2, 4.0, 6.0, 200);
+
+        assertEquals(99L, scheduler.stalls(), "half the frames, not none");
+    }
+
+    @Test
+    void twoSlotsAreEnoughWhenTheGpuKeepsUp() {
+        FrameSlotScheduler scheduler = new FrameSlotScheduler(2);
+
+        runFrames(scheduler, 2, 6.0, 6.0, 200);
+
+        assertEquals(0L, scheduler.stalls());
+    }
+
+    /**
+     * Drives the scheduler with a CPU that runs ahead and a GPU that finishes asynchronously.
+     *
+     * <p>When every slot is busy the CPU waits for the earliest GPU completion, which is what a real
+     * caller does, and the frame is then issued.
+     */
+    private static void runFrames(FrameSlotScheduler scheduler, int slots,
+                                  double cpu, double gpu, int frames) {
         double now = 0.0;
-        double[] gpuFinish = {Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
-        int frames = 200;
+        double[] finish = new double[slots];
+        java.util.Arrays.fill(finish, Double.NEGATIVE_INFINITY);
 
         for (int frame = 0; frame < frames; frame++) {
-            // Release the slot whose GPU work has finished by now.
-            for (int slot = 0; slot < 2; slot++) {
-                if (gpuFinish[slot] <= now && scheduler.isInFlight(slot)) {
+            for (int slot = 0; slot < slots; slot++) {
+                if (finish[slot] <= now && scheduler.isInFlight(slot)) {
                     scheduler.complete(slot);
                 }
             }
             int slot = scheduler.acquire();
-            assertTrue(slot != FrameSlotScheduler.NO_SLOT, "frame " + frame + " found a free slot");
+            if (slot == FrameSlotScheduler.NO_SLOT) {
+                double earliest = Double.POSITIVE_INFINITY;
+                for (int i = 0; i < slots; i++) {
+                    if (scheduler.isInFlight(i)) {
+                        earliest = Math.min(earliest, finish[i]);
+                    }
+                }
+                now = earliest;
+                for (int i = 0; i < slots; i++) {
+                    if (finish[i] <= now && scheduler.isInFlight(i)) {
+                        scheduler.complete(i);
+                    }
+                }
+                slot = scheduler.acquire();
+                assertTrue(slot != FrameSlotScheduler.NO_SLOT, "frame " + frame + " after waiting");
+            }
             scheduler.submit(slot);
             now += cpu;
-            gpuFinish[slot] = now + gpu;
+            finish[slot] = now + gpu;
         }
-
-        assertEquals(0L, scheduler.stalls(), "never had to wait");
-        assertEquals(0.0, scheduler.stallRatePercent());
-        assertEquals(frames, scheduler.submits());
     }
 
     @Test
-    void aOneSlotPipelineStallsEveryFrame() {
+    void aOneSlotPipelineStallsEveryFrameButTheFirst() {
         // What the same workload costs without overlap, which is the comparison the class exists for.
         FrameSlotScheduler scheduler = new FrameSlotScheduler(1);
-        double cpu = 4.0;
-        double gpu = 6.0;
-        double now = 0.0;
-        double gpuFinish = Double.NEGATIVE_INFINITY;
 
-        for (int frame = 0; frame < 200; frame++) {
-            if (gpuFinish <= now && scheduler.isInFlight(0)) {
-                scheduler.complete(0);
-            }
-            int slot = scheduler.acquire();
-            if (slot == FrameSlotScheduler.NO_SLOT) {
-                // The CPU waits for the GPU, which is the stall.
-                now = gpuFinish;
-                scheduler.complete(0);
-                slot = scheduler.acquire();
-            }
-            scheduler.submit(slot);
-            now += cpu;
-            gpuFinish = now + gpu;
-        }
+        runFrames(scheduler, 1, 4.0, 6.0, 200);
 
-        assertEquals(200L, scheduler.stalls(), "every single frame");
-        assertEquals(100.0, scheduler.stallRatePercent());
+        assertEquals(199L, scheduler.stalls(), "every frame after the first");
+        assertEquals(99.5, scheduler.stallRatePercent(), 0.01);
     }
 
     @Test
@@ -204,6 +241,12 @@ class FrameSlotSchedulerTest {
         assertEquals(40.0, (1.0 - Math.max(cpu, gpu) / (cpu + gpu)) * 100.0, 0.01);
         // And half, when the two are equal.
         assertEquals(50.0, (1.0 - 6.0 / 12.0) * 100.0, 0.01);
+    }
+
+    @Test
+    void slotsForRejectsNonsenseArguments() {
+        assertThrows(IllegalArgumentException.class, () -> FrameSlotScheduler.slotsFor(0L, 1L));
+        assertThrows(IllegalArgumentException.class, () -> FrameSlotScheduler.slotsFor(1L, -1L));
     }
 
     @Test
