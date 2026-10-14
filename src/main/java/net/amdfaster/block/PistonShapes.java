@@ -126,6 +126,10 @@ public final class PistonShapes {
      * comment rather than only against each other.
      */
     static BoxShape build(int axis, boolean positive, boolean extended) {
+        // Checked here and not only in index. Without it an out-of-range axis falls through both
+        // loops without matching, every box becomes a full cube, and the caller gets a piston that
+        // collides like a solid block instead of an exception.
+        checkAxis(axis);
         if (!extended) {
             return new BoxShape(0f, 0f, 0f, 1f, 1f, 1f);
         }

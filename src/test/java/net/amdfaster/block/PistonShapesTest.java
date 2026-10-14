@@ -57,14 +57,17 @@ class PistonShapesTest {
         BoxShape shape = PistonShapes.build(PistonShapes.AXIS_Y, true, true);
 
         assertEquals(2, shape.boxCount());
-        // Sorted, so the shaft (starting at 0.25 on the non-facing axes) comes before the base.
-        assertEquals(0.25f, shape.min(0, 0), 0.0f);
-        assertEquals(0.75f, shape.max(0, 0), 0.0f);
-        assertEquals(0.75f, shape.min(0, 1), 0.0f, "the shaft starts where the base ends");
-        assertEquals(1.0f, shape.max(0, 1), 0.0f);
+        // Sorted by minX first, so the base (which spans the whole X extent from 0) comes before the
+        // shaft (which starts at 0.25). An earlier version of this test had them the other way round.
+        assertEquals(0.0f, shape.min(0, 0), 0.0f, "base first");
+        assertEquals(1.0f, shape.max(0, 0), 0.0f);
+        assertEquals(0.0f, shape.min(0, 1), 0.0f);
+        assertEquals(0.75f, shape.max(0, 1), 0.0f, "the base is three quarters deep");
 
-        assertEquals(0.0f, shape.min(1, 0), 0.0f);
-        assertEquals(0.75f, shape.max(1, 1), 0.0f, "the base is three quarters deep");
+        assertEquals(0.25f, shape.min(1, 0), 0.0f, "shaft second");
+        assertEquals(0.75f, shape.max(1, 0), 0.0f);
+        assertEquals(0.75f, shape.min(1, 1), 0.0f, "the shaft starts where the base ends");
+        assertEquals(1.0f, shape.max(1, 1), 0.0f);
     }
 
     @Test
@@ -121,10 +124,24 @@ class PistonShapesTest {
         BoxShape down = pistons.shape(PistonShapes.AXIS_Y, false, true);
 
         assertFalse(up.equals(down));
-        assertTrue(up.touchesFace(1, true), "the upward piston reaches the top of the block");
-        assertFalse(up.touchesFace(1, false), "and not the bottom");
-        assertTrue(down.touchesFace(1, false));
-        assertFalse(down.touchesFace(1, true));
+        // Both reach both faces, because the base spans the full non-facing extent and starts at the
+        // block boundary. What differs is where the base sits, so that is what gets checked.
+        assertTrue(up.touchesFace(1, true));
+        assertTrue(up.touchesFace(1, false));
+        boolean upHasHighBase = false;
+        boolean downHasLowBase = false;
+        for (int b = 0; b < up.boxCount(); b++) {
+            if (up.min(b, 0) == 0.0f && up.max(b, 1) == 0.75f) {
+                upHasHighBase = true;
+            }
+        }
+        for (int b = 0; b < down.boxCount(); b++) {
+            if (down.min(b, 0) == 0.0f && down.min(b, 1) == 0.25f) {
+                downHasLowBase = true;
+            }
+        }
+        assertTrue(upHasHighBase, "the upward piston's base sits low and its head is high");
+        assertTrue(downHasLowBase, "the downward one is the other way round");
     }
 
     @Test
@@ -152,20 +169,24 @@ class PistonShapesTest {
     }
 
     @Test
-    void indexCoversAllTwelveSlotsExactlyOnce() {
+    void everyOneOfTheTwelveSlotsResolvesToAShape() {
         PistonShapes pistons = PistonShapes.instance();
-        Set<BoxShape> byIdentity = new HashSet<>();
+        Set<BoxShape> distinct = new HashSet<>();
         int count = 0;
         for (int axis = 0; axis < 3; axis++) {
             for (boolean positive : new boolean[] {false, true}) {
                 for (boolean extended : new boolean[] {false, true}) {
-                    assertTrue(pistons.shape(axis, positive, extended) != null);
+                    BoxShape shape = pistons.shape(axis, positive, extended);
+                    assertTrue(shape != null, "axis " + axis);
+                    assertTrue(shape.boxCount() > 0);
+                    distinct.add(shape);
                     count++;
                 }
             }
         }
-        assertEquals(12, count);
-        assertEquals(7, byIdentity.size() + pistons.distinctShapes() - 7 + 7 - 7,
-                "sanity: the distinct count is what the cache reports");
+        assertEquals(12, count, "six facings times two states");
+        assertEquals(7, distinct.size(), "and seven distinct objects among them");
+        assertEquals(distinct.size(), pistons.distinctShapes(),
+                "which is what the cache reports, so the two counts agree");
     }
 }
