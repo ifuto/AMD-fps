@@ -373,6 +373,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/entity/EntityCollisionGrid.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
+                        "net/amdfaster/worldgen/ChunkSectionWriter.class",
                         "net/amdfaster/mc/ModelCache.class",
                         "net/amdfaster/gpu/BlockBindings.class",
                         // The packing layer between a section mesh and a mapped GPU buffer. It is
