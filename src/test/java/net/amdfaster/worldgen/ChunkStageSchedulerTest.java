@@ -214,8 +214,16 @@ class ChunkStageSchedulerTest {
         assertEquals(2, zs[0]);
         assertTrue(scheduler.advance(xs[0], zs[0]));
 
+        // The centre goes on again, because BIOMES needs nothing from a neighbour either. It stops at
+        // NOISE, which does.
         ready = scheduler.collectReady(xs, zs);
-        assertEquals(0, ready, "and then genuinely none can");
+        assertEquals(1, ready, "BIOMES has no neighbour requirement");
+        assertEquals(Stage.STRUCTURE_REFERENCES, scheduler.stageAt(2, 2));
+        assertTrue(scheduler.advance(xs[0], zs[0]));
+        assertEquals(Stage.BIOMES, scheduler.stageAt(2, 2));
+
+        ready = scheduler.collectReady(xs, zs);
+        assertEquals(0, ready, "and NOISE waits for the neighbours' biomes, which they do not have");
     }
 
     @Test
