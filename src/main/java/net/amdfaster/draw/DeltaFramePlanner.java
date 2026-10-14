@@ -52,6 +52,15 @@ public final class DeltaFramePlanner {
 
     private static final int DEFAULT_CAPACITY = 1024;
 
+    /**
+     * The uploaded version meaning "nothing is on the GPU".
+     *
+     * <p>Zero cannot be used for this, because zero is also a section's version before anything has
+     * changed in it, and the two being equal means a freshly loaded section looks already uploaded. It
+     * would never be sent, and neither would an evicted one, since eviction resets to the same value.
+     */
+    private static final int NOTHING_UPLOADED = -1;
+
     /** Current versions, per tracked section. */
     private int[] keys;
     private int[] geometryVersions;
@@ -112,6 +121,9 @@ public final class DeltaFramePlanner {
         this.uploadedLight = new int[this.capacity];
         this.visible = new boolean[this.capacity];
         this.drawn = new boolean[this.capacity];
+        // Every slot starts as "nothing uploaded" rather than zero, for the reason on the constant.
+        java.util.Arrays.fill(this.uploadedGeometry, NOTHING_UPLOADED);
+        java.util.Arrays.fill(this.uploadedLight, NOTHING_UPLOADED);
         this.count = 0;
     }
 
@@ -180,8 +192,8 @@ public final class DeltaFramePlanner {
         if (index < 0) {
             return;
         }
-        this.uploadedGeometry[index] = 0;
-        this.uploadedLight[index] = 0;
+        this.uploadedGeometry[index] = NOTHING_UPLOADED;
+        this.uploadedLight[index] = NOTHING_UPLOADED;
         this.drawn[index] = false;
     }
 
@@ -193,8 +205,8 @@ public final class DeltaFramePlanner {
         }
         this.geometryVersions[index] = 0;
         this.lightVersions[index] = 0;
-        this.uploadedGeometry[index] = 0;
-        this.uploadedLight[index] = 0;
+        this.uploadedGeometry[index] = NOTHING_UPLOADED;
+        this.uploadedLight[index] = NOTHING_UPLOADED;
         this.visible[index] = false;
         this.drawn[index] = false;
         this.keys[index] = 0;

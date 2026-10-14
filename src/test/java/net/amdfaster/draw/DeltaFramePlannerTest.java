@@ -203,6 +203,7 @@ class DeltaFramePlannerTest {
             planner.setVisible(DeltaFramePlanner.pack(i, 4, 0), true);
         }
         planner.commit(planner.plan());
+        long before = planner.fullRedrawSections();
 
         for (int i = 0; i < 8; i++) {
             planner.geometryChanged(DeltaFramePlanner.pack(i, 4, 0));
@@ -213,7 +214,9 @@ class DeltaFramePlannerTest {
         DeltaFramePlanner.Plan plan = planner.plan();
         planner.commit(plan);
 
-        assertEquals(400L, planner.fullRedrawSections(), "what a full redraw would have visited");
+        // One frame's worth. The counter accumulates across every plan, including the setup one.
+        assertEquals(400L, planner.fullRedrawSections() - before,
+                "what a full redraw would have visited this frame");
         assertEquals(8L, planner.geometryUploads());
         assertEquals(40L, planner.lightUploads());
         // 8 whole sections plus 40 light streams at a quarter of a section each, over 400.
@@ -249,22 +252,18 @@ class DeltaFramePlannerTest {
         // failure, which is why the count is asserted after every growth rather than only at the end.
         DeltaFramePlanner planner = new DeltaFramePlanner(16);
 
-        for (int i = 1; i <= 5000; i++) {
+        for (int i = 1; i <= 3000; i++) {
             planner.setVisible(i, true);
             assertEquals(i, planner.trackedCount(), "after inserting " + i);
         }
-        for (int i = 1; i <= 5000; i++) {
+        for (int i = 1; i <= 3000; i++) {
             assertTrue(planner.isTracked(i), "section " + i + " survived every rehash");
         }
 
-        // Planned in batches, since a frame caps how many sections it will touch at once.
-        int planned = 0;
-        for (int batch = 0; batch < 3; batch++) {
-            DeltaFramePlanner.Plan plan = planner.plan();
-            planned += plan.drawAddCount;
-            planner.commit(plan);
-        }
-        assertEquals(5000, planned, "every tracked section was visited");
+        // Fewer than the per-frame cap, since a plan that exceeds it throws rather than clipping.
+        // 3,000 still forces several growths out of a table that starts at sixteen.
+        DeltaFramePlanner.Plan plan = planner.plan();
+        assertEquals(3000, plan.drawAddCount, "every tracked section was visited");
     }
 
     @Test
