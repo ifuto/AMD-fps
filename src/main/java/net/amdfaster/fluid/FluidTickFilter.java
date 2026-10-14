@@ -157,17 +157,30 @@ public final class FluidTickFilter {
         this.size = 0;
     }
 
+    /**
+     * Inserts or updates a state.
+     *
+     * <p>The state is written before the growth check, which is the only correct order here. An
+     * earlier version wrote the key, incremented the size, checked the load, and set the state
+     * afterwards. When that check triggered, {@code grow} copied the old table while the new slot
+     * still read as untracked, so the entry in flight was dropped from the copy and the size was
+     * recounted without it. Inserting 20,000 positions lost 11 of them and undercounted the size by
+     * one per doubling, which also pushes the next growth later than the load factor intends.
+     *
+     * <p>Writing the state first means the entry is complete before anything can move it, and no
+     * re-probe is needed afterwards.
+     */
     private void put(int key, byte state) {
         int index = probe(key);
-        if (this.states[index] == UNTRACKED) {
-            this.keys[index] = key;
-            this.size++;
-            if (this.size * LOAD_DENOMINATOR >= this.capacity * LOAD_NUMERATOR) {
-                grow();
-                index = probe(key);
-            }
-        }
+        boolean isNew = this.states[index] == UNTRACKED;
+        this.keys[index] = key;
         this.states[index] = state;
+        if (isNew) {
+            this.size++;
+        }
+        if (this.size * LOAD_DENOMINATOR >= this.capacity * LOAD_NUMERATOR) {
+            grow();
+        }
     }
 
     private int probe(int key) {

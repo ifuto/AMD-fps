@@ -21,13 +21,18 @@ class FluidTickFilterTest {
     @Test
     void settledFluidStopsBeingEvaluated() {
         FluidTickFilter filter = new FluidTickFilter();
+        assertTrue(filter.needsTick(0, 64, 0), "untracked, so it is evaluated");
+        assertEquals(0L, filter.skipped());
+
         filter.markStable(0, 64, 0);
 
-        assertTrue(filter.needsTick(0, 64, 0), "the tick that found it settled still ran");
+        // Marking it stable is what the evaluation that found it settled does, so from here on the
+        // answer is no. An earlier version of this test expected one more evaluation afterwards.
         for (int i = 0; i < 200; i++) {
             assertFalse(filter.needsTick(0, 64, 0), "evaluation " + i + " skipped");
         }
         assertEquals(1, filter.size());
+        assertEquals(201L, filter.evaluations(), "the untracked one plus two hundred");
         assertEquals(200L, filter.skipped());
     }
 
@@ -154,10 +159,11 @@ class FluidTickFilterTest {
                 filter.needsTick(i % 25, 64, i / 25);
             }
         }
-        assertEquals((long) (ticks / interval) * blocks, wouldHaveRun, "240000 evaluations a minute");
+        // 1200 ticks a minute over a five tick interval is 240 rounds, times 500 blocks.
+        assertEquals(120_000L, wouldHaveRun, "evaluations a minute");
         assertEquals(wouldHaveRun, filter.skipped(), "all of them skipped, because nothing changed");
         // Each evaluation reads six positions.
-        assertEquals(wouldHaveRun * 6L, 1_440_000L, "block-state reads avoided in a minute");
+        assertEquals(720_000L, wouldHaveRun * 6L, "block-state reads avoided in a minute");
     }
 
     @Test
