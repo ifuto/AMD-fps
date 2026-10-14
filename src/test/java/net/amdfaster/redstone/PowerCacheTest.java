@@ -131,7 +131,12 @@ class PowerCacheTest {
             assertEquals(without[i], withCache[i], "wire " + i + " settled differently");
         }
         assertEquals(15, without[0]);
-        assertTrue(without[n - 1] > 0, "the signal reaches the far end of a 30 long line");
+        // A line of 30 does not carry to the end. Signal falls by one per block from 15, so it runs
+        // out at fifteen blocks and the rest of the line stays at zero. Asserting that the far end
+        // was powered would have been asserting something redstone does not do.
+        assertEquals(1, without[14], "fifteen blocks out, one strength left");
+        assertEquals(0, without[15], "and it stops there");
+        assertEquals(0, without[n - 1]);
     }
 
     private static int[] settle(int n, boolean useCache) {
