@@ -384,6 +384,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/mesh/SparseVoxelOctree.class",
                         "net/amdfaster/draw/DeltaFramePlanner.class",
                         "net/amdfaster/gpu/InstanceDeduplicator.class",
+                        "net/amdfaster/gpu/VramBudget.class",
                         "net/amdfaster/mc/ModelCache.class",
                         "net/amdfaster/gpu/BlockBindings.class",
                         // The packing layer between a section mesh and a mapped GPU buffer. It is
