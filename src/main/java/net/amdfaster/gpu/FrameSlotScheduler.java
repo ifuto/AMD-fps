@@ -56,8 +56,18 @@ public final class FrameSlotScheduler {
 
     private final int slots;
 
-    /** Per slot: true once submitted and not yet complete. */
+    /** Per slot: true from acquire until complete. */
     private final boolean[] inFlight;
+
+    /**
+     * Per slot: true once the caller has submitted.
+     *
+     * <p>Separate from {@link #inFlight} because a slot is in flight from the moment it is acquired and
+     * stays in flight until the GPU is done, while "submitted" is a one-way transition the caller makes
+     * once. Checking only inFlight let a slot be submitted twice, which would mean two frames sharing
+     * one command buffer.
+     */
+    private final boolean[] submitted;
 
     /** The slot acquire will try next, so slots are reused round robin. */
     private int cursor;
@@ -82,6 +92,7 @@ public final class FrameSlotScheduler {
         }
         this.slots = slots;
         this.inFlight = new boolean[slots];
+        this.submitted = new boolean[slots];
     }
 
     /**
@@ -113,6 +124,10 @@ public final class FrameSlotScheduler {
         if (!this.inFlight[slot]) {
             throw new IllegalStateException("slot " + slot + " was not acquired");
         }
+        if (this.submitted[slot]) {
+            throw new IllegalStateException("slot " + slot + " was already submitted");
+        }
+        this.submitted[slot] = true;
         this.submits++;
     }
 
@@ -128,6 +143,7 @@ public final class FrameSlotScheduler {
             throw new IllegalStateException("slot " + slot + " is not in flight");
         }
         this.inFlight[slot] = false;
+        this.submitted[slot] = false;
         this.completes++;
     }
 
@@ -183,6 +199,7 @@ public final class FrameSlotScheduler {
     public void reset() {
         for (int i = 0; i < this.slots; i++) {
             this.inFlight[i] = false;
+            this.submitted[i] = false;
         }
         this.cursor = 0;
     }
@@ -220,13 +237,19 @@ public final class FrameSlotScheduler {
     }
 
     /**
-     * How often the CPU had to wait for a slot.
+     * How often the CPU had to wait for a slot, per frame actually issued.
      *
-     * <p>Zero means the pipeline is genuinely pipelined. Near one hundred means the CPU waits for the
-     * GPU every frame and the slots bought nothing, which usually means too many sync points rather
-     * than a slow GPU.
+     * <p>The denominator is successful acquisitions rather than calls to {@link #acquire}, because a
+     * caller that waits and retries calls acquire twice for one frame. Dividing by the call count made
+     * a single-slot pipeline -- which stalls on every frame -- report about 50%, which reads as a
+     * pipeline that mostly works.
+     *
+     * <p>Zero means the pipeline is genuinely pipelined. One hundred means the CPU waits for the GPU
+     * every frame and the slots bought nothing, which usually means too many sync points rather than a
+     * slow GPU.
      */
     public double stallRatePercent() {
-        return this.acquires == 0 ? 0.0 : 100.0 * this.stalls / this.acquires;
+        long issued = this.acquires - this.stalls;
+        return issued == 0 ? 0.0 : 100.0 * this.stalls / issued;
     }
 }

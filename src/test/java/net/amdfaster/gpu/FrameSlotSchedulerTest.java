@@ -138,6 +138,7 @@ class FrameSlotSchedulerTest {
         assertEquals(0L, scheduler.stalls(), "never had to wait");
         assertEquals(0.0, scheduler.stallRatePercent());
         assertEquals(200L, scheduler.submits());
+        assertEquals(200L, scheduler.acquires(), "and no retries");
     }
 
     @Test
@@ -209,6 +210,9 @@ class FrameSlotSchedulerTest {
         runFrames(scheduler, 1, 4.0, 6.0, 200);
 
         assertEquals(199L, scheduler.stalls(), "every frame after the first");
+        // Per frame issued, not per call: the caller that waits calls acquire twice for one frame, and
+        // dividing by the call count reported about 50% for a pipeline that stalls every time.
+        assertEquals(399L, scheduler.acquires(), "200 issued plus 199 retries");
         assertEquals(99.5, scheduler.stallRatePercent(), 0.01);
     }
 
