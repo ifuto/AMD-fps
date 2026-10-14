@@ -37,6 +37,11 @@ class SleepTrackerTest {
         public void wake() {
             this.wakes++;
         }
+
+        @Override
+        public void tick() {
+            this.ticks++;
+        }
     }
 
     /** A world with a few block entities in known places. */

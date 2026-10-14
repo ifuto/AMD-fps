@@ -62,6 +62,15 @@ public final class SleepTracker {
 
         /** Called when the entity is woken, so it can re-read whatever it cached. */
         void wake();
+
+        /**
+         * Runs one tick of this entity's work.
+         *
+         * <p>The tracker calls it rather than handing back a list, because the whole saving is not
+         * iterating, and a caller that iterated a returned list would still have to know which
+         * entries had gone to sleep during the pass.
+         */
+        void tick();
     }
 
     /** Identifies a block entity by position. Positions are what block changes can name. */
@@ -168,6 +177,7 @@ public final class SleepTracker {
     public void tickAll() {
         for (Map.Entry<Long, Sleeping> entry : this.awake.entrySet()) {
             Sleeping entity = entry.getValue();
+            entity.tick();
             this.ticksRun++;
             if (entity.canSleep()) {
                 this.pendingRemoval.add(entry.getKey());
