@@ -45,8 +45,19 @@ public final class HopperTransferCache {
         long containerAt(int x, int y, int z);
     }
 
-    /** A position with no container. Distinct from zero, which is a legitimate token. */
+    /** A position with no container. A real cached answer, distinct from zero. */
     public static final long NO_CONTAINER = -1L;
+
+    /**
+     * Marks an empty table slot, and is not a value any position can hold.
+     *
+     * <p>This used to be {@link #NO_CONTAINER}, which meant caching the absence of a container wrote
+     * the empty marker into the slot, {@code probe} read it back as never-filled, and the world was
+     * asked again every tick. The comment said the absence was cached and it was not -- the majority
+     * case in a farm, and exactly the case the cache exists for. An absent position and an empty
+     * table slot have to be different values or the cache cannot hold one of them.
+     */
+    private static final long ABSENT_SLOT = Long.MIN_VALUE;
 
     private static final int DEFAULT_CAPACITY = 512;
 
@@ -92,7 +103,7 @@ public final class HopperTransferCache {
         // NO_CONTAINER rather than zero as the empty marker. Zero is a plausible container token, and
         // using it as "absent" would make every uncached position look cached.
         this.tokens = new long[this.capacity];
-        Arrays.fill(this.tokens, NO_CONTAINER);
+        Arrays.fill(this.tokens, ABSENT_SLOT);
         this.hoppers = hopperCount;
         this.idle = new boolean[this.hoppers];
     }
@@ -103,11 +114,18 @@ public final class HopperTransferCache {
         int key = pack(x, y, z);
         int index = probe(key);
         long cached = this.tokens[index];
-        if (cached != NO_CONTAINER) {
+        if (cached != ABSENT_SLOT) {
             this.hits++;
             return cached;
         }
         long token = lookup.containerAt(x, y, z);
+        if (token == ABSENT_SLOT) {
+            // It would be indistinguishable from an empty slot, so the position would be searched
+            // again on every question and the cache would report a hit rate it is not earning.
+            throw new IllegalArgumentException(
+                    "container token at " + x + "," + y + "," + z
+                            + " collides with the absent marker");
+        }
         this.keys[index] = key;
         this.tokens[index] = token;
         this.size++;
@@ -121,10 +139,10 @@ public final class HopperTransferCache {
     public void invalidateAt(int x, int y, int z) {
         int key = pack(x, y, z);
         int index = probe(key);
-        if (this.tokens[index] == NO_CONTAINER) {
+        if (this.tokens[index] == ABSENT_SLOT) {
             return;
         }
-        this.tokens[index] = NO_CONTAINER;
+        this.tokens[index] = ABSENT_SLOT;
         this.size--;
         this.invalidations++;
         backshift(index);
@@ -211,7 +229,7 @@ public final class HopperTransferCache {
 
     private int probe(int key) {
         int index = spread(key) & (this.capacity - 1);
-        while (this.tokens[index] != NO_CONTAINER) {
+        while (this.tokens[index] != ABSENT_SLOT) {
             if (this.keys[index] == key) {
                 return index;
             }
@@ -231,7 +249,7 @@ public final class HopperTransferCache {
         int i = hole;
         while (true) {
             int j = (i + 1) & (this.capacity - 1);
-            while (this.tokens[j] != NO_CONTAINER) {
+            while (this.tokens[j] != ABSENT_SLOT) {
                 int ideal = spread(this.keys[j]) & (this.capacity - 1);
                 boolean movable = i <= j
                         ? ideal > i && ideal <= j
@@ -242,12 +260,12 @@ public final class HopperTransferCache {
                     break;
                 }
             }
-            if (this.tokens[j] == NO_CONTAINER) {
+            if (this.tokens[j] == ABSENT_SLOT) {
                 return;
             }
             this.keys[i] = this.keys[j];
             this.tokens[i] = this.tokens[j];
-            this.tokens[j] = NO_CONTAINER;
+            this.tokens[j] = ABSENT_SLOT;
             i = j;
         }
     }
@@ -267,10 +285,10 @@ public final class HopperTransferCache {
         this.capacity = oldCapacity * 2;
         this.keys = new int[this.capacity];
         this.tokens = new long[this.capacity];
-        Arrays.fill(this.tokens, NO_CONTAINER);
+        Arrays.fill(this.tokens, ABSENT_SLOT);
         this.size = 0;
         for (int i = 0; i < oldCapacity; i++) {
-            if (oldTokens[i] == NO_CONTAINER) {
+            if (oldTokens[i] == ABSENT_SLOT) {
                 continue;
             }
             int index = probe(oldKeys[i]);

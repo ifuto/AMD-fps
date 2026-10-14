@@ -232,6 +232,15 @@ class HopperTransferCacheTest {
     }
 
     @Test
+    void aTokenEqualToTheAbsentMarkerIsRejected() {
+        // The other half of the separation. NO_CONTAINER is a cached value and ABSENT_SLOT is an
+        // empty slot, so a lookup returning the latter would be stored and then read back as absent.
+        HopperTransferCache cache = new HopperTransferCache();
+        assertThrows(IllegalArgumentException.class,
+                () -> cache.containerAt((x, y, z) -> Long.MIN_VALUE, 0, 64, 0));
+    }
+
+    @Test
     void nonsenseArgumentsAreRejected() {
         assertThrows(IllegalArgumentException.class, () -> new HopperTransferCache(8, 4));
         assertThrows(IllegalArgumentException.class, () -> new HopperTransferCache(64, 0));
