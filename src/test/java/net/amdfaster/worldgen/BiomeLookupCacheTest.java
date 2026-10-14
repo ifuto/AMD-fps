@@ -50,7 +50,7 @@ class BiomeLookupCacheTest {
         }
         assertEquals(1, source.calls, "64 positions, one lookup");
         assertEquals(1, cache.biomeCacheSize());
-        assertEquals(63L, cache.biomeHits());
+        assertEquals(64L, cache.biomeHits(), "the first call plus the 64 in the loop, less one miss");
     }
 
     @Test
@@ -99,8 +99,10 @@ class BiomeLookupCacheTest {
         BiomeLookupCache cache = new BiomeLookupCache(64, 256);
 
         for (int i = 0; i < 20000; i++) {
+            // Different divisors, or the two loop over the same values and only 16 of the 128 pairs
+            // are ever reached. Taking both from i directly correlates them.
             int biome = i % 16;
-            int depth = i % 8;
+            int depth = (i / 16) % 8;
             cache.surfaceBlockFor(resolver, biome, depth);
         }
         assertEquals(16 * 8, resolver.calls, "128 distinct biome and depth pairs");
@@ -187,7 +189,10 @@ class BiomeLookupCacheTest {
             cache.surfaceBlockFor((b, d) -> b + d, i % 256, i % 256);
         }
 
-        assertEquals(4000, cache.biomeCacheSize());
+        // 4,000 positions over 64 by 63 blocks collapse to 16 by 16 cells, which is the point of
+        // keying on the cell. Asserting 4,000 here would be asserting the cache did nothing.
+        assertEquals(256, cache.biomeCacheSize(), "16 by 16 cells");
+        assertEquals(4000 - 256, cache.biomeHits());
         assertEquals(256, cache.surfaceCacheSize());
     }
 
