@@ -134,8 +134,8 @@ class FluidTickFilterTest {
                 stillTracked++;
             }
         }
-        assertEquals(400, stillTracked);
-        assertEquals(positions.length - 400, filter.size());
+        assertEquals(400, stillTracked, "two hundred of the six hundred were removed");
+        assertEquals(400, filter.size(), "and the table agrees with the count");
     }
 
     @Test
