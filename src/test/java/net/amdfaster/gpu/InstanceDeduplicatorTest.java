@@ -25,14 +25,15 @@ class InstanceDeduplicatorTest {
         InstanceDeduplicator dedup = new InstanceDeduplicator();
         long key = InstanceDeduplicator.groupKey(7, 2, 100, 0);
 
+        int group = -1;
         for (int i = 0; i < 200; i++) {
-            dedup.add(key, at(i * 2f, 64f, i * 3f));
+            group = dedup.add(key, at(i * 2f, 64f, i * 3f));
         }
 
         assertEquals(200L, dedup.draws());
         assertEquals(1L, dedup.groupCount());
         assertEquals(1, dedup.drawCallsNeeded());
-        assertEquals(200, dedup.instanceCount(0));
+        assertEquals(200, dedup.instanceCount(group), "every draw joined the same group");
         assertEquals(199, dedup.instancedDraws());
         assertEquals(99.5, dedup.drawReductionPercent(), 0.01);
     }
@@ -44,14 +45,15 @@ class InstanceDeduplicatorTest {
         // which is visible rather than merely slow.
         InstanceDeduplicator dedup = new InstanceDeduplicator();
 
-        dedup.add(InstanceDeduplicator.groupKey(7, 2, 100, 0), at(0f, 0f, 0f));
-        dedup.add(InstanceDeduplicator.groupKey(7, 2, 101, 0), at(1f, 0f, 0f));
+        int first = dedup.add(InstanceDeduplicator.groupKey(7, 2, 100, 0), at(0f, 0f, 0f));
+        int other = dedup.add(InstanceDeduplicator.groupKey(7, 2, 101, 0), at(1f, 0f, 0f));
         dedup.add(InstanceDeduplicator.groupKey(7, 2, 100, 0), at(2f, 0f, 0f));
 
         assertEquals(2, dedup.drawCallsNeeded());
         assertEquals(2L, dedup.groupCount());
-        assertEquals(2, dedup.instanceCount(0));
-        assertEquals(1, dedup.instanceCount(1));
+        assertNotEquals(first, other, "different textures land in different slots");
+        assertEquals(2, dedup.instanceCount(first));
+        assertEquals(1, dedup.instanceCount(other));
     }
 
     @Test
@@ -92,13 +94,14 @@ class InstanceDeduplicatorTest {
         long key = InstanceDeduplicator.groupKey(4, 1, 9, 0);
 
         float[][] sent = new float[50][];
+        int group = -1;
         for (int i = 0; i < 50; i++) {
             sent[i] = at(i * 1.5f, 64f + i, -i * 0.25f);
-            dedup.add(key, sent[i]);
+            group = dedup.add(key, sent[i]);
         }
 
         float[] out = new float[50 * 12];
-        int written = dedup.copyInstances(0, out);
+        int written = dedup.copyInstances(group, out);
         assertEquals(600, written);
 
         for (int i = 0; i < 50; i++) {
@@ -158,17 +161,17 @@ class InstanceDeduplicatorTest {
     void clearStartsANewFrameButKeepsTheSlots() {
         InstanceDeduplicator dedup = new InstanceDeduplicator();
         long key = InstanceDeduplicator.groupKey(5, 0, 1, 0);
-        dedup.add(key, at(0, 0, 0));
+        int first = dedup.add(key, at(0, 0, 0));
         dedup.add(key, at(1, 0, 0));
-        assertEquals(2, dedup.instanceCount(0));
+        assertEquals(2, dedup.instanceCount(first));
 
         dedup.clear();
         assertEquals(0, dedup.drawCallsNeeded(), "no group holds anything");
-        assertEquals(0, dedup.instanceCount(0), "the count was reset");
+        assertEquals(0, dedup.instanceCount(first), "the count was reset");
 
         int again = dedup.add(key, at(5f, 0f, 0f));
-        assertEquals(0, again, "and the same key lands in the same slot");
-        assertEquals(1, dedup.instanceCount(0));
+        assertEquals(first, again, "and the same key lands in the same slot");
+        assertEquals(1, dedup.instanceCount(again));
     }
 
     @Test
@@ -213,9 +216,9 @@ class InstanceDeduplicatorTest {
                 () -> InstanceDeduplicator.groupKey(0, 0, 0, -1));
         assertThrows(IllegalArgumentException.class, () -> new InstanceDeduplicator(8));
 
-        dedup.add(0L, at(0, 0, 0));
+        int group = dedup.add(0L, at(0, 0, 0));
         assertThrows(IllegalArgumentException.class,
-                () -> dedup.copyInstances(0, new float[11]), "destination too small");
+                () -> dedup.copyInstances(group, new float[11]), "destination too small");
         assertThrows(IndexOutOfBoundsException.class, () -> dedup.instanceCount(-1));
         assertThrows(IndexOutOfBoundsException.class, () -> dedup.isWorthInstancing(999));
     }
