@@ -43,7 +43,7 @@ public final class SortKeyRadixSort {
 
     private final int[] histogram = new int[RADIX];
 
-    private int[] scratchKeys;
+    private long[] scratchKeys;
     private int[] scratchPayload;
 
     private long sorts;
