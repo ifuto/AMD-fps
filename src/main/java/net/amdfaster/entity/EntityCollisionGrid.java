@@ -224,12 +224,17 @@ public final class EntityCollisionGrid {
     /**
      * Packs section coordinates into an int.
      *
-     * <p>Eleven bits each of X, Y and Z, which is a 2048 by 2048 by 2048 section volume -- far
-     * larger than a loaded world. Section coordinates are block coordinates shifted right by four,
-     * so the range is generous by a wide margin.
+     * <p>Eleven bits of X, eight of Y and eleven of Z. Y gets the narrow field because a world is 384
+     * blocks tall, which is 24 sections, while X and Z are unbounded. That is 11 + 8 + 11 = 30 bits,
+     * which does not reach the sign bit.
+     *
+     * <p>An earlier version gave Z ten bits and Y eleven, so any section beyond 1023 on Z wrapped
+     * onto one below it. Two entities a thousand sections apart shared a count, the grid reported
+     * fewer sections than it held, and a neighbourhood check could answer from the wrong part of the
+     * world.
      */
     public static int pack(int sectionX, int sectionY, int sectionZ) {
-        return ((sectionX & 0x7FF) << 21) | ((sectionY & 0x7FF) << 10) | (sectionZ & 0x3FF);
+        return ((sectionX & 0x7FF) << 19) | ((sectionY & 0xFF) << 11) | (sectionZ & 0x7FF);
     }
 
     static int spread(int key) {

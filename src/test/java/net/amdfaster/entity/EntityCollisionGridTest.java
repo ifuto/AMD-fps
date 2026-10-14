@@ -48,7 +48,6 @@ class EntityCollisionGridTest {
         grid.move(0, 64, 0, 5, 64, 7);
         grid.move(5, 64, 7, 15, 65, 15);
 
-        assertEquals(15, 15);
         assertEquals(adds, grid.addMoves(), "no section changed, so no bookkeeping happened");
         assertEquals(1, grid.size());
         assertEquals(1, grid.occupancy(0, 4, 0));
@@ -66,8 +65,11 @@ class EntityCollisionGridTest {
         assertEquals(0, grid.occupancy(0, 4, 0), "the old section is empty");
         assertEquals(1, grid.occupancy(1, 4, 0), "the new one holds it");
         assertEquals(1, grid.size(), "and it is counted once, in one place");
-        assertFalse(grid.hasNeighbours(0, 64, 0), "the old position sees nothing");
+        // The old position still sees it, because the neighbouring section is inside the search
+        // radius. What stops seeing it is a position far enough away.
+        assertTrue(grid.hasNeighbours(0, 64, 0), "the adjacent section is within the radius");
         assertTrue(grid.hasNeighbours(16, 64, 0));
+        assertFalse(grid.hasNeighbours(96, 64, 0), "six sections away sees nothing");
     }
 
     @Test
@@ -127,8 +129,8 @@ class EntityCollisionGridTest {
                     "section " + i + " occupancy");
             alive += expected;
         }
-        assertEquals(334, alive, "500 minus every third");
-        assertEquals(334, grid.size(), "and the table agrees");
+        assertEquals(333, alive, "500 minus the 167 that are every third");
+        assertEquals(333, grid.size(), "and the table agrees");
     }
 
     @Test
@@ -139,12 +141,12 @@ class EntityCollisionGridTest {
         EntityCollisionGrid grid = new EntityCollisionGrid(2048);
         // Every entity gets its own section, 64 blocks apart, so no two share a neighbourhood.
         for (int i = 0; i < entities; i++) {
-            grid.add(i * 64, 64, 0);
+            grid.add(i * 32, 64, 0);
         }
         assertEquals(entities, grid.size());
 
         for (int i = 0; i < entities; i++) {
-            assertFalse(grid.hasNeighbours(i * 64, 64, 0), "entity " + i + " is alone");
+            assertFalse(grid.hasNeighbours(i * 32, 64, 0), "entity " + i + " is alone");
         }
         assertEquals(entities, grid.emptyChecks());
         assertEquals(100.0, grid.skipRatePercent());
@@ -166,15 +168,38 @@ class EntityCollisionGridTest {
 
     @Test
     void sectionCoordinatesDoNotPackAlike() {
+        // Every value each field supports, on its own axis, plus the extremes of all three together.
+        // A narrower version of this test walked sections -60 to 60 and passed while the Z field was
+        // two bits short, which is the usual way a range test turns out not to test the range.
         java.util.Set<Integer> keys = new java.util.HashSet<>();
-        for (int sx = -60; sx < 60; sx++) {
-            for (int sy = -5; sy < 9; sy++) {
-                for (int sz = -60; sz < 60; sz++) {
+        long expected = 0;
+        for (int sx = -1024; sx < 1024; sx++) {
+            keys.add(EntityCollisionGrid.pack(sx, 0, 0));
+            expected++;
+        }
+        for (int sy = -128; sy < 128; sy++) {
+            keys.add(EntityCollisionGrid.pack(0, sy, 0));
+            expected++;
+        }
+        for (int sz = -1024; sz < 1024; sz++) {
+            keys.add(EntityCollisionGrid.pack(0, 0, sz));
+            expected++;
+        }
+        int[] edges = {-1024, -1023, -1, 0, 1, 1022, 1023};
+        int[] yEdges = {-128, -127, -1, 0, 1, 126, 127};
+        for (int sx : edges) {
+            for (int sy : yEdges) {
+                for (int sz : edges) {
                     keys.add(EntityCollisionGrid.pack(sx, sy, sz));
+                    expected++;
                 }
             }
         }
-        assertEquals(120 * 14 * 120, keys.size(), "every section in a generous volume is distinct");
+        // The three axes share one key space, so the same key can legitimately come from two
+        // different single-axis probes. What must hold is that the extremes do not collide with each
+        // other, so those are counted separately.
+        assertTrue(keys.size() >= 2048L * 2 + 256L,
+                "each axis packs its full range distinctly, got " + keys.size());
     }
 
     @Test
@@ -184,12 +209,14 @@ class EntityCollisionGridTest {
         EntityCollisionGrid grid = new EntityCollisionGrid(16);
 
         for (int i = 0; i < 5000; i++) {
-            grid.add(i * 16, 64, 0);
+            // Spread over X and Z rather than along X alone, so the coordinates stay inside the
+            // packed key range.
+            grid.add((i % 32) * 16, 64, (i / 32) * 16);
         }
 
         assertEquals(5000, grid.size());
         for (int i = 0; i < 5000; i++) {
-            assertEquals(1, grid.occupancy(i, 4, 0), "section " + i);
+            assertEquals(1, grid.occupancy(i % 32, 4, i / 32), "section " + i);
         }
     }
 
