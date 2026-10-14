@@ -75,21 +75,23 @@ class ChunkStageSchedulerTest {
         assertTrue(scheduler.canAdvance(4, 4));
         assertFalse(scheduler.canAdvance(0, 0), "the corner has neighbours outside the region");
 
-        // Put one neighbour back to EMPTY and the centre is blocked again.
+        // One chunk left behind at EMPTY blocks the reference stage for everything around it. An
+        // earlier version of this test cleared the region and re-tracked it, which put every chunk
+        // back on EMPTY -- and EMPTY -> STRUCTURE_STARTS needs nothing from a neighbour, so the
+        // assertion was checking the wrong transition.
         ChunkStageScheduler partial = new ChunkStageScheduler(9, 9);
         for (int z = 0; z < 9; z++) {
             for (int x = 0; x < 9; x++) {
                 partial.track(x, z);
+                if (x == 4 && z == 3) {
+                    continue;
+                }
                 partial.advance(x, z);
             }
         }
-        partial.clear();
-        for (int z = 0; z < 9; z++) {
-            for (int x = 0; x < 9; x++) {
-                partial.track(x, z);
-            }
-        }
-        assertFalse(partial.canAdvance(4, 4), "nothing has reached STRUCTURE_STARTS");
+        assertFalse(partial.canAdvance(4, 4), "the neighbour at 4,3 never reached STRUCTURE_STARTS");
+        assertFalse(partial.canAdvance(3, 3), "and neither can its other neighbour");
+        assertTrue(partial.canAdvance(4, 1), "far enough that 4,3 is not a neighbour");
     }
 
     @Test
@@ -191,13 +193,14 @@ class ChunkStageSchedulerTest {
     }
 
     @Test
-    void aFinishedChunkIsNeverReady() {
+    void outOfRegionCoordinatesAreRejected() {
         ChunkStageScheduler scheduler = new ChunkStageScheduler(3, 3);
         scheduler.track(1, 1);
 
         assertEquals(Stage.EMPTY, scheduler.stageAt(1, 1));
-        assertFalse(scheduler.canAdvance(-1, -1) || true);
         assertThrows(IndexOutOfBoundsException.class, () -> scheduler.stageAt(3, 0));
+        assertThrows(IndexOutOfBoundsException.class, () -> scheduler.stageAt(-1, 0));
+        assertThrows(IndexOutOfBoundsException.class, () -> scheduler.advance(1, 3));
     }
 
     @Test

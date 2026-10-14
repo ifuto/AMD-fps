@@ -41,9 +41,9 @@ public final class ChunkStageScheduler {
     /** The generation stages, in order. */
     public enum Stage {
         /** Nothing generated yet. */
-        EMPTY(null),
+        EMPTY(-1),
         /** Structure starts placed in this chunk. */
-        STRUCTURE_STARTS(null),
+        STRUCTURE_STARTS(-1),
         /**
          * Structure pieces that reach in from neighbouring chunks. Needs their starts, ordinal 1.
          *
