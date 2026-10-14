@@ -56,9 +56,12 @@ class LodMergerTest {
         LodMerger.Merged[] out = new LodMerger.Merged[16];
         merger.merge(heights, colours, 2, out);
 
-        assertEquals(SNOW, out[0].colour, "cell 5 is inside the first 4 by 4 group");
-        assertEquals(100, out[0].height);
-        assertEquals(ROCK, out[1].colour, "and the groups without the peak keep the rock");
+        // The layout is row-major, so cell 5 is x = 5, z = 0, which is the second 4 by 4 group along
+        // X. An earlier version of this test put it in the first.
+        assertEquals(SNOW, out[1].colour, "cell 5 is x = 5, so group 1 along X");
+        assertEquals(100, out[1].height);
+        assertEquals(ROCK, out[0].colour, "and the groups without the peak keep the rock");
+        assertEquals(64, out[0].height);
     }
 
     @Test
@@ -171,8 +174,9 @@ class LodMergerTest {
         LodMerger.Merged[] out = new LodMerger.Merged[16];
         merger.merge(heights, colours(ROCK), 2, out);
 
-        assertEquals(-40, out[0].height, "the highest of a set of negatives");
-        assertEquals(-64, out[1].height);
+        // Cell 7 is x = 7, z = 0, again the second group along X.
+        assertEquals(-40, out[1].height, "the highest of a set of negatives");
+        assertEquals(-64, out[0].height);
     }
 
     @Test
