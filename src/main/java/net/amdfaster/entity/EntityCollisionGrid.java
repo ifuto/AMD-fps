@@ -85,7 +85,12 @@ public final class EntityCollisionGrid {
         for (int dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx++) {
             for (int dy = -SEARCH_RADIUS; dy <= SEARCH_RADIUS; dy++) {
                 for (int dz = -SEARCH_RADIUS; dz <= SEARCH_RADIUS; dz++) {
-                    if (occupancy(sx + dx, sy + dy, sz + dz) > 0) {
+                    // The entity asking is itself counted in its own section, so that one has to hold
+                    // at least two before it means anything. Comparing every section against zero
+                    // instead made this return true for every registered entity, which is not a
+                    // filter, it is a constant.
+                    int needed = (dx == 0 && dy == 0 && dz == 0) ? 2 : 1;
+                    if (occupancy(sx + dx, sy + dy, sz + dz) >= needed) {
                         return true;
                     }
                 }
