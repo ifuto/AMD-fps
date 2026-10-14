@@ -366,6 +366,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/block/ShapeCache.class",
                         "net/amdfaster/tick/RandomTickFilter.class",
                         "net/amdfaster/blockentity/SleepTracker.class",
+                        "net/amdfaster/block/PistonShapes.class",
                         "net/amdfaster/mc/ModelCache.class",
                         "net/amdfaster/gpu/BlockBindings.class",
                         // The packing layer between a section mesh and a mapped GPU buffer. It is
