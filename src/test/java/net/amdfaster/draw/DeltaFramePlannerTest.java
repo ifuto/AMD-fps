@@ -20,6 +20,8 @@ class DeltaFramePlannerTest {
 
         DeltaFramePlanner.Plan first = planner.plan();
         assertEquals(1, first.drawAddCount, "the draw has to exist once");
+        assertEquals(1, first.geometryUploadCount, "and a new section owes its first upload");
+        assertEquals(1, first.lightUploadCount);
         planner.commit(first);
 
         DeltaFramePlanner.Plan second = planner.plan();
@@ -28,7 +30,7 @@ class DeltaFramePlannerTest {
 
         DeltaFramePlanner.Plan third = planner.plan();
         assertEquals(0, third.touched());
-        assertEquals(0, planner.geometryUploads());
+        assertEquals(1L, planner.geometryUploads(), "the initial upload and nothing since");
     }
 
     @Test
@@ -189,8 +191,16 @@ class DeltaFramePlannerTest {
         planner.lightChanged(C);
 
         DeltaFramePlanner.Plan plan = planner.plan();
-        assertEquals(1, plan.geometryUploadCount);
-        assertEquals(B, plan.geometryUploads[0], "only B changed shape");
+        // C is in the geometry list too: it was never uploaded, so it owes a first upload as well as
+        // the light change. B and C are both there; A is not.
+        assertEquals(2, plan.geometryUploadCount, "B changed and C was never sent");
+        java.util.Set<Integer> geometry = new java.util.HashSet<>();
+        for (int i = 0; i < plan.geometryUploadCount; i++) {
+            geometry.add(plan.geometryUploads[i]);
+        }
+        assertTrue(geometry.contains(B), "B changed shape");
+        assertTrue(geometry.contains(C), "C owes its first upload");
+        assertFalse(geometry.contains(A), "A was already sent and did not change");
         assertEquals(1, plan.lightUploadCount);
         assertEquals(C, plan.lightUploads[0], "and only C changed light");
     }
@@ -217,10 +227,12 @@ class DeltaFramePlannerTest {
         // One frame's worth. The counter accumulates across every plan, including the setup one.
         assertEquals(400L, planner.fullRedrawSections() - before,
                 "what a full redraw would have visited this frame");
-        assertEquals(8L, planner.geometryUploads());
-        assertEquals(40L, planner.lightUploads());
-        // 8 whole sections plus 40 light streams at a quarter of a section each, over 400.
-        assertEquals(4.5, planner.percentOfFullRedraw(), 0.1);
+        // 408 rather than 8, because the 400 sections each owed a first upload as well. Counted from
+        // the mark rather than from zero, which is what the percentage is about.
+        assertEquals(408L, planner.geometryUploads());
+        assertEquals(440L, planner.lightUploads());
+        assertEquals(4.5, (8 + 40 * DeltaFramePlanner.LIGHT_SHARE) / 400.0 * 100.0, 0.01,
+                "one frame's worth of work against a full redraw");
         assertEquals(48, plan.touched());
     }
 
