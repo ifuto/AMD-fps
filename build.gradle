@@ -370,6 +370,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/redstone/PowerCache.class",
                         "net/amdfaster/hopper/HopperTransferCache.class",
                         "net/amdfaster/fluid/FluidTickFilter.class",
+                        "net/amdfaster/entity/EntityCollisionGrid.class",
                         "net/amdfaster/mc/ModelCache.class",
                         "net/amdfaster/gpu/BlockBindings.class",
                         // The packing layer between a section mesh and a mapped GPU buffer. It is
