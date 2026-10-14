@@ -65,11 +65,18 @@ class EntityCollisionGridTest {
         assertEquals(0, grid.occupancy(0, 4, 0), "the old section is empty");
         assertEquals(1, grid.occupancy(1, 4, 0), "the new one holds it");
         assertEquals(1, grid.size(), "and it is counted once, in one place");
-        // The old position still sees it, because the neighbouring section is inside the search
-        // radius. What stops seeing it is a position far enough away.
-        assertTrue(grid.hasNeighbours(0, 64, 0), "the adjacent section is within the radius");
-        assertTrue(grid.hasNeighbours(16, 64, 0));
-        assertFalse(grid.hasNeighbours(96, 64, 0), "six sections away sees nothing");
+        // A position in the old section sees it, because the entity sits in an adjacent section.
+        // A position in the new section does not: the entity is alone there, and its own section
+        // holding one entity proves nothing about whether anything else is near.
+        assertTrue(grid.hasNeighbours(0, 64, 0), "an adjacent section holds the entity");
+        assertFalse(grid.hasNeighbours(16, 64, 0), "alone in its own section");
+        assertFalse(grid.hasNeighbours(96, 64, 0), "and six sections away sees nothing");
+
+        // Bring a second entity into the neighbouring section and both must now see each other.
+        grid.add(0, 64, 0);
+        assertTrue(grid.hasNeighbours(0, 64, 0), "two entities in adjacent sections");
+        assertTrue(grid.hasNeighbours(16, 64, 0), "each sees the other, not itself");
+        assertEquals(2, grid.size());
     }
 
     @Test
