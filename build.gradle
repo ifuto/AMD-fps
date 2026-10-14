@@ -382,6 +382,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/gpu/FrameSlotScheduler.class",
                         "net/amdfaster/mesh/LodMerger.class",
                         "net/amdfaster/mesh/SparseVoxelOctree.class",
+                        "net/amdfaster/draw/DeltaFramePlanner.class",
                         "net/amdfaster/mc/ModelCache.class",
                         "net/amdfaster/gpu/BlockBindings.class",
                         // The packing layer between a section mesh and a mapped GPU buffer. It is
