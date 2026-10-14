@@ -344,11 +344,19 @@ public final class DeltaFramePlanner {
      */
     private int probe(int sectionKey) {
         int index = spread(sectionKey) & (this.capacity - 1);
+        int visited = 0;
         while (isOccupied(index)) {
             if (this.keys[index] == sectionKey) {
                 return index;
             }
             index = (index + 1) & (this.capacity - 1);
+            if (++visited > this.capacity) {
+                // Cannot happen while the load factor holds, but a full table makes the loop above run
+                // forever, and a hang gives no diagnosis at all. Throwing costs one comparison per
+                // probe and turns a silent stall into a message.
+                throw new IllegalStateException(
+                        "table of " + this.capacity + " is full; probe did not terminate");
+            }
         }
         return index;
     }
@@ -426,6 +434,11 @@ public final class DeltaFramePlanner {
             this.visible[index] = oldVisible[i];
             this.drawn[index] = oldDrawn[i];
             this.occupied[index] = true;
+            // allocate() reset this to zero, and the count is what decides when to grow next. Leaving
+            // it at zero meant growth never happened again, the table filled, and probe walked it
+            // forever looking for a key that was not there. A hang is the worst way for a bug to
+            // report itself: CI sits at "in progress" and says nothing.
+            this.count++;
         }
     }
 

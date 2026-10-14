@@ -241,6 +241,27 @@ class DeltaFramePlannerTest {
     }
 
     @Test
+    void growingKeepsTheCountThatDecidesTheNextGrowth() {
+        // The bug this catches: grow() called allocate(), which zeroes the count, and the rehash loop
+        // did not put it back. The count is what decides when to grow next, so after the first growth
+        // it stayed at zero, growth never happened again, the table filled, and probe walked it forever
+        // looking for a key that was not there. CI reported that as "in progress" rather than as a
+        // failure, which is why the count is asserted after every growth rather than only at the end.
+        DeltaFramePlanner planner = new DeltaFramePlanner(16);
+
+        for (int i = 1; i <= 5000; i++) {
+            planner.setVisible(i, true);
+            assertEquals(i, planner.trackedCount(), "after inserting " + i);
+        }
+        for (int i = 1; i <= 5000; i++) {
+            assertTrue(planner.isTracked(i), "section " + i + " survived every rehash");
+        }
+
+        DeltaFramePlanner.Plan plan = planner.plan();
+        assertEquals(5000, plan.drawAddCount);
+    }
+
+    @Test
     void sectionKeysPackDistinctly() {
         java.util.Set<Integer> keys = new java.util.HashSet<>();
         long expected = 0;
