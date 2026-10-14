@@ -115,13 +115,17 @@ class ChunkSectionWriterTest {
         int bits = ChunkSectionWriter.bitsFor(writer.paletteSize());
 
         assertEquals(ChunkSectionWriter.longsFor(bits), packed.length);
+        // The palette is in first-seen order, and the fill starts at stone, so it is [1, 2, 0] -- the
+        // stored indices are not the block ids. An earlier version of this test indexed the palette
+        // with a block id and compared the result to another one.
+        assertArrayEquals(new int[] {1, 2, 0}, writer.palette());
         for (int y = 0; y < 16; y++) {
             for (int z = 0; z < 16; z++) {
                 for (int x = 0; x < 16; x++) {
-                    int want = y < 12 ? 1 : (y < 14 ? 2 : 0);
+                    int wantId = y < 12 ? 1 : (y < 14 ? 2 : 0);
                     int index = ChunkSectionWriter.index(x, y, z);
-                    assertEquals(writer.palette()[want], packed == null ? -1
-                            : writer.palette()[ChunkSectionWriter.unpack(packed, bits, index)],
+                    int storedIndex = ChunkSectionWriter.unpack(packed, bits, index);
+                    assertEquals(wantId, writer.palette()[storedIndex],
                             "block at " + x + "," + y + "," + z);
                 }
             }
