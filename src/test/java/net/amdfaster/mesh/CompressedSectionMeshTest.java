@@ -36,11 +36,29 @@ class CompressedSectionMeshTest {
     }
 
     private static CompressedSectionMesh.InputQuad templateQuad(int template, int light) {
+        return templateQuad(template, light, 0, 0, 0);
+    }
+
+    /**
+     * A template quad with its corners placed at a block offset.
+     *
+     * <p>The mesher works in section-local coordinates, so the corners a caller holds are the canonical
+     * ones plus the block offset. Passing corners at the origin with a non-zero offset describes a quad
+     * that is not where it claims to be, and the template match correctly refuses it.
+     */
+    private static CompressedSectionMesh.InputQuad templateQuad(
+            int template, int light, int offsetX, int offsetY, int offsetZ) {
         int[] block = {light, light, light, light};
         int[] sky = {15, 15, 15, 15};
         int[] ao = {3, 3, 3, 3};
+        float[] corners = face(template);
+        for (int v = 0; v < 4; v++) {
+            corners[v * 3] += offsetX;
+            corners[v * 3 + 1] += offsetY;
+            corners[v * 3 + 2] += offsetZ;
+        }
         return new CompressedSectionMesh.InputQuad(
-                face(template), standardUvs(), axisNormal(template), block, sky, ao);
+                corners, standardUvs(), axisNormal(template), block, sky, ao);
     }
 
     @Test
@@ -49,7 +67,7 @@ class CompressedSectionMeshTest {
         // template supplies the exact corners, normal and UVs, so nothing is lost at all.
         CompressedSectionMesh mesh = new CompressedSectionMesh(64);
 
-        assertTrue(mesh.add(templateQuad(1, 12), 3, 70, 5, ATLAS));
+        assertTrue(mesh.add(templateQuad(1, 12, 3, 70, 5), 3, 70, 5, ATLAS));
 
         assertEquals(1, mesh.quadCount());
         assertEquals(5, mesh.bytes());
@@ -68,6 +86,8 @@ class CompressedSectionMeshTest {
         assertEquals(1f, normal[1], 0.0f, "the up face points up");
         assertEquals(0f, normal[2], 0.0f);
 
+        // Measured against the canonical corners, which is what reconstruct returns: a template stores
+        // no geometry, so the section origin is supplied at draw time rather than baked in.
         assertTrue(mesh.measure(0, templateQuad(1, 12), ATLAS));
         assertEquals(0.0, mesh.worstPositionError(), 0.0);
         assertEquals(0.0, mesh.worstNormalErrorDegrees(), 1e-6);
@@ -138,7 +158,8 @@ class CompressedSectionMeshTest {
         CompressedSectionMesh mesh = new CompressedSectionMesh(512);
 
         for (int template = 0; template < 256; template++) {
-            mesh.add(templateQuad(template % 6, 10 + (template % 6)),
+            mesh.add(templateQuad(template % 6, 10 + (template % 6),
+                            template % 16, template / 16, 0),
                     template % 16, template / 16, 0, ATLAS);
         }
 
