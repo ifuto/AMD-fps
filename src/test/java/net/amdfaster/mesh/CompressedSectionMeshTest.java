@@ -138,7 +138,7 @@ class CompressedSectionMeshTest {
         CompressedSectionMesh mesh = new CompressedSectionMesh(512);
 
         for (int template = 0; template < 256; template++) {
-            mesh.add(templateQuad(template % 6, 10 + (template % 6), template % 16),
+            mesh.add(templateQuad(template % 6, 10 + (template % 6)),
                     template % 16, template / 16, 0, ATLAS);
         }
 
