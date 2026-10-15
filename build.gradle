@@ -387,6 +387,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/gpu/VramBudget.class",
                         "net/amdfaster/runtime/GuiUpdateThrottle.class",
                         "net/amdfaster/mesh/VertexQuantizer.class",
+                        "net/amdfaster/mesh/CompressedSectionMesh.class",
                         "net/amdfaster/mc/ModelCache.class",
                         "net/amdfaster/gpu/BlockBindings.class",
                         // The packing layer between a section mesh and a mapped GPU buffer. It is
