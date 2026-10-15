@@ -174,10 +174,13 @@ public final class VertexQuantizer {
         ex = Math.min(limit, Math.max(-limit, ex));
         ey = Math.min(limit, Math.max(-limit, ey));
 
-        double error = Math.toDegrees(angleBetween(nx, ny, nz, decodeNormal(ex, ey)));
+        int packed = (ex & 0xFF) | ((ey & 0xFF) << 8);
+        // Measured through the same decode a caller uses, so the reported error is the error the shader
+        // will actually have rather than the error an independent implementation would.
+        double error = Math.toDegrees(angleBetween(nx, ny, nz, decodeNormal(packed)));
         this.worstNormalErrorDegrees = Math.max(this.worstNormalErrorDegrees, error);
 
-        return (ex & 0xFF) | ((ey & 0xFF) << 8);
+        return packed;
     }
 
     /**
