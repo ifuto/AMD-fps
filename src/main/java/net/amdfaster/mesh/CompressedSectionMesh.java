@@ -58,11 +58,17 @@ public final class CompressedSectionMesh {
      */
     public static final int GENERAL_SLOT_BYTES = 2 + 4 * 9;
 
-    /** Bits in one vertex's packed record. */
-    private static final int VERTEX_BITS = 72;
 
     private final QuadTemplateLibrary templates = new QuadTemplateLibrary();
     private final VertexQuantizer quantizer = new VertexQuantizer();
+
+    /**
+     * The quantisation range each quad was packed against, six floats per quad.
+     *
+     * <p>Recorded per quad here; a real buffer stores it once per meshlet, which is what makes local
+     * quantisation cheap rather than paying for the range on every quad.
+     */
+    private float[][] ranges;
 
     private final byte[] packed;
     private final boolean[] isTemplate;
