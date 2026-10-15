@@ -12,7 +12,7 @@ class CompressedSectionMeshTest {
     private static final int ATLAS = 1024;
 
     /** The six template faces, in the order QuadTemplateLibrary defines them. */
-    private static float[][] face(int template) {
+    private static float[] face(int template) {
         float[] out = new float[12];
         new QuadTemplateLibrary().templateVertices(template, out);
         return out;
