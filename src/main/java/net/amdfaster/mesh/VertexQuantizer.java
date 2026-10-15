@@ -236,7 +236,10 @@ public final class VertexQuantizer {
         int quantised = Math.round(insetCoordinate * 65535.0f);
         quantised = Math.min(65535, Math.max(0, quantised));
 
-        float decoded = quantised / 65535.0f;
+        // Measured after undoing the inset, which is what the shader does. Comparing against the raw
+        // quantised value instead counts the deliberate half-texel shift as error and reports about
+        // half a texel every time, which is the inset working rather than the quantisation failing.
+        float decoded = decodeUv(quantised, atlasSize);
         this.worstUvErrorTexels = Math.max(this.worstUvErrorTexels,
                 Math.abs(decoded - clamped) * atlasSize);
         return quantised;
@@ -249,6 +252,12 @@ public final class VertexQuantizer {
      *     {@link #quantiseUv}
      */
     public static float decodeUv(int quantised, int atlasSize) {
+        if (atlasSize < 1) {
+            throw new IllegalArgumentException("an atlas is at least one texel: " + atlasSize);
+        }
+        if (quantised < 0 || quantised > 65535) {
+            throw new IllegalArgumentException("a UV is a 16-bit value: " + quantised);
+        }
         float inset = 0.5f / atlasSize;
         float raw = quantised / 65535.0f;
         float unInset = (raw - inset) / (1.0f - 2.0f * inset);
