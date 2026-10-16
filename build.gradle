@@ -386,6 +386,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/gpu/TextureUploadBatcher.class",
                         "net/amdfaster/mesh/SectionMeshDeduplicator.class",
                         "net/amdfaster/net/PacketPriorityScheduler.class",
+                        "net/amdfaster/gpu/UniformCache.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
