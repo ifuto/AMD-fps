@@ -384,6 +384,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/entity/TrackerVisibilityCache.class",
                         "net/amdfaster/mob/SpawnCandidateCache.class",
                         "net/amdfaster/gpu/TextureUploadBatcher.class",
+                        "net/amdfaster/mesh/SectionMeshDeduplicator.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
