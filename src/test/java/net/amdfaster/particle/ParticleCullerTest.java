@@ -59,9 +59,15 @@ class ParticleCullerTest {
         ParticleCuller culler = new ParticleCuller(W, H);
         culler.markOpaque(0, H / 2, W, H, NEAR);
 
-        // Straddling the wall: the top half is in clear air.
-        assertTrue(culler.keep(100, H / 2 - 4, 108, H / 2 + 4, FAR, 1.0f));
+        // Straddling the wall, and tall enough to span more than one cell row. An eight pixel particle
+        // at the boundary sits inside a single 8-pixel cell, which the wall marks opaque, and the cell
+        // is conservative by design: it cannot tell that part of the particle is in clear air.
+        assertTrue(culler.keep(100, H / 2 - 16, 108, H / 2 + 16, FAR, 1.0f));
         assertEquals(0L, culler.culledBehind());
+
+        // The same particle, wholly inside the wall's cell row, is culled. That is the conservatism
+        // showing: it costs a particle that was actually visible at the edge of the wall.
+        assertTrue(culler.keep(100, H / 2 + 16, 108, H / 2 + 24, FAR, 1.0f) == false);
     }
 
     @Test
@@ -93,8 +99,9 @@ class ParticleCullerTest {
     @Test
     void markingMoreGeometryOnlyMakesACellMoreConservative() {
         ParticleCuller culler = new ParticleCuller(W, H);
-        culler.markOpaque(0, 0, 100, 100, 0.4f);
-        assertTrue(culler.keep(10, 10, 18, 18, 0.3f, 1.0f), "0.3 is nearer than 0.4");
+        // Reversed Z: the larger value is nearer, so a particle at 0.3 is behind a wall at 0.4.
+        culler.markOpaque(0, 0, 100, 100, 0.2f);
+        assertTrue(culler.keep(10, 10, 18, 18, 0.3f, 1.0f), "0.3 is nearer than 0.2");
 
         culler.markOpaque(0, 0, 100, 100, 0.9f);
         assertFalse(culler.keep(10, 10, 18, 18, 0.3f, 1.0f), "and now the wall is nearer");
