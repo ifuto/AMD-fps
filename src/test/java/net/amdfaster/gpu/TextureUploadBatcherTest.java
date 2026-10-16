@@ -38,14 +38,16 @@ class TextureUploadBatcherTest {
     void texturesAreSentInBatchesNotOneAtATime() {
         // Every upload is a driver call with a fixed cost. Three hundred of them at 0.03 ms each is 9 ms
         // that has nothing to do with the bytes being moved.
-        TextureUploadBatcher batcher = new TextureUploadBatcher();
         Recording uploader = new Recording();
+        TextureUploadBatcher batcher = new TextureUploadBatcher(uploader);
 
         for (int i = 0; i < 300; i++) {
             batcher.submit(entry(i));
         }
-        batcher.flush(uploader);
+        batcher.flush();
 
+        // The batches that filled on their own have to reach the caller's uploader too. Sending them
+        // anywhere else would be a texture that never arrives.
         assertEquals(300, uploader.ids.size());
         assertEquals(10, batcher.batches(), "300 over batches of 32");
         assertEquals(300L, batcher.uploaded());
@@ -56,12 +58,12 @@ class TextureUploadBatcherTest {
     void orderIsPreservedSoAFailureCanBeAttributed() {
         // Returning results in completion order would make a failure impossible to trace back to the
         // texture that caused it.
-        TextureUploadBatcher batcher = new TextureUploadBatcher();
+        TextureUploadBatcher batcher = new TextureUploadBatcher(new Recording());
 
         for (int i = 0; i < 5; i++) {
             batcher.submit(entry(i));
         }
-        List<Result> results = batcher.flush(new Recording());
+        List<Result> results = batcher.flush();
 
         assertEquals(5, results.size());
         for (int i = 0; i < 5; i++) {
@@ -73,18 +75,17 @@ class TextureUploadBatcherTest {
     void twoTexturesAreNeverSwapped() {
         // A block drawing with another block's texture is not subtle: it is visible on every face that
         // uses it, and it reads as a corrupted resource pack rather than a renderer mod.
-        TextureUploadBatcher batcher = new TextureUploadBatcher();
         List<Entry> seen = new ArrayList<>();
-        TextureUploadBatcher.Uploader capture = e -> {
+        TextureUploadBatcher batcher = new TextureUploadBatcher(e -> {
             seen.add(e);
             return true;
-        };
+        });
 
         Entry a = new Entry(7, 0, 16, 16, pixels(16, 16));
         Entry b = new Entry(9, 0, 32, 32, pixels(32, 32));
         batcher.submit(a);
         batcher.submit(b);
-        batcher.flush(capture);
+        batcher.flush();
 
         assertEquals(7, seen.get(0).textureId());
         assertEquals(16, seen.get(0).width());
@@ -96,13 +97,12 @@ class TextureUploadBatcherTest {
     void aFailureIsReportedPerEntryNotForTheWholeBatch() {
         // A partial batch is the worst outcome: some textures are on the GPU and some are not, and from
         // the outside the missing ones simply draw as whatever was there before, often black.
-        TextureUploadBatcher batcher = new TextureUploadBatcher();
-        TextureUploadBatcher.Uploader failsThird = e -> e.textureId() != 2;
+        TextureUploadBatcher batcher = new TextureUploadBatcher(e -> e.textureId() != 2);
 
         for (int i = 0; i < 5; i++) {
             batcher.submit(entry(i));
         }
-        List<Result> results = batcher.flush(failsThird);
+        List<Result> results = batcher.flush();
 
         assertEquals(5, results.size());
         assertTrue(results.get(0).uploaded());
@@ -116,18 +116,17 @@ class TextureUploadBatcherTest {
 
     @Test
     void anUploaderThatThrowsDoesNotLoseTheRestOfTheBatch() {
-        TextureUploadBatcher batcher = new TextureUploadBatcher();
-        TextureUploadBatcher.Uploader throwsOnSecond = e -> {
+        TextureUploadBatcher batcher = new TextureUploadBatcher(e -> {
             if (e.textureId() == 1) {
                 throw new IllegalStateException("device lost");
             }
             return true;
-        };
+        });
 
         for (int i = 0; i < 4; i++) {
             batcher.submit(entry(i));
         }
-        List<Result> results = batcher.flush(throwsOnSecond);
+        List<Result> results = batcher.flush();
 
         assertEquals(4, results.size());
         assertFalse(results.get(1).uploaded());
@@ -137,31 +136,31 @@ class TextureUploadBatcherTest {
 
     @Test
     void flushingAnEmptyQueueDoesNothing() {
-        TextureUploadBatcher batcher = new TextureUploadBatcher();
+        TextureUploadBatcher batcher = new TextureUploadBatcher(new Recording());
 
-        assertTrue(batcher.flush(new Recording()).isEmpty());
+        assertTrue(batcher.flush().isEmpty());
         assertEquals(0L, batcher.batches());
     }
 
     @Test
     void theQueueIsClearedAfterFlushing() {
-        TextureUploadBatcher batcher = new TextureUploadBatcher();
+        TextureUploadBatcher batcher = new TextureUploadBatcher(new Recording());
         batcher.submit(entry(1));
 
-        batcher.flush(new Recording());
+        batcher.flush();
 
         assertEquals(0, batcher.pending());
     }
 
     @Test
     void aPartialBatchIsSentOnFlush() {
-        TextureUploadBatcher batcher = new TextureUploadBatcher();
+        TextureUploadBatcher batcher = new TextureUploadBatcher(new Recording());
         for (int i = 0; i < 5; i++) {
             batcher.submit(entry(i));
         }
         assertEquals(5, batcher.pending(), "not yet full");
 
-        batcher.flush(new Recording());
+        batcher.flush();
 
         assertEquals(1L, batcher.batches(), "and the partial batch counts as one call");
     }
@@ -180,8 +179,10 @@ class TextureUploadBatcherTest {
 
     @Test
     void aMipLevelNeedsEnoughDataForItsSize() {
-        // A level-1 image of a 16x16 texture is 8x8.
-        assertThrows(IllegalArgumentException.class, () -> new Entry(1, 1, 16, 16, new byte[16 * 16 * 4 - 1]));
+        // A level-1 image of a 16x16 texture is 8x8, so it needs 256 bytes -- not the 1,024 a full-size
+        // buffer would carry. Accepting a short one would upload garbage at the wrong resolution.
+        assertThrows(IllegalArgumentException.class,
+                () -> new Entry(1, 1, 16, 16, new byte[8 * 8 * 4 - 1]));
         assertNotNull(new Entry(1, 1, 16, 16, pixels(8, 8)));
     }
 
@@ -194,8 +195,13 @@ class TextureUploadBatcherTest {
     }
 
     @Test
+    void aBatcherNeedsAnUploader() {
+        assertThrows(IllegalArgumentException.class, () -> new TextureUploadBatcher(null));
+    }
+
+    @Test
     void aFreshBatcherReportsZeroNotNaN() {
-        TextureUploadBatcher batcher = new TextureUploadBatcher();
+        TextureUploadBatcher batcher = new TextureUploadBatcher(new Recording());
 
         assertEquals(0.0, batcher.savedPercent());
         assertEquals(0, batcher.pending());

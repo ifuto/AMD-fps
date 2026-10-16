@@ -67,8 +67,13 @@ public final class TextureUploadBatcher {
             if (mipLevel < 0) {
                 throw new IllegalArgumentException("a negative mip level: " + mipLevel);
             }
-            // A power-of-two check on the level-0 size would belong to the texture, not the entry; here
-            // the data has to be large enough for the level being written.
+            // Clamping the shifted size to one would let a level past the end of the chain through, and
+            // writing it would go outside the allocated storage.
+            if (mipLevel >= mipLevels(width, height)) {
+                throw new IllegalArgumentException(
+                        "a " + width + "x" + height + " texture has "
+                                + mipLevels(width, height) + " levels, not " + (mipLevel + 1));
+            }
             long expected = (long) Math.max(1, width >> mipLevel)
                     * Math.max(1, height >> mipLevel) * 4;
             if (data.length < expected) {
@@ -83,11 +88,24 @@ public final class TextureUploadBatcher {
     public record Result(int textureId, int mipLevel, boolean uploaded, String failure) {}
 
     private final List<Entry> pending = new ArrayList<>();
+    private final Uploader uploader;
 
     private long submitted;
     private long uploaded;
     private long failed;
     private long batches;
+
+    /**
+     * @param uploader where textures go. Held rather than passed per call, because a batch that fills
+     *     on its own has to send itself, and sending it anywhere but the caller's device would be a
+     *     texture that never arrives.
+     */
+    public TextureUploadBatcher(Uploader uploader) {
+        if (uploader == null) {
+            throw new IllegalArgumentException("no uploader");
+        }
+        this.uploader = uploader;
+    }
 
     /**
      * Queues a texture.
@@ -99,15 +117,7 @@ public final class TextureUploadBatcher {
         this.pending.add(entry);
         this.submitted++;
         if (this.pending.size() >= BATCH_SIZE) {
-            flush(new AlwaysSucceeds());
-        }
-    }
-
-    /** A uploader that never fails, for measuring the batching itself. */
-    private static final class AlwaysSucceeds implements Uploader {
-        @Override
-        public boolean upload(Entry entry) {
-            return true;
+            flush();
         }
     }
 
@@ -123,7 +133,7 @@ public final class TextureUploadBatcher {
      * <p>Order matters because a caller reading the results by index expects them to line up with what it
      * submitted. Returning them in completion order would make a failure impossible to attribute.
      */
-    public List<Result> flush(Uploader uploader) {
+    public List<Result> flush() {
         if (this.pending.isEmpty()) {
             return List.of();
         }
@@ -134,7 +144,7 @@ public final class TextureUploadBatcher {
             boolean ok;
             String failure = null;
             try {
-                ok = uploader.upload(entry);
+                ok = this.uploader.upload(entry);
                 if (!ok) {
                     failure = "the uploader refused it";
                 }
