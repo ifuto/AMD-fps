@@ -59,6 +59,7 @@ public final class RetainedChunkCache {
     private long retained;
     private long replaced;
     private long evicted;
+    private long hits;
     private long misses;
 
     /**
@@ -90,7 +91,11 @@ public final class RetainedChunkCache {
         for (int i = 0; i < CAPACITY; i++) {
             if (this.used[i] && this.keys[i] == key) {
                 // Live chunks are drawn from the real one; only retained copies are served from here.
-                return this.states[i] == RETAINED;
+                if (this.states[i] == RETAINED) {
+                    this.hits++;
+                    return true;
+                }
+                return false;
             }
         }
         this.misses++;
@@ -107,6 +112,13 @@ public final class RetainedChunkCache {
         int key = key(chunkX, chunkZ);
         for (int i = 0; i < CAPACITY; i++) {
             if (this.used[i] && this.keys[i] == key) {
+                if (this.states[i] != RETAINED) {
+                    // Marking a live chunk as retained counts the same as retaining a new one: either
+                    // way the client has committed to drawing it from memory. Not counting this case
+                    // would understate the cache whenever the chunk had been received first, which is
+                    // the normal order of events.
+                    this.retained++;
+                }
                 this.states[i] = RETAINED;
                 return;
             }
@@ -185,6 +197,11 @@ public final class RetainedChunkCache {
         return this.evicted;
     }
 
+    /** How many restores were served from the retained cache. */
+    public long hits() {
+        return this.hits;
+    }
+
     /** How many restores found nothing to draw. */
     public long misses() {
         return this.misses;
@@ -196,14 +213,17 @@ public final class RetainedChunkCache {
      * <p>Zero before any restore has been asked for. A cache that has been asked nothing has technically
      * always succeeded, but reporting a hit rate for an unused one reads as a result when it is the
      * absence of one.
+     *
+     * <p>A chunk that is live is not a miss and not a hit: it is drawn from the real one, and counting it
+     * either way would describe the cache as doing something it did not.
      */
     public double hitPercent() {
-        long asked = this.retained + this.misses;
-        return asked == 0 ? 0.0 : 100.0 * this.retained / asked;
+        long asked = this.hits + this.misses;
+        return asked == 0 ? 0.0 : 100.0 * this.hits / asked;
     }
 
-    /** Milliseconds of terrain drawing this cache adds per frame, for the chunks it serves. */
+    /** Milliseconds of terrain drawing this cache adds per frame, for the restores it served. */
     public double msPerFrame() {
-        return this.retained * MS_PER_CHUNK;
+        return this.hits * MS_PER_CHUNK;
     }
 }

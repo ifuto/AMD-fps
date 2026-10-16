@@ -19,7 +19,8 @@ class RetainedChunkCacheTest {
         cache.retain(10, 20);
 
         assertTrue(cache.restore(10, 20));
-        assertEquals(1L, cache.retained());
+        assertEquals(1L, cache.retained(), "marking a received chunk as retained counts");
+        assertEquals(1L, cache.hits());
     }
 
     @Test
@@ -59,7 +60,8 @@ class RetainedChunkCacheTest {
 
         assertEquals(1L, cache.evicted());
         assertFalse(cache.restore(0, 0), "the oldest was dropped");
-        assertTrue(cache.restore(9_999, 0));
+        assertFalse(cache.restore(9_999, 0),
+                "the new one is live, so it is drawn from the real chunk and not served from here");
     }
 
     @Test
@@ -92,6 +94,7 @@ class RetainedChunkCacheTest {
         assertEquals(0.0, cache.msPerFrame());
         assertEquals(0L, cache.retained());
         assertEquals(0L, cache.replaced());
+        assertEquals(0L, cache.hits());
         assertEquals(0L, cache.misses());
         assertEquals(4096, RetainedChunkCache.CAPACITY);
     }
