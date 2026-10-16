@@ -195,6 +195,35 @@ public final class ChunkSectionWriter {
      * <p>Exists so the round trip can be checked rather than trusted, and because the layout is easy
      * to get wrong in a way that produces scrambled chunks rather than errors.
      */
+    /**
+     * Writes one palette index into a packed array.
+     *
+     * <p>The counterpart to {@link #unpack}, and the same rule applies: entries do not straddle a long,
+     * so the spare high bits of each long stay zero. Packing tightly would save space and break the
+     * reader, which decodes on the same assumption.
+     *
+     * @param packed the array to write into, at least {@link #longsFor} long
+     * @param bits the packing width
+     * @param index the block index, YZX
+     * @param paletteIndex the value to store
+     */
+    public static void packInto(long[] packed, int bits, int index, int paletteIndex) {
+        if (index < 0 || index >= BLOCKS) {
+            throw new IndexOutOfBoundsException("block index " + index + " outside " + BLOCKS);
+        }
+        if (paletteIndex < 0 || paletteIndex >= (1 << bits)) {
+            throw new IllegalArgumentException(
+                    "palette index " + paletteIndex + " does not fit in " + bits + " bits");
+        }
+        int expected = longsFor(bits);
+        if (packed.length < expected) {
+            throw new IllegalArgumentException(
+                    "a " + bits + "-bit section is " + expected + " longs: " + packed.length);
+        }
+        int entries = entriesPerLong(bits);
+        packed[index / entries] |= (long) paletteIndex << ((index % entries) * bits);
+    }
+
     public static int unpack(long[] packed, int bits, int index) {
         int entries = entriesPerLong(bits);
         long word = packed[index / entries];
