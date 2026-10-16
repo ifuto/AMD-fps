@@ -47,6 +47,8 @@ public final class TrackerVisibilityCache {
     /** The entity position the answer was computed from, for detecting a boundary crossing. */
     private double[] entityX;
     private double[] entityZ;
+    /** The range the answer was computed for, since entity kinds are tracked at different distances. */
+    private double[] ranges;
     private boolean[] occupied;
     private int size;
     private int capacity;
@@ -69,6 +71,7 @@ public final class TrackerVisibilityCache {
         this.visible = new boolean[capacity];
         this.entityX = new double[capacity];
         this.entityZ = new double[capacity];
+        this.ranges = new double[capacity];
         this.occupied = new boolean[capacity];
     }
 
@@ -95,9 +98,14 @@ public final class TrackerVisibilityCache {
             // The cached answer is only safe while neither side has moved far enough to cross the
             // boundary. Checking distance every tick would defeat the purpose, so the slack is the
             // margin the cached answer is allowed to be wrong by before it is recomputed.
+            //
+            // The range has to match too. Entity kinds are tracked at different distances, and an answer
+            // computed for 64 blocks is simply wrong for one tracked at 32 -- there is no movement to
+            // notice, so serving it would be the stale-answer bug with nothing to trigger it.
             double dx = entityX - this.entityX[index];
             double dz = entityZ - this.entityZ[index];
-            if (dx * dx + dz * dz < INVALIDATION_SLACK * INVALIDATION_SLACK) {
+            if (this.ranges[index] == range
+                    && dx * dx + dz * dz < INVALIDATION_SLACK * INVALIDATION_SLACK) {
                 this.hits++;
                 return this.visible[index];
             }
@@ -117,6 +125,7 @@ public final class TrackerVisibilityCache {
         this.visible[index] = answer;
         this.entityX[index] = entityX;
         this.entityZ[index] = entityZ;
+        this.ranges[index] = range;
         this.size++;
         return answer;
     }
@@ -199,6 +208,7 @@ public final class TrackerVisibilityCache {
         boolean[] oldVisible = this.visible;
         double[] oldX = this.entityX;
         double[] oldZ = this.entityZ;
+        double[] oldRanges = this.ranges;
         boolean[] oldOccupied = this.occupied;
         int oldCapacity = this.capacity;
 
@@ -207,6 +217,7 @@ public final class TrackerVisibilityCache {
         this.visible = new boolean[this.capacity];
         this.entityX = new double[this.capacity];
         this.entityZ = new double[this.capacity];
+        this.ranges = new double[this.capacity];
         this.occupied = new boolean[this.capacity];
         this.size = 0;
 
@@ -220,6 +231,7 @@ public final class TrackerVisibilityCache {
             this.visible[index] = oldVisible[i];
             this.entityX[index] = oldX[i];
             this.entityZ[index] = oldZ[i];
+            this.ranges[index] = oldRanges[i];
             this.size++;
         }
     }
