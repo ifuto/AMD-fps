@@ -464,6 +464,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/explosion/ChainReactionDeduplicator.class",
                         "net/amdfaster/fluid/FluidSurfaceMerger.class",
                         "net/amdfaster/cull/MeshletFaceMaskCuller.class",
+                        "net/amdfaster/cull/NormalConeCuller.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
