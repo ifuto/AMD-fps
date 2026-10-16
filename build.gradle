@@ -420,6 +420,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/resource/ModelBakeCache.class",
                         "net/amdfaster/resource/LazyModelLoader.class",
                         "net/amdfaster/blockentity/StaticGeometryBaker.class",
+                        "net/amdfaster/blockentity/AnimationSkipper.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
