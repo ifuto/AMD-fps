@@ -64,10 +64,15 @@ class AmbientOcclusionBakerTest {
 
         int[] levels = baker.bakeFace(sides, corners);
 
+        // Derived from the rule, corner by corner:
+        //   0: no sides, no diagonal          -> 3 - 0 = 3
+        //   1: one side, no diagonal          -> 3 - 1 = 2
+        //   2: both sides solid               -> 0 regardless of the diagonal
+        //   3: one side, no diagonal          -> 3 - 1 = 2
         assertEquals(3, levels[0]);
         assertEquals(2, levels[1]);
         assertEquals(0, levels[2], "both sides solid");
-        assertEquals(1, levels[3], "one side and the diagonal");
+        assertEquals(2, levels[3], "one side only; corners[3] is false so the diagonal does not count");
     }
 
     @Test
