@@ -41,8 +41,12 @@ class BlockEntityFrustumCullerTest {
     }
 
     @Test
-    void aBoxEntirelyInsideTheViewHasNearestAngleZero() {
-        assertEquals(0.0, BlockEntityFrustumCuller.nearestAngle(10.0, 2.0), 1e-9);
+    void aBoxStraddlingTheViewCentreHasNearestAngleZero() {
+        // The nearest point is zero away only when the box covers the centre. One off to the side still has
+        // its near edge at some angle, and reporting zero for it would make the test above meaningless.
+        assertEquals(0.0, BlockEntityFrustumCuller.nearestAngle(1.0, 2.0), 1e-9, "covers the centre");
+        assertEquals(8.0, BlockEntityFrustumCuller.nearestAngle(10.0, 2.0), 1e-9,
+                "a box centred at ten degrees with a two degree half-width reaches to eight");
     }
 
     @Test
