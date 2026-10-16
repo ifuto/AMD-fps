@@ -373,6 +373,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/fluid/FluidTickFilter.class",
                         "net/amdfaster/entity/EntityCollisionGrid.class",
                         "net/amdfaster/entity/ItemMergeIndex.class",
+                        "net/amdfaster/village/PoiIndex.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
