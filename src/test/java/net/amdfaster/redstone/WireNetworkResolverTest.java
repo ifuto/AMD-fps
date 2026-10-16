@@ -77,7 +77,9 @@ class WireNetworkResolverTest {
         WireNetworkResolver resolver = new WireNetworkResolver();
 
         assertEquals(42, resolver.resolve(1, 1, 0));
-        assertEquals(16.67, resolver.savedPercent(1, 1, 0), 0.01);
+        // Five of the six recalculations are gone, so the saving is the same fraction at any network size.
+        // It is the number of updates that scales, not the share avoided.
+        assertEquals(83.33, resolver.savedPercent(1, 1, 0), 0.01);
     }
 
     @Test
