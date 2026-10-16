@@ -366,6 +366,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/block/ShapeCache.class",
                         "net/amdfaster/tick/RandomTickFilter.class",
                         "net/amdfaster/blockentity/SleepTracker.class",
+                        "net/amdfaster/blockentity/TickScheduler.class",
                         "net/amdfaster/block/PistonShapes.class",
                         "net/amdfaster/redstone/PowerCache.class",
                         "net/amdfaster/hopper/HopperTransferCache.class",
