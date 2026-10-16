@@ -91,8 +91,22 @@ class TranslucentSortCacheTest {
         TranslucentSortCache cache = new TranslucentSortCache();
         cache.needsSort(0.0, 64.0, 0.0, GAP);
 
-        assertFalse(cache.needsSort(0.0, 64.4, 0.0, GAP), "vertical");
-        assertTrue(cache.needsSort(0.0, 64.0, 0.0, GAP), "and back down past the bound");
+        assertFalse(cache.needsSort(0.0, 64.4, 0.0, GAP), "vertical, inside the bound");
+        assertTrue(cache.needsSort(0.0, 65.0, 0.0, GAP), "vertical, a whole block from the last sort");
+    }
+
+    @Test
+    void returningToTheLastSortPositionNeedsNoSort() {
+        // The order depends on where the camera is now, not on the path it took. Going up and back to the
+        // position the order was built for cannot have reordered anything, however far it travelled in
+        // between.
+        TranslucentSortCache cache = new TranslucentSortCache();
+        cache.needsSort(0.0, 64.0, 0.0, GAP);
+
+        assertFalse(cache.needsSort(0.0, 64.4, 0.0, GAP), "up, inside the bound");
+        assertFalse(cache.needsSort(0.0, 64.0, 0.0, GAP), "and back to exactly where it was sorted");
+        assertEquals(1L, cache.sorted());
+        assertEquals(2L, cache.skipped());
     }
 
     @Test
