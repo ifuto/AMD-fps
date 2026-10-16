@@ -71,15 +71,18 @@ class StaticGeometryBakerTest {
 
     @Test
     void aKeptRendererStillCostsItsAssembly() {
-        // The saving is against assembling every block entity separately, including the ones that could not
-        // be baked.
+        // Two block entities here, so the baseline is two assemblies: one that was baked away and one that
+        // could not be. The saving is against assembling both separately every frame.
         StaticGeometryBaker baker = new StaticGeometryBaker();
 
         baker.bake("minecraft:chest", List.of(BODY), List.of(LID));
         baker.bake("minecraft:beacon", List.of(), List.of(LID));
 
-        assertEquals(3 * StaticGeometryBaker.MS_PER_ENTITY, baker.msWithoutBaking(), 1e-9);
-        assertEquals(2 * StaticGeometryBaker.MS_PER_ENTITY, baker.msSavedPerFrame(), 1e-9);
+        assertEquals(2 * StaticGeometryBaker.MS_PER_ENTITY, baker.msWithoutBaking(), 1e-9,
+                "the baked chest and the kept beacon");
+        assertEquals(1 * StaticGeometryBaker.MS_PER_ENTITY, baker.msSavedPerFrame(), 1e-9,
+                "only the chest stopped being assembled");
+        assertEquals(50.0, baker.savedPercent(), 1e-9);
     }
 
     @Test
