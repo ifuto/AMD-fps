@@ -390,6 +390,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/draw/DrawCallMerger.class",
                         "net/amdfaster/tick/WorkBudget.class",
                         "net/amdfaster/render/AnimatedTextureScheduler.class",
+                        "net/amdfaster/render/CloudMeshCache.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
