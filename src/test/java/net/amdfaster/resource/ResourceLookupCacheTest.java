@@ -62,8 +62,9 @@ class ResourceLookupCacheTest {
                 () -> { searches.incrementAndGet(); return null; }));
 
         assertEquals(1, searches.get(), "the failed search was not repeated");
-        assertEquals(1L, cache.missing());
-        assertEquals(1L, cache.hits());
+        assertEquals(2L, cache.missing(),
+                "both lookups asked for a resource that does not exist");
+        assertEquals(1L, cache.hits(), "the second was served from the cache");
     }
 
     @Test
