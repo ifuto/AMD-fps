@@ -472,6 +472,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/mesh/MeshSweepBounds.class",
                         "net/amdfaster/mesh/AxisPassScheduler.class",
                         "net/amdfaster/mesh/VoxelPermutationTable.class",
+                        "net/amdfaster/mesh/VertexPullingLayout.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
