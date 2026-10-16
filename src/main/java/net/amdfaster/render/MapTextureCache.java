@@ -145,8 +145,17 @@ public final class MapTextureCache {
         return (long) MAP_SIZE * MAP_SIZE * MS_PER_PIXEL;
     }
 
+    /**
+     * The share of the repaint avoided.
+     *
+     * <p>Zero before any frame has been drawn. A cache that has done nothing has technically avoided
+     * all of it, but reporting 100% for an unused cache reads as a result when it is the absence of one.
+     */
     public double savedPercent() {
         double without = msPerFrameWithoutCache();
-        return without == 0.0 ? 0.0 : 100.0 * (without - msPerFrame()) / without;
+        if (without == 0.0 || this.frames == 0) {
+            return 0.0;
+        }
+        return 100.0 * (without - msPerFrame()) / without;
     }
 }

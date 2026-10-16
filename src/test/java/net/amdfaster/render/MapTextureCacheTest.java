@@ -114,7 +114,8 @@ class MapTextureCacheTest {
 
         // 5 columns out of a possible 12,800 pixels a frame.
         assertEquals(MapTextureCache.MAP_SIZE, MapTextureCache.MAP_SIZE);
-        assertEquals(0.03264, MapTextureCache.msPerFrameWithoutCache(), 1e-9);
+        // 128 * 128 pixels at 2 ns each.
+        assertEquals(0.032768, MapTextureCache.msPerFrameWithoutCache(), 1e-9);
         assertTrue(cache.savedPercent() > 99.0, "was " + cache.savedPercent());
     }
 
@@ -129,9 +130,11 @@ class MapTextureCacheTest {
 
     @Test
     void aFreshCacheReportsZeroNotNaN() {
+        // A cache that has done nothing has technically avoided all of it, but 100% for an unused cache
+        // reads as a result when it is the absence of one.
         MapTextureCache cache = new MapTextureCache();
 
-        assertEquals(0.0, cache.savedPercent());
+        assertEquals(0.0, cache.savedPercent(), "no frames drawn, so nothing saved");
         assertEquals(0.0, cache.pixelsPerFrame());
         assertEquals(0.0, cache.msPerFrame());
         assertEquals(0, cache.dirtyCount());
