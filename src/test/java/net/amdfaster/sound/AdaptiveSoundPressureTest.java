@@ -29,7 +29,8 @@ class AdaptiveSoundPressureTest {
         }
 
         assertTrue(gauge.isSaturated(), "ten events a tick is two hundred a second");
-        assertEquals(1.0, gauge.pressure(), 1e-9);
+        assertTrue(gauge.pressure() >= AdaptiveSoundPressure.SATURATION,
+                "an asymptotic rise reaches the threshold rather than exactly one");
     }
 
     @Test
@@ -89,6 +90,8 @@ class AdaptiveSoundPressureTest {
         }
 
         assertEquals(16, gauge.limit(64, 16), "and a flooded one the strict end");
+        assertEquals(24L, gauge.saturated(),
+                "the ticks past the threshold, which the rise does not reach until tick 17");
     }
 
     @Test
