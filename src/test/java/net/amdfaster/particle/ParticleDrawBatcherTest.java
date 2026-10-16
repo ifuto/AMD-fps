@@ -39,8 +39,9 @@ class ParticleDrawBatcherTest {
         batcher.add(FLAME);
 
         assertEquals(2L, batcher.textureSwitches());
-        assertEquals(10, batcher.buffered(), "the rain was flushed, the flame is buffered");
-        assertEquals(1L, batcher.calls());
+        assertEquals(1L, batcher.calls(), "the ten rain particles went out as one call");
+        assertEquals(1, batcher.buffered(),
+                "the single flame particle that caused the switch is the new batch");
     }
 
     @Test

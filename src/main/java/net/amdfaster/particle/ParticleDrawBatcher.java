@@ -86,6 +86,10 @@ public final class ParticleDrawBatcher {
             // particles disappear, and growing without bound would defeat the point of having one.
             flush();
             this.flushesFull++;
+            // The particle that filled the buffer is the first one in the next, and falls through to be
+            // counted. Returning here instead would drop it, which is the same omission as the texture
+            // switch above and would lose one particle from every burst.
+            this.inBuffer++;
             return true;
         }
         this.inBuffer++;
