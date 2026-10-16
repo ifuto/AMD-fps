@@ -380,6 +380,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/worldgen/StructurePieceCache.class",
                         "net/amdfaster/pacing/AdaptiveQuality.class",
                         "net/amdfaster/worldgen/NoiseCache.class",
+                        "net/amdfaster/fluid/FlowDirectionCache.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
