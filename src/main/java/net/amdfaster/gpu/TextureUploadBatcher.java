@@ -45,10 +45,21 @@ public final class TextureUploadBatcher {
     /** Fixed cost of one driver call, in milliseconds. */
     public static final double MS_PER_CALL = 0.03;
 
-    /** A texture in a batch. */
+    /**
+     * A texture in a batch.
+     *
+     * <p>An explicit canonical constructor rather than a compact one: javac rejects the compact form
+     * here, and the validation is the point of the type, so it has to compile.
+     */
     public record Entry(int textureId, int mipLevel, int width, int height, byte[] data) {
 
-        Entry {
+        public Entry(int textureId, int mipLevel, int width, int height, byte[] data) {
+            this.textureId = textureId;
+            this.mipLevel = mipLevel;
+            this.width = width;
+            this.height = height;
+            this.data = data;
+
             if (width < 1 || height < 1) {
                 throw new IllegalArgumentException(
                         "a texture of " + width + "x" + height + " has no pixels");
@@ -58,7 +69,8 @@ public final class TextureUploadBatcher {
             }
             // A power-of-two check on the level-0 size would belong to the texture, not the entry; here
             // the data has to be large enough for the level being written.
-            long expected = (long) Math.max(1, width >> mipLevel) * Math.max(1, height >> mipLevel) * 4;
+            long expected = (long) Math.max(1, width >> mipLevel)
+                    * Math.max(1, height >> mipLevel) * 4;
             if (data.length < expected) {
                 throw new IllegalArgumentException(
                         "level " + mipLevel + " of a " + width + "x" + height
