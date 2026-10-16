@@ -450,6 +450,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/net/MovementPacketSuppressor.class",
                         "net/amdfaster/net/EmptyLightSectionSkipper.class",
                         "net/amdfaster/net/SpiralChunkOrder.class",
+                        "net/amdfaster/redstone/WireNetworkResolver.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
