@@ -177,8 +177,9 @@ class ExperienceOrbMergerTest {
                 orb(20.0, 64.0, 0.0, 3)));
 
         assertEquals(3, merger.orbsIn());
-        assertEquals(2, merger.orbsOut());
-        assertEquals(2 * ExperienceOrbMerger.MS_PER_ORB, merger.msSavedPerTick(), 1e-9);
+        assertEquals(2, merger.orbsOut(), "the two near each other merged, the distant one did not");
+        // One orb was removed by the merge, so one orb's cost is what was saved.
+        assertEquals(1 * ExperienceOrbMerger.MS_PER_ORB, merger.msSavedPerTick(), 1e-9);
         assertEquals(3 * ExperienceOrbMerger.MS_PER_ORB, merger.msWithoutMerging(), 1e-9);
     }
 
