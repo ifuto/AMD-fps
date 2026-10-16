@@ -388,6 +388,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/net/PacketPriorityScheduler.class",
                         "net/amdfaster/gpu/UniformCache.class",
                         "net/amdfaster/draw/DrawCallMerger.class",
+                        "net/amdfaster/tick/WorkBudget.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
