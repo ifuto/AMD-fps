@@ -73,7 +73,8 @@ class UniformCacheTest {
         assertTrue(cache.set(1, 0, new float[] {-0.0f}, COUNTING), "-0.0 is not 0.0");
 
         assertEquals(2, CALLS.get());
-        assertEquals(0.0f, -0.0f, "but == would say they are the same");
+        // assertEquals on floats is bit-exact, so it cannot demonstrate this; the language operator can.
+        assertTrue(0.0f == -0.0f, "the == operator treats them as the same, which is the trap");
     }
 
     @Test
