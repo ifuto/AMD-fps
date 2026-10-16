@@ -116,19 +116,34 @@ class SectionMeshDeduplicatorTest {
         assertEquals(2, BUILDS.get());
     }
 
+    /**
+     * A section filled with a distinct byte.
+     *
+     * <p>Taken modulo 256 because that is how many distinct fill bytes exist; an earlier version of this
+     * test asked for 500 distinct sections and got 256, which was the test being wrong rather than the
+     * deduplicator losing entries.
+     */
+    private static byte[] distinct(int index) {
+        byte[] content = new byte[SectionMeshDeduplicator.SECTION_BLOCKS];
+        java.util.Arrays.fill(content, (byte) (index & 0xFF));
+        // Vary the tail too, so more than 256 distinct sections are possible.
+        content[index % SectionMeshDeduplicator.SECTION_BLOCKS] = (byte) (index >> 8);
+        return content;
+    }
+
     @Test
     void meshesSurviveGrowth() {
         SectionMeshDeduplicator dedup = new SectionMeshDeduplicator(16);
         BUILDS.set(0);
 
         for (int i = 0; i < 500; i++) {
-            dedup.mesh(section(i), COUNTING);
+            dedup.mesh(distinct(i), COUNTING);
         }
-        assertEquals(500, dedup.size());
+        assertEquals(500, dedup.size(), "all 500 are distinct");
 
         int before = BUILDS.get();
         for (int i = 0; i < 500; i++) {
-            dedup.mesh(section(i), COUNTING);
+            dedup.mesh(distinct(i), COUNTING);
         }
         assertEquals(before, BUILDS.get(), "every one still shared after the table grew");
     }
