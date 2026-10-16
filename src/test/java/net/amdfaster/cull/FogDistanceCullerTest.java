@@ -81,7 +81,7 @@ class FogDistanceCullerTest {
         assertEquals(625L, culler.offered());
         assertEquals(432L, culler.culled());
         assertEquals(193L, culler.drawn());
-        assertEquals(68.8, culler.culledPercent(), 0.01);
+        assertEquals(69.12, culler.culledPercent(), 0.01);
         assertEquals(432 * FogDistanceCuller.MS_PER_SECTION, culler.msSavedPerFrame(), 1e-9);
     }
 
