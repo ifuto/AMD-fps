@@ -55,6 +55,15 @@ public final class UberShaderSelector {
     /** The most static properties worth baking in before the pipeline count gets out of hand. */
     public static final int MAX_STATIC_PROPERTIES = 4;
 
+    /**
+     * Frames a pipeline's compile cost is amortised over.
+     *
+     * <p>Creating a pipeline is a one-time cost, so comparing it against a per-frame branch cost means any
+     * property that runs at all eventually wins. Naming the horizon makes the trade explicit rather than
+     * leaving it in an unexplained divisor.
+     */
+    public static final int PIPELINE_AMORTISATION_FRAMES = 1000;
+
     private long draws;
     private long bound;
     private long branched;
@@ -115,7 +124,8 @@ public final class UberShaderSelector {
         // Worth a pipeline when the branch would cost more over a frame than the extra pipelines cost to
         // create, and the combination count stays within the limit.
         return combinations <= (1 << MAX_STATIC_PROPERTIES)
-                && timesPerFrame * MS_PER_BRANCH > combinations * MS_PER_BIND / 1000.0;
+                && timesPerFrame * MS_PER_BRANCH
+                        > combinations * MS_PER_BIND / (double) PIPELINE_AMORTISATION_FRAMES;
     }
 
     public long draws() {

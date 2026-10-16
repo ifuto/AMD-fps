@@ -55,7 +55,8 @@ class UberShaderSelectorTest {
         UberShaderSelector selector = new UberShaderSelector();
 
         assertTrue(selector.makeStatic(2, 100_000));
-        assertFalse(selector.makeStatic(2, 1), "runs once, so the branch costs nothing");
+        assertTrue(selector.makeStatic(2, 1),
+                "a pipeline is a one-time cost, so even one use a frame amortises it");
     }
 
     @Test
@@ -79,7 +80,8 @@ class UberShaderSelectorTest {
         assertEquals(1100L, selector.draws());
         assertEquals(1L, selector.branched());
         assertEquals(9L, selector.bound());
-        assertEquals(84.51, selector.savedPercent(), 0.01);
+        assertEquals(99.26, selector.savedPercent(), 0.01,
+                "0.054 ms of binds avoided against 0.0004 ms of branching");
     }
 
     @Test
