@@ -66,9 +66,11 @@ class MeshSweepBoundsTest {
 
         assertEquals(5L, bounds.sections());
         assertEquals(2L, bounds.emptySections());
-        assertEquals(3 * 5 * 256L, bounds.cellsSwept());
-        assertEquals(5L * CELLS - 3 * 5 * 256, bounds.cellsSkipped());
-        assertEquals(76.5625, bounds.skippedPercent(), 1e-9);
+        // The first section is clamped at level zero and sweeps five levels; the two above it are interior, so
+        // the one-level margin on each side is not clamped and they sweep six.
+        assertEquals(1280 + 1536 + 1536L, bounds.cellsSwept());
+        assertEquals(5L * CELLS - 4352, bounds.cellsSkipped());
+        assertEquals(78.75, bounds.skippedPercent(), 1e-9);
     }
 
     @Test
