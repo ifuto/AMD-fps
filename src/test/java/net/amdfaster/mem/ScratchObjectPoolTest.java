@@ -104,7 +104,8 @@ class ScratchObjectPoolTest {
         assertEquals(1001L, pool.taken());
         assertEquals(1000L, pool.reused());
         assertEquals(1L, pool.allocated());
-        assertEquals(99.9, pool.reusePercent(), 1e-9);
+        assertEquals(1000.0 / 1001 * 100, pool.reusePercent(), 1e-9,
+                "one allocation in a thousand and one takes");
     }
 
     @Test
