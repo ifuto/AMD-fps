@@ -392,6 +392,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/mesh/BlockVertexLadder.class",
                         "net/amdfaster/particle/ParticleCuller.class",
                         "net/amdfaster/particle/ParticlePool.class",
+                        "net/amdfaster/sound/SoundCuller.class",
                         "net/amdfaster/net/ChunkSectionReader.class",
                         "net/amdfaster/net/InflaterPool.class",
                         "net/amdfaster/mem/ModelDeduplicator.class",
