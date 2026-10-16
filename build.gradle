@@ -458,6 +458,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/village/StuckVillagerThrottler.class",
                         "net/amdfaster/mob/BreedingDensityCap.class",
                         "net/amdfaster/entity/DroppedItemExpiry.class",
+                        "net/amdfaster/sound/SoundPressureController.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
