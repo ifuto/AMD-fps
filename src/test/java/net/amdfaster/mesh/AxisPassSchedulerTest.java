@@ -16,7 +16,8 @@ class AxisPassSchedulerTest {
 
         assertEquals(3 * AxisPassScheduler.SECTION_CELLS, scheduler.runSection(1000));
         assertEquals(3L * AxisPassScheduler.SECTION_CELLS, scheduler.cellsVisited());
-        assertEquals(3L, scheduler.sections());
+        assertEquals(1L, scheduler.sections(), "one section, visited by three passes");
+        assertEquals(3L * AxisPassScheduler.SECTION_CELLS, scheduler.hits() + scheduler.misses());
     }
 
     @Test
