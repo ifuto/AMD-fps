@@ -418,6 +418,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/boot/StartupPriorityController.class",
                         "net/amdfaster/render/ConnectedTextureSelector.class",
                         "net/amdfaster/resource/ModelBakeCache.class",
+                        "net/amdfaster/resource/LazyModelLoader.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
