@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class EnumValuesCacheTest {
@@ -60,15 +61,15 @@ class EnumValuesCacheTest {
         Empty[] values = cache.values(Empty.class);
 
         assertEquals(0, values.length);
-        assertEquals(1L, cache.empty());
+        assertEquals(1L, cache.emptyRequests());
     }
 
     @Test
     void theEmptyArrayIsShared() {
         // An empty array is the same empty array every time, and allocating one per call would be the same
         // waste in a smaller package.
-        assertEquals(EnumValuesCache.empty(), EnumValuesCache.empty());
-        assertEquals(0, EnumValuesCache.empty().length);
+        assertSame(EnumValuesCache.sharedEmpty(), EnumValuesCache.sharedEmpty());
+        assertEquals(0, EnumValuesCache.sharedEmpty().length);
     }
 
     @Test
@@ -85,9 +86,7 @@ class EnumValuesCacheTest {
 
         cache.values(Colour.class);
 
-        @SuppressWarnings("unchecked")
-        Class<? extends Enum<?>> type = (Class<? extends Enum<?>>) (Class<?>) Colour.class;
-        assertEquals(3, cache.length(type));
+        assertEquals(3, cache.length(Colour.class));
     }
 
     @Test

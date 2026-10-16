@@ -1,6 +1,6 @@
 package net.amdfaster.mem;
 
-import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -51,22 +51,17 @@ public final class EnumValuesCache {
     /** The single shared empty array. */
     private static final Object[] EMPTY = new Object[0];
 
-    private final Map<Class<? extends Enum<?>>, Object[]> cache = new EnumMap<>(emptyKey());
+    /**
+     * The cached arrays, by enum type.
+     *
+     * <p>A plain map rather than an {@code EnumMap}: the key is a {@code Class}, which is not an enum, and
+     * an EnumMap requires an enum key type.
+     */
+    private final Map<Class<?>, Object[]> cache = new HashMap<>();
 
     private long requests;
     private long cached;
-    private long empty;
-
-    @SuppressWarnings("unchecked")
-    private static Class<? extends Enum<?>> emptyKey() {
-        // An EnumMap needs a key type; the marker is never used as a key.
-        return (Class<? extends Enum<?>>) (Class<?>) Marker.class;
-    }
-
-    /** Stands in for the key type of the map, which is fixed per instance. */
-    private enum Marker { ONLY }
-
-    private long[] lengths;
+    private long emptyRequests;
 
     /**
      * Returns a copy of an enum's values.
@@ -80,18 +75,17 @@ public final class EnumValuesCache {
         }
         this.requests++;
 
-        @SuppressWarnings("unchecked")
-        Object[] held = this.cache.get((Class<? extends Enum<?>>) (Class<?>) type);
+        Object[] held = this.cache.get(type);
         if (held == null) {
             held = type.getEnumConstants();
             if (held == null) {
                 throw new IllegalArgumentException("not an enum: " + type.getName());
             }
-            this.cache.put((Class<? extends Enum<?>>) (Class<?>) type, held);
+            this.cache.put(type, held);
             this.cached++;
         }
         if (held.length == 0) {
-            this.empty++;
+            this.emptyRequests++;
         }
 
         @SuppressWarnings("unchecked")
@@ -106,13 +100,13 @@ public final class EnumValuesCache {
      * <p>They must not write to it. A caller that needs to modify the result should use {@link #values},
      * which gives a copy.
      */
-    public int length(Class<? extends Enum<?>> type) {
+    public int length(Class<?> type) {
         Object[] held = this.cache.get(type);
         return held == null ? -1 : held.length;
     }
 
     /** A shared empty array, so a lookup that finds nothing does not allocate one. */
-    public static Object[] empty() {
+    public static Object[] sharedEmpty() {
         return EMPTY;
     }
 
@@ -136,8 +130,8 @@ public final class EnumValuesCache {
     }
 
     /** How many requests were for an enum with no constants. */
-    public long empty() {
-        return this.empty;
+    public long emptyRequests() {
+        return this.emptyRequests;
     }
 
     /**
