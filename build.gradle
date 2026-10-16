@@ -378,6 +378,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/mesh/AtlasPacker.class",
                         "net/amdfaster/block/ScheduledTickIndex.class",
                         "net/amdfaster/worldgen/StructurePieceCache.class",
+                        "net/amdfaster/pacing/AdaptiveQuality.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
