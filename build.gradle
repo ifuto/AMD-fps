@@ -469,6 +469,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/vk/GeneratedCommandScheduler.class",
                         "net/amdfaster/mesh/MeshletQuantizer.class",
                         "net/amdfaster/mesh/TriangleStripPacker.class",
+                        "net/amdfaster/mesh/MeshSweepBounds.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
