@@ -54,6 +54,16 @@ public final class AdaptiveSoundPressure {
     /** How much pressure is shed each tick when nothing arrives. */
     public static final double DECAY_PER_TICK = 0.05;
 
+    /**
+     * The pressure at which the gauge counts as saturated.
+     *
+     * <p>Not 1.0. Rising by a fraction of the remaining gap approaches the target without ever reaching it --
+     * forty ticks of a sustained flood leave 1 - 0.75^40, which is 0.99999 -- so a gauge that compared
+     * against exactly one would never report saturation however long the flood lasted. The threshold is where
+     * the limit has effectively reached its strict end, which is what "saturated" is meant to say.
+     */
+    public static final double SATURATION = 0.99;
+
     private double pressure;
 
     private long ticks;
@@ -87,7 +97,7 @@ public final class AdaptiveSoundPressure {
             // world muffled because of where the player has been.
             this.pressure = Math.max(target, this.pressure - DECAY_PER_TICK);
         }
-        if (this.pressure >= 1.0) {
+        if (this.pressure >= SATURATION) {
             this.saturated++;
         }
         return this.pressure;
@@ -98,9 +108,9 @@ public final class AdaptiveSoundPressure {
         return this.pressure;
     }
 
-    /** Whether the pressure is at its maximum. */
+    /** Whether the pressure has reached the point where the strict limit applies. */
     public boolean isSaturated() {
-        return this.pressure >= 1.0;
+        return this.pressure >= SATURATION;
     }
 
     /**
