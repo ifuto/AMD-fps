@@ -69,10 +69,16 @@ class LdsBankConflictAvoiderTest {
     }
 
     @Test
-    void aPowerOfTwoStrideAgainstAPowerOfTwoBankCountAlwaysConflicts() {
+    void aPowerOfTwoStrideWiderThanTheLanesSpreadConflicts() {
         // Arrays in shared memory are almost always sized in powers of two, because that is how tiles are
-        // shaped, so the conflict is the common case rather than the accident.
-        for (int stride : new int[] {2, 4, 8, 16, 32, 64, 128}) {
+        // shaped, so the conflict is the common case rather than the accident -- but not for every power of
+        // two. With 32 lanes and 64 banks a stride of 1 or 2 still lands each lane on its own bank, and the
+        // conflict starts at 4, which is where lanes begin to wrap onto banks already used.
+        assertFalse(LdsBankConflictAvoider.conflicts(1, LANES, BANKS));
+        assertFalse(LdsBankConflictAvoider.conflicts(2, LANES, BANKS),
+                "32 lanes at stride 2 reach 32 of the 64 banks");
+
+        for (int stride : new int[] {4, 8, 16, 32, 64, 128}) {
             assertTrue(LdsBankConflictAvoider.conflicts(stride, LANES, BANKS),
                     "stride " + stride + " conflicts");
         }

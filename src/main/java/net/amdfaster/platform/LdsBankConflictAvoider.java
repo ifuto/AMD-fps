@@ -97,9 +97,11 @@ public final class LdsBankConflictAvoider {
     /**
      * Whether a stride causes any conflict at all.
      *
-     * <p>A power-of-two stride against a power-of-two bank count always does, which is why the conflict is
-     * the common case rather than the accident -- arrays in shared memory are sized in powers of two because
-     * that is how tiles are shaped.
+     * <p>A power-of-two stride wider than the bank count divided by the lane count does, which with 32 lanes
+     * and 64 banks means anything from 4 up. That is why the conflict is the common case rather than the
+     * accident -- arrays in shared memory are sized in powers of two because that is how tiles are shaped, and
+     * the strides tiles produce are the ones that conflict. A stride of 1 or 2 is safe because the lanes
+     * still reach that many distinct banks.
      */
     public static boolean conflicts(int strideElements, int lanes, int banks) {
         return distinctBanks(strideElements, lanes, banks) < lanes;
