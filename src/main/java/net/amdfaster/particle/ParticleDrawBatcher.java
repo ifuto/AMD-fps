@@ -75,6 +75,10 @@ public final class ParticleDrawBatcher {
             boolean flushed = flushIfNotEmpty();
             this.currentTexture = texture;
             this.textureSwitches++;
+            // The particle that caused the switch is the first one in the new batch, and falls through to be
+            // counted with the rest. Returning here instead would drop it: a batch of one would report
+            // empty, and a scene alternating between two textures would draw nothing at all.
+            this.inBuffer++;
             return flushed;
         }
         if (this.inBuffer >= BATCH_SIZE) {
