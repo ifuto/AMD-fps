@@ -399,6 +399,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/render/BeaconBeamCache.class",
                         "net/amdfaster/render/GlintCuller.class",
                         "net/amdfaster/render/EndPortalCache.class",
+                        "net/amdfaster/render/BreakingOverlayCache.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
