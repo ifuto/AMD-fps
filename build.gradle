@@ -475,6 +475,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/mesh/VertexPullingLayout.class",
                         "net/amdfaster/gpu/TileBinner.class",
                         "net/amdfaster/gpu/BindlessTextureTable.class",
+                        "net/amdfaster/gpu/UberShaderSelector.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
