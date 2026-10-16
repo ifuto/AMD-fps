@@ -73,7 +73,7 @@ class BlockEntityOcclusionCullerTest {
 
         assertEquals(0L, culler.culled());
         assertEquals(0.0, culler.msSaved(), 1e-9);
-        assertEquals(1.0, culler.msTesting(), 1e-9);
+        assertEquals(0.1, culler.msTesting(), 1e-9, "a hundred tests at a millisecond each");
         assertEquals(0.0, culler.savedPercent(), 1e-9, "nothing saved, and not reported as a loss");
     }
 
