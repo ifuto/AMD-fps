@@ -23,10 +23,15 @@ class MeshJobPrioritizerTest {
     @Test
     void anInvisibleSectionIsStillBuilt() {
         // A section outside the current view is one turn of the head away from being in it, and a queue
-        // that dropped them would trade a slow fill for a hole that never fills.
+        // that dropped them would trade a slow fill for a hole that never fills. Priority zero is still a
+        // priority -- it is queued behind the visible ones, not left out.
         MeshJobPrioritizer prioritizer = new MeshJobPrioritizer();
 
-        assertTrue(prioritizer.priority(false, 0) > 0, "queued, not dropped");
+        int priority = prioritizer.priority(false, 0);
+
+        assertEquals(0, priority, "a fresh invisible job, at the bottom of the queue");
+        assertEquals(1L, prioritizer.chosenInvisible(), "and counted as queued");
+        assertTrue(priority < prioritizer.priority(true, 0), "below a visible one, not absent");
     }
 
     @Test
