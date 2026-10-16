@@ -392,6 +392,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/render/AnimatedTextureScheduler.class",
                         "net/amdfaster/render/CloudMeshCache.class",
                         "net/amdfaster/entity/NameplateCuller.class",
+                        "net/amdfaster/render/WeatherMeshCache.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
