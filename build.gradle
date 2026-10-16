@@ -382,6 +382,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/worldgen/NoiseCache.class",
                         "net/amdfaster/fluid/FlowDirectionCache.class",
                         "net/amdfaster/entity/TrackerVisibilityCache.class",
+                        "net/amdfaster/mob/SpawnCandidateCache.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
