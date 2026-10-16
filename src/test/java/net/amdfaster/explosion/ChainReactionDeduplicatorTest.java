@@ -45,12 +45,16 @@ class ChainReactionDeduplicatorTest {
         AtomicInteger resolutions = new AtomicInteger();
 
         chain.resistanceAt(STONE, p -> { resolutions.incrementAndGet(); return STONE_RESISTANCE; });
+        assertEquals(1, chain.size());
+
         chain.destroy(STONE);
+        assertEquals(0, chain.size(), "gone from the cache");
+
         chain.resistanceAt(STONE, p -> { resolutions.incrementAndGet(); return 0.0; });
 
         assertEquals(2, resolutions.get());
         assertEquals(1L, chain.destroyed());
-        assertEquals(0, chain.size());
+        assertEquals(1, chain.size(), "resolved again, so it is back");
     }
 
     @Test
@@ -82,19 +86,21 @@ class ChainReactionDeduplicatorTest {
         // A hundred TNT detonating in the same tick resolves the same volume over and over, and the number of
         // distinct blocks barely grows past the first blast's.
         ChainReactionDeduplicator chain = new ChainReactionDeduplicator();
-        int distinct = 500;
+        // Sixty rays cross each block, so a blast's 24 336 samples cover 405 distinct positions.
+        int positionsPerBlast = ChainReactionDeduplicator.LOOKUPS_PER_BLAST / 60;
+        assertEquals(405, positionsPerBlast);
 
         for (int blast = 0; blast < 100; blast++) {
             chain.beginBlast();
-            for (int block = 0; block < ChainReactionDeduplicator.LOOKUPS_PER_BLAST / 60; block++) {
-                int packed = block % distinct;
-                chain.resistanceAt(packed, p -> 6.0);
+            for (int block = 0; block < positionsPerBlast; block++) {
+                chain.resistanceAt(block, p -> 6.0);
             }
         }
 
         assertEquals(100L, chain.blasts());
-        assertEquals(distinct, chain.size(), "the distinct set, not a hundred times it");
-        assertTrue(chain.hitPercent() > 95.0);
+        assertEquals(40_500L, chain.lookups());
+        assertEquals(positionsPerBlast, chain.size(), "the distinct set, not a hundred times it");
+        assertEquals(98.77, chain.hitPercent(), 0.01);
     }
 
     @Test
