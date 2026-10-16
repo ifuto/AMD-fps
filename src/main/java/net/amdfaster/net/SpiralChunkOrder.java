@@ -148,7 +148,11 @@ public final class SpiralChunkOrder {
      */
     public double savedPercent(int radius) {
         double without = msBeforeCentreReadyRowByRow(radius);
-        if (without == 0.0) {
+        if (without == 0.0 || this.computed == 0) {
+            // Gated on an order having been built, not just on the arithmetic. The saving here is a property
+            // of the geometry, so without this it would report the same number for an order that has never
+            // been computed as for one that has -- and a figure for an unused one reads as a result when it
+            // is the absence of one.
             return 0.0;
         }
         return 100.0 * Math.max(0.0, without - msBeforeCentreReady()) / without;
