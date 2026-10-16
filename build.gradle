@@ -434,6 +434,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/entity/AsyncVisibilityWorker.class",
                         "net/amdfaster/particle/ParticleDrawBatcher.class",
                         "net/amdfaster/mesh/HiddenFaceCuller.class",
+                        "net/amdfaster/mesh/job/MeshJobPrioritizer.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
