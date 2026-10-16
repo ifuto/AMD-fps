@@ -76,7 +76,8 @@ class TextVertexBufferTest {
 
         assertTrue(buffer.needsRebuild("Chest of diamond!"),
                 "the same length, so a length check would not catch it");
-        assertEquals(TEXT, buffer.text(), "and the text is what was last asked for");
+        assertEquals("Chest of diamond!", buffer.text(),
+                "what was last asked for, not what was built before");
     }
 
     @Test
