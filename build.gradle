@@ -488,6 +488,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/sound/RegionBoundarySmoothing.class",
                         "net/amdfaster/sound/CriticalSoundWhitelist.class",
                         "net/amdfaster/sound/SoundDirectionPrioritizer.class",
+                        "net/amdfaster/sound/SlidingWindowRateLimiter.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
