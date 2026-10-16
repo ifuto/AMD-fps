@@ -456,6 +456,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/entity/ActivationRangeScheduler.class",
                         "net/amdfaster/tick/DynamicLoadController.class",
                         "net/amdfaster/village/StuckVillagerThrottler.class",
+                        "net/amdfaster/mob/BreedingDensityCap.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
