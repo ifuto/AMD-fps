@@ -424,6 +424,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/blockentity/BlockEntityOcclusionCuller.class",
                         "net/amdfaster/blockentity/BlockEntityFrustumCuller.class",
                         "net/amdfaster/render/LodChunkReducer.class",
+                        "net/amdfaster/resource/LazyDataFixer.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
