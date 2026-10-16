@@ -440,6 +440,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/pacing/UnfocusedFrameLimiter.class",
                         "net/amdfaster/light/ChunkParallelLightEngine.class",
                         "net/amdfaster/worldgen/DistantTerrainGenerator.class",
+                        "net/amdfaster/worldgen/StructureLayoutCache.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
