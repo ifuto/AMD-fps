@@ -274,7 +274,12 @@ public final class BlockVertexLadder {
         this.vertices += 4;
     }
 
-    /** Unpacks a grid-aligned quad. */
+    /**
+     * Unpacks a grid-aligned quad.
+     *
+     * @return thirteen ints: x, y, z, face, sprite id, then four occlusion values and four packed
+     *     lights
+     */
     public static int[] unpackGridQuad(byte[] packed) {
         int headerBytes = (GRID_HEADER_BITS + 7) / 8;
         if (packed.length < headerBytes + 4) {
@@ -286,7 +291,8 @@ public final class BlockVertexLadder {
             bits |= ((long) (packed[i] & 0xFF)) << (i * 8);
         }
         int axisMask = (1 << GRID_AXIS_BITS) - 1;
-        int[] out = new int[12];
+        // Five header fields, then four occlusion values at 5..8 and four lights at 9..12.
+        int[] out = new int[5 + 4 + 4];
         out[0] = (int) (bits & axisMask);
         out[1] = (int) ((bits >>> GRID_AXIS_BITS) & axisMask);
         out[2] = (int) ((bits >>> (2 * GRID_AXIS_BITS)) & axisMask);
