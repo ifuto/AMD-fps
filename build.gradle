@@ -496,6 +496,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/platform/WorkgroupModeSelector.class",
                         "net/amdfaster/platform/LdsBankConflictAvoider.class",
                         "net/amdfaster/platform/Xe3RegisterPlanner.class",
+                        "net/amdfaster/vk/ComputeQueueSelector.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
