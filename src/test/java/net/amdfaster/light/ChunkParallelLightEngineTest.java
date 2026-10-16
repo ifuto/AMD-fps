@@ -70,13 +70,16 @@ class ChunkParallelLightEngineTest {
 
         engine.propagate(16, 8, new int[] {4});
 
-        assertEquals(8 * ChunkParallelLightEngine.MS_PER_SECTION
+        // Sixteen sections over eight cores is two per core, not eight.
+        assertEquals(2 * ChunkParallelLightEngine.MS_PER_SECTION
                 + 4 * ChunkParallelLightEngine.MS_PER_BOUNDARY,
                 engine.msParallel(16, 8), 1e-9);
+        assertEquals(2.6, engine.msParallel(16, 8), 1e-9,
+                "2.4 of filling plus 0.2 of boundary checks");
         assertEquals(16 * ChunkParallelLightEngine.MS_PER_SECTION,
                 engine.msSerial(16), 1e-9);
         assertEquals(19.2, engine.msSerial(16), 1e-9);
-        assertEquals(98.75, engine.savedPercent(16, 8), 0.01);
+        assertEquals(86.46, engine.savedPercent(16, 8), 0.01);
     }
 
     @Test
