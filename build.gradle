@@ -409,6 +409,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/draw/TranslucentSortCache.class",
                         "net/amdfaster/render/TextVertexBuffer.class",
                         "net/amdfaster/worldgen/BiomeBlendCache.class",
+                        "net/amdfaster/cull/FogDistanceCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
