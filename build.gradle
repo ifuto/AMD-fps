@@ -430,6 +430,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/render/HudTextureCache.class",
                         "net/amdfaster/mem/ScratchObjectPool.class",
                         "net/amdfaster/resource/ResourceLookupCache.class",
+                        "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
