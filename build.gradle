@@ -492,6 +492,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/sound/AdaptiveSoundPressure.class",
                         "net/amdfaster/entity/TieredActivationScheduler.class",
                         "net/amdfaster/cull/BehindCameraCuller.class",
+                        "net/amdfaster/platform/DynamicVgprPlanner.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
