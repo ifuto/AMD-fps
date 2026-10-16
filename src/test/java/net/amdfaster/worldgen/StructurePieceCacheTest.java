@@ -172,9 +172,11 @@ class StructurePieceCacheTest {
 
     @Test
     void aFreshCacheReportsZeroNotNaN() {
+        // Nothing is cached, so nothing can be served from it. Reporting the copy cost anyway would
+        // claim a saving for work that cannot happen.
         StructurePieceCache cache = new StructurePieceCache();
 
-        assertEquals(0.0, cache.savedPercent(8, 400));
+        assertEquals(0.0, cache.savedPercent(8, 400), "an empty cache saves nothing");
         assertEquals(0, cache.templateCount());
         assertEquals(0L, cache.reused());
     }

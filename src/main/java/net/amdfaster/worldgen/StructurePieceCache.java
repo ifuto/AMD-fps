@@ -159,6 +159,11 @@ public final class StructurePieceCache {
      * @param blocksPerPiece how large each is
      */
     public double msWithCache(int placements, int blocksPerPiece) {
+        if (this.templates.isEmpty()) {
+            // Nothing is cached, so nothing can be served from the cache. Reporting the copy cost here
+            // would claim a saving for work that cannot happen.
+            return msWithoutCache(placements, blocksPerPiece);
+        }
         // Generating each design once, then copying. A copy is a memory move, which is far cheaper than
         // placement, palette and light work per block.
         long generate = (long) this.templateCount() * blocksPerPiece;
