@@ -443,6 +443,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/worldgen/StructureLayoutCache.class",
                         "net/amdfaster/worldgen/GpuTerrainGenerator.class",
                         "net/amdfaster/mem/NbtStringCache.class",
+                        "net/amdfaster/mem/MemoryPressureMonitor.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
