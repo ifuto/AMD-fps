@@ -422,6 +422,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/blockentity/StaticGeometryBaker.class",
                         "net/amdfaster/blockentity/AnimationSkipper.class",
                         "net/amdfaster/blockentity/BlockEntityOcclusionCuller.class",
+                        "net/amdfaster/blockentity/BlockEntityFrustumCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
