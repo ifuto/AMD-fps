@@ -62,9 +62,10 @@ class OffscreenParticleCullerTest {
 
         assertEquals(2000L, culler.tested());
         assertEquals(2000L, culler.aged(), "every one aged");
-        assertEquals(422L, culler.drawn(), "0 to 38 degrees and 322 to 359");
-        assertEquals(1578L, culler.culled());
-        assertEquals(78.9, culler.culledPercent(), 0.01);
+        assertEquals(234L, culler.drawn(),
+                "39 of every 360 degrees, over five full cycles and a partial one");
+        assertEquals(1766L, culler.culled());
+        assertEquals(88.3, culler.culledPercent(), 0.01);
     }
 
     @Test
