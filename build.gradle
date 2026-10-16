@@ -461,6 +461,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/sound/SoundPressureController.class",
                         "net/amdfaster/pathfinding/SharedPathCache.class",
                         "net/amdfaster/collision/EntityPairDeduplicator.class",
+                        "net/amdfaster/explosion/ChainReactionDeduplicator.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
