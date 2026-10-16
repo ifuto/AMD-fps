@@ -100,7 +100,8 @@ class ChainReactionDeduplicatorTest {
         assertEquals(100L, chain.blasts());
         assertEquals(40_500L, chain.lookups());
         assertEquals(positionsPerBlast, chain.size(), "the distinct set, not a hundred times it");
-        assertEquals(98.77, chain.hitPercent(), 0.01);
+        assertEquals(99.0, chain.hitPercent(), 1e-9, "405 resolved out of 40 500 asked");
+        assertEquals(99.0, chain.savedPercent(), 1e-9);
     }
 
     @Test
