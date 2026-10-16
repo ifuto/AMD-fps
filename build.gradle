@@ -392,6 +392,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/particle/ParticleCuller.class",
                         "net/amdfaster/net/ChunkSectionReader.class",
                         "net/amdfaster/net/InflaterPool.class",
+                        "net/amdfaster/mem/ModelDeduplicator.class",
                         "net/amdfaster/mc/ModelCache.class",
                         "net/amdfaster/gpu/BlockBindings.class",
                         // The packing layer between a section mesh and a mapped GPU buffer. It is
