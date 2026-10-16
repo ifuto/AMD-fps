@@ -87,7 +87,8 @@ class FluidSurfaceMergerTest {
         assertEquals(39L, merger.quads());
         assertEquals(1.0 / CELLS, merger.quadsPerBlock(), 1e-12);
         assertEquals(39 * CELLS * FluidSurfaceMerger.MS_PER_QUAD, merger.msWithoutMerging(), 1e-9);
-        assertEquals(99.39, merger.savedPercent(), 0.01);
+        assertEquals(99.609375, merger.savedPercent(), 1e-9,
+                "9945 of 9984 quads gone, which is exact");
     }
 
     @Test
