@@ -46,7 +46,7 @@ class SoundCullerTest {
     void attenuationIsLinearAndMatchesTheEngine() {
         assertEquals(1.0, SoundCuller.attenuated(0.0, 16.0, 1.0), 1e-9, "full volume at the source");
         assertEquals(0.5, SoundCuller.attenuated(8.0, 16.0, 1.0), 1e-9, "half way, half volume");
-        assertEquals(0.25, SoundCuller.attenuated(4.0, 16.0, 1.0), 1e-9);
+        assertEquals(0.75, SoundCuller.attenuated(4.0, 16.0, 1.0), 1e-9, "a quarter of the way, three quarters left");
         assertEquals(0.0, SoundCuller.attenuated(16.0, 16.0, 1.0), 1e-9);
     }
 
