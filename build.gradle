@@ -482,6 +482,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/sound/CategoryBudgetAllocator.class",
                         "net/amdfaster/sound/DuplicateSoundLimiter.class",
                         "net/amdfaster/sound/LoopingSoundDamper.class",
+                        "net/amdfaster/sound/SoundWorkOffloader.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
