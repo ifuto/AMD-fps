@@ -427,6 +427,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/resource/LazyDataFixer.class",
                         "net/amdfaster/render/InventoryIconCache.class",
                         "net/amdfaster/render/HudUpdateScheduler.class",
+                        "net/amdfaster/render/HudTextureCache.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
