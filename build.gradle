@@ -415,6 +415,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/resource/LazyLanguageLoader.class",
                         "net/amdfaster/entity/CullingExclusionList.class",
                         "net/amdfaster/mem/WorldChangeRegistry.class",
+                        "net/amdfaster/boot/StartupPriorityController.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
