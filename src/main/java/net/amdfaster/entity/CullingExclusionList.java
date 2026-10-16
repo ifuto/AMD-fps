@@ -97,7 +97,14 @@ public final class CullingExclusionList {
         if (isExcluded(type)) {
             // Unconditional, not a more generous test. A wider frustum or a shorter occlusion distance
             // would still hide a beacon behind enough terrain, which defeats the reason it was excluded.
-            this.bypassed++;
+            if (occluded) {
+                // Only an occluded one was actually rescued. An excluded entity that was visible anyway
+                // was never going to be culled, and counting it here would claim credit for work the
+                // culler did not avoid.
+                this.bypassed++;
+            } else {
+                this.drawn++;
+            }
             return true;
         }
         if (occluded) {
