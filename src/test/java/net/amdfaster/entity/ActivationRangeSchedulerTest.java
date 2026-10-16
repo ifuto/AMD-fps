@@ -62,8 +62,9 @@ class ActivationRangeSchedulerTest {
         // tick, the mob would sit still for up to a quarter of a second after the player arrived.
         ActivationRangeScheduler scheduler = new ActivationRangeScheduler();
 
-        assertFalse(scheduler.shouldTick(FAR, false, 1, 1), "off phase, distant");
-        assertTrue(scheduler.shouldTick(NEAR, false, 1, 1), "and immediately when it is close");
+        // Entity zero is due on tick zero, four, eight -- so on tick one it is off phase and far away.
+        assertFalse(scheduler.shouldTick(FAR, false, 1, 0), "off phase, distant");
+        assertTrue(scheduler.shouldTick(NEAR, false, 1, 0), "and immediately when it is close");
     }
 
     @Test
