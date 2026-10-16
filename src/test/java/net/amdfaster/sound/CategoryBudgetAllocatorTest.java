@@ -45,14 +45,21 @@ class CategoryBudgetAllocatorTest {
     void aShareIsACeilingNotAReservation() {
         // If nothing is raining those channels are free for anything else, and a busy scene with no weather
         // gets the whole budget. Reserving them would waste channels in the common case, which is a quiet
-        // one.
+        // one. Hostile mobs cap at 57, so weather takes the last 7 -- which it could not do if that share
+        // had been held back for rain.
         CategoryBudgetAllocator allocator = new CategoryBudgetAllocator();
 
-        for (int i = 0; i < CategoryBudgetAllocator.BUDGET; i++) {
+        for (int i = 0; i < Category.HOSTILE.channels(); i++) {
             assertTrue(allocator.allow(Category.HOSTILE));
         }
+        assertEquals(57, allocator.total());
 
-        assertEquals(64, allocator.total(), "no channels held back for weather");
+        for (int i = 0; i < 7; i++) {
+            assertTrue(allocator.allow(Category.WEATHER), "the unused share is free");
+        }
+
+        assertEquals(CategoryBudgetAllocator.BUDGET, allocator.total(),
+                "nothing held back for weather");
     }
 
     @Test
