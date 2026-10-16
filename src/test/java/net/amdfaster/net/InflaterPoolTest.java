@@ -113,9 +113,14 @@ class InflaterPoolTest {
     }
 
     @Test
-    void aGoodInflaterIsStillPooledAfterABadOne() {
+    void aCorruptPayloadCostsThePooledInflaterAndThePoolRecovers() {
+        // Worth pinning because it is not what one would hope for. The bad payload is handed the only
+        // pooled inflater, since that is what acquire does, and it is then discarded -- so a healthy
+        // inflater is lost. That cannot be avoided: a payload is not known to be corrupt until it has
+        // been tried. What matters is that the pool recovers and the next payload still round-trips.
         InflaterPool pool = new InflaterPool();
-        byte[] compressed = compress(chunkLike(10_000));
+        byte[] original = chunkLike(10_000);
+        byte[] compressed = compress(original);
 
         try {
             pool.inflate(compressed, new byte[InflaterPool.INITIAL_BUFFER]);
@@ -123,22 +128,24 @@ class InflaterPoolTest {
             throw new AssertionError(e);
         }
         assertEquals(1, pool.pooled());
+        assertEquals(1L, pool.created());
 
         try {
             pool.inflate(InflaterPool.notZlib(), new byte[1024]);
         } catch (DataFormatException expected) {
             // The bad payload, as intended.
         }
-        assertEquals(1, pool.pooled(), "the good one survived");
+        assertEquals(0, pool.pooled(), "the pooled one was handed the bad payload and discarded");
         assertEquals(1L, pool.discarded());
 
         try {
             int n = pool.inflate(compressed, new byte[InflaterPool.INITIAL_BUFFER]);
-            assertEquals(10_240, n, "and still works");
+            assertEquals(original.length, n, "and the pool still works");
         } catch (DataFormatException e) {
             throw new AssertionError(e);
         }
-        assertEquals(2L, pool.created(), "it was reused, not remade");
+        assertEquals(2L, pool.created(), "a replacement was made, as it has to be");
+        assertEquals(1, pool.pooled());
     }
 
     @Test
@@ -210,9 +217,15 @@ class InflaterPoolTest {
 
     @Test
     void closeEndsEverything() {
+        // All four held at once, because acquiring and releasing in a loop reuses the single pooled
+        // inflater and only ever leaves one behind.
         InflaterPool pool = new InflaterPool();
+        List<Inflater> held = new ArrayList<>();
         for (int i = 0; i < 4; i++) {
-            pool.release(pool.acquire(), true);
+            held.add(pool.acquire());
+        }
+        for (Inflater inflater : held) {
+            pool.release(inflater, true);
         }
         assertEquals(4, pool.pooled());
 
