@@ -34,7 +34,8 @@ class TriangleStripPackerTest {
         // The bridge is a triangle with a repeated vertex, which the rasteriser discards because it has no
         // area. That is not free: the bridge is an index too.
         assertEquals(40, TriangleStripPacker.stripIndicesFor(new int[] {10, 10, 10}));
-        assertEquals(34, TriangleStripPacker.stripIndicesFor(new int[] {30}), "one run, no bridges");
+        assertEquals(32, TriangleStripPacker.stripIndicesFor(new int[] {30}),
+                "one run: three for the first triangle and one for each of the other twenty-nine");
     }
 
     @Test
@@ -65,16 +66,17 @@ class TriangleStripPackerTest {
         for (int i = 0; i < 100; i++) {
             packer.pack(64, 62);
         }
+        // Twenty scattered-face meshlets: four triangles, ten indices as a strip against twelve as a list.
         for (int i = 0; i < 20; i++) {
-            packer.pack(16, 4);
+            packer.pack(10, 4);
         }
 
         assertEquals(120L, packer.packed());
         assertEquals(0L, packer.keptAsList());
-        assertEquals(100 * 64L + 20 * 16L, packer.bytes());
+        assertEquals(100 * 64L + 20 * 10L, packer.bytes());
         assertEquals(100 * 186L + 20 * 12L, packer.bytesAsList());
-        assertEquals(64.33, packer.savedPercent(), 0.01,
-                "6 720 bytes against 18 840 -- the twenty short meshlets barely strip");
+        assertEquals(64.97, packer.savedPercent(), 0.01,
+                "6 600 bytes against 18 840 -- the short meshlets gain little but still gain");
     }
 
     @Test
