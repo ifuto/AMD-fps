@@ -172,9 +172,11 @@ class ScheduledTickIndexTest {
 
     @Test
     void aFreshIndexReportsZeroNotNaN() {
+        // An index that has done no lookups has technically avoided all of them, but 100% for an unused
+        // index reads as a result when it is the absence of one.
         ScheduledTickIndex index = new ScheduledTickIndex();
 
-        assertEquals(0.0, index.savedPercent(100, 10));
+        assertEquals(0.0, index.savedPercent(100, 10), "nothing was scheduled, so nothing was saved");
         assertEquals(0, index.pending());
         assertEquals(0L, index.scheduled());
         assertTrue(index.isIdleAt(0), "nothing is ever due");

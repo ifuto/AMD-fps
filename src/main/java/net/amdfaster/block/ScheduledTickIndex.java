@@ -172,9 +172,16 @@ public final class ScheduledTickIndex {
         return (long) pendingCount * ticks;
     }
 
+    /**
+     * The share of the scan's work avoided.
+     *
+     * <p>Zero when nothing has been scheduled. An index that has done no lookups has technically avoided
+     * all of them, but reporting 100% for an unused index is the kind of number that reads as a result
+     * when it is the absence of one.
+     */
     public double savedPercent(int pendingCount, int ticks) {
         long without = checksWithoutIndex(pendingCount, ticks);
-        if (without == 0) {
+        if (without == 0 || this.scheduled == 0) {
             return 0.0;
         }
         return 100.0 * (without - this.checksSaved) / without;
