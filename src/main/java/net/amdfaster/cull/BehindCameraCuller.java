@@ -58,12 +58,12 @@ public final class BehindCameraCuller {
     /**
      * Whether an element should be drawn.
      *
-     * @param nearestDepth the depth of the closest point of the box, relative to the camera. Negative means
-     *     behind it.
+     * @param frontDepth the depth of the box's furthest point along the camera's forward axis, relative to
+     *     the camera. Negative means the whole box is behind it.
      * @param shadowPass whether the shadow map is being drawn rather than the scene
      * @return true if it should be drawn
      */
-    public boolean shouldDraw(double nearestDepth, boolean shadowPass) {
+    public boolean shouldDraw(double frontDepth, boolean shadowPass) {
         this.tested++;
 
         if (shadowPass) {
@@ -74,7 +74,8 @@ public final class BehindCameraCuller {
             this.drawn++;
             return true;
         }
-        if (nearestDepth < 0.0) {
+        if (frontDepth < 0.0) {
+            // Even the furthest point is behind the camera, so no part of the box can be on screen.
             this.culled++;
             return false;
         }
@@ -83,20 +84,21 @@ public final class BehindCameraCuller {
     }
 
     /**
-     * The depth of the nearest point of a box.
+     * The depth of the box's furthest point along the camera's forward axis.
      *
-     * <p>The whole box, not its centre. Something long can have its origin behind the camera and still
-     * extend into view, and testing the origin would drop it so the player saw a machine disappear as they
-     * turned.
+     * <p>The furthest point rather than the centre or the nearest one, because the question is whether any
+     * part of the box is in front of the camera. Something long can have its centre behind the camera and
+     * still extend into view, and testing the centre or the near edge would drop it so the player saw a
+     * machine disappear as they turned.
      *
      * @param centreDepth the depth of the box's centre, relative to the camera
      * @param halfExtent the box's half size along the depth axis
      */
-    public static double nearestDepth(double centreDepth, double halfExtent) {
+    public static double frontDepth(double centreDepth, double halfExtent) {
         if (halfExtent < 0.0) {
             throw new IllegalArgumentException("a negative extent: " + halfExtent);
         }
-        return centreDepth - halfExtent;
+        return centreDepth + halfExtent;
     }
 
     public long tested() {

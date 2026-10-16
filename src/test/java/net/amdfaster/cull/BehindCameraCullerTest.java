@@ -33,21 +33,20 @@ class BehindCameraCullerTest {
         // origin would drop it and the player would see a machine disappear as they turned.
         BehindCameraCuller culler = new BehindCameraCuller();
 
-        double nearest = BehindCameraCuller.nearestDepth(-10.0, 30.0);
+        double front = BehindCameraCuller.frontDepth(-10.0, 30.0);
 
-        assertEquals(-40.0, nearest, 1e-9);
-        assertTrue(culler.shouldDraw(nearest, false),
-                "the box reaches twenty blocks in front of the camera");
+        assertEquals(20.0, front, 1e-9, "the far end reaches twenty blocks in front");
+        assertTrue(culler.shouldDraw(front, false));
     }
 
     @Test
     void aLongMachineWhollyBehindIsStillCulled() {
         BehindCameraCuller culler = new BehindCameraCuller();
 
-        double nearest = BehindCameraCuller.nearestDepth(-40.0, 30.0);
+        double front = BehindCameraCuller.frontDepth(-40.0, 30.0);
 
-        assertEquals(-70.0, nearest, 1e-9);
-        assertFalse(culler.shouldDraw(nearest, false));
+        assertEquals(-10.0, front, 1e-9, "even the far end is ten behind");
+        assertFalse(culler.shouldDraw(front, false));
     }
 
     @Test
@@ -55,8 +54,10 @@ class BehindCameraCullerTest {
         // Dropping it would put a hard edge across the screen where the box stopped.
         BehindCameraCuller culler = new BehindCameraCuller();
 
-        assertEquals(0.0, BehindCameraCuller.nearestDepth(5.0, 5.0), 1e-12);
-        assertTrue(culler.shouldDraw(0.0, false), "touching the plane counts as in front");
+        assertEquals(-5.0, BehindCameraCuller.frontDepth(-10.0, 5.0), 1e-12);
+        assertFalse(culler.shouldDraw(BehindCameraCuller.frontDepth(-10.0, 5.0), false),
+                "the near edge touches the plane but nothing is in front of it");
+        assertTrue(culler.shouldDraw(0.0, false), "and touching it from the front does count");
     }
 
     @Test
@@ -105,7 +106,7 @@ class BehindCameraCullerTest {
     @Test
     void nonsenseArgumentsAreRejected() {
         assertThrows(IllegalArgumentException.class,
-                () -> BehindCameraCuller.nearestDepth(0.0, -1.0));
+                () -> BehindCameraCuller.frontDepth(0.0, -1.0));
     }
 
     @Test
