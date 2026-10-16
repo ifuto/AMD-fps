@@ -155,13 +155,17 @@ public final class ModelDeduplicator {
         }
 
         this.quadOccupied[index] = true;
-        this.quads[index] = content.clone();
+        long[] stored = content.clone();
+        this.quads[index] = stored;
         this.quadCount++;
         this.quadInserts++;
         if (this.quadCount * 4 >= this.capacity * 3) {
+            // Growing moves the entry to a different slot, so the reference has to be held before the
+            // growth rather than read back through an index that is stale afterwards. Reading it back
+            // returned null or whichever quad had moved into the old slot.
             growQuads();
         }
-        return this.quads[index];
+        return stored;
     }
 
     /**
@@ -191,13 +195,14 @@ public final class ModelDeduplicator {
         }
 
         this.instanceOccupied[index] = true;
-        this.instances[index] = predicate.clone();
+        long[] stored = predicate.clone();
+        this.instances[index] = stored;
         this.instanceCount++;
         this.instanceInserts++;
         if (this.instanceCount * 4 >= this.capacity * 3) {
             growInstances();
         }
-        return this.instances[index];
+        return stored;
     }
 
     private static int hash(long[] content) {

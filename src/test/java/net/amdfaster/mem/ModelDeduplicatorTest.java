@@ -121,9 +121,11 @@ class ModelDeduplicatorTest {
             dedup.internQuad(quad(i % 50, 0xFFFFFF, i % 16, -1));
         }
 
-        assertEquals(800, dedup.quadCount(), "50 positions times 16 light levels");
+        // Not 50 times 16. i % 50 and i % 16 are both driven by i, so the pairs repeat with period
+        // lcm(50, 16) = 400 rather than covering the full product.
+        assertEquals(400, dedup.quadCount(), "the pairs repeat every lcm(50, 16) = 400");
         assertEquals(20_000L, dedup.quadLookups());
-        assertEquals(96.0, dedup.quadSavedPercent(), 0.01);
+        assertEquals(98.0, dedup.quadSavedPercent(), 0.01);
     }
 
     @Test
