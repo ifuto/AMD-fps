@@ -68,7 +68,8 @@ class DistantTerrainGeneratorTest {
         }
 
         assertEquals(1585, generator.framesToFill(), "4225 columns at 160 a second");
-        assertEquals(87_000.0, generator.msGenerated(), 1e-9);
+        assertEquals(160 * DistantTerrainGenerator.MS_PER_CHUNK, generator.msGenerated(), 1e-9,
+                "960 ms of work for the 160 columns generated in that second");
     }
 
     @Test
