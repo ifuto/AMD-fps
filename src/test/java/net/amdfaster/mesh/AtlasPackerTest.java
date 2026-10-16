@@ -63,11 +63,11 @@ class AtlasPackerTest {
         AtlasPacker packer = new AtlasPacker(128, 128);
 
         Placement tall = packer.place(64, 64);
-        Placement short = packer.place(16, 16);
+        Placement small = packer.place(16, 16);
 
         assertNotNull(tall);
-        assertNotNull(short);
-        assertEquals(tall.y(), short.y(), "the short one sits beside it, not below");
+        assertNotNull(small);
+        assertEquals(tall.y(), small.y(), "the short one sits beside it, not below");
         assertTrue(packer.usedHeight() <= 64, "and the atlas did not grow");
     }
 
