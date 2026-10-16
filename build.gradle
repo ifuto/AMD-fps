@@ -405,6 +405,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/entity/ExperienceOrbMerger.class",
                         "net/amdfaster/mesh/LeafFaceCuller.class",
                         "net/amdfaster/craft/RecipeSearchCache.class",
+                        "net/amdfaster/mesh/AmbientOcclusionBaker.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
                         "net/amdfaster/worldgen/RandomTickSkipper.class",
