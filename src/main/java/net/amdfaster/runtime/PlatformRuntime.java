@@ -95,7 +95,7 @@ public final class PlatformRuntime {
         String name = this.device != null ? this.device.deviceName() : "";
         GpuIdentity.Match match = GpuIdentity.classify(name, "", "");
         this.amdArchitecture = match.architecture();
-        this.shape = VendorProfile.Shape.fromDeviceName(name);
+        this.shape = VendorProfile.fromDeviceName(name);
         this.vendor = classifyVendor(name);
     }
 
