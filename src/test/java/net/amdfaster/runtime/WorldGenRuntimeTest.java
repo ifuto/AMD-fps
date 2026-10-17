@@ -11,9 +11,9 @@ class WorldGenRuntimeTest {
     private static final long SEED_A = 11111L;
     private static final long SEED_B = 22222L;
 
-    /** A noise evaluator that returns its coordinates, so the cache key is what varies. */
+    /** A noise evaluator that returns the sum of its coordinates, so the cache key is what varies. */
     private static double sample(WorldGenRuntime runtime, int octave, double x, double y, double z) {
-        return runtime.noise().sample(octave, x, y, z, (ox, oy, oz) -> ox + oy + oz);
+        return runtime.noise().sample(octave, x, y, z, (seed, oct, ox, oy, oz) -> ox + oy + oz);
     }
 
     @Test
