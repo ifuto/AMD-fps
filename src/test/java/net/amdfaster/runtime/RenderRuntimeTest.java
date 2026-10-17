@@ -33,7 +33,9 @@ class RenderRuntimeTest {
 
         Frame second = frame(runtime, 1, false);
         assertTrue(second.blitHud(), "and the next frame blits it");
-        assertEquals(1L, runtime.frames());
+        assertEquals(2L, runtime.frames(), "two frames were drawn");
+        assertEquals(1L, runtime.hudTexture().blitted());
+        assertEquals(1L, runtime.hudTexture().rebuilt());
     }
 
     @Test
