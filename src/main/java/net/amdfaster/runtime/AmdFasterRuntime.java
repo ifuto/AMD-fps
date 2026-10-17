@@ -182,6 +182,7 @@ public final class AmdFasterRuntime {
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
+    private long framesClosed;
     private int restoredFramerateLimit = -1;
     private boolean limitApplied;
     private boolean installed;
@@ -400,6 +401,11 @@ public final class AmdFasterRuntime {
         return this.gpu;
     }
 
+    /** How many frames have had their per-frame windows closed. */
+    public long framesClosed() {
+        return this.framesClosed;
+    }
+
     private void register() {
         ClientTickEvents.START_CLIENT_TICK.register(this::onStartTick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onEndTick);
@@ -501,6 +507,26 @@ public final class AmdFasterRuntime {
         if (this.config.bool(AmdFasterConfig.KEY_OVERLAY_ENABLED, true)) {
             drawOverlay(client, graphics);
         }
+
+        endFrame();
+    }
+
+    /**
+     * Closes the per-frame windows.
+     *
+     * <p>Called from the HUD callback rather than from a tick, because frames and ticks are not one-to-one:
+     * a frame can run without a tick and a tick can run without a frame. Closing these on a tick would
+     * either skip a frame's worth of accounting or close a window that was never opened.
+     *
+     * <p>Order matters. The renderer's frame closes first, because it is what decides which draws were
+     * issued; the GPU frame closes next, since the bindless table's retirement is counted against what was
+     * drawn; particles close last, as their batching is consumed by the renderer's decision.
+     */
+    private void endFrame() {
+        this.render.endFrame();
+        this.gpu.endFrame();
+        this.particles.endFrame();
+        this.framesClosed++;
     }
 
     private void applyGovernor(Minecraft client, long nowMs) {
@@ -540,6 +566,10 @@ public final class AmdFasterRuntime {
             this.blockCache.clear();
             this.chunksInvalidated++;
         }
+        // A chunk arriving or leaving changes the light in it and in its eight neighbours, so the cull
+        // decisions that were made from the old light have to be dropped with it. Without this the
+        // culler keeps answering from light levels that belong to a chunk that is no longer loaded.
+        this.cull.onLightChange();
     }
 
     private void onDisconnect() {
@@ -562,6 +592,10 @@ public final class AmdFasterRuntime {
         // Invalidates the HUD, cloud, weather, icon and text caches together. Missing one means a stale HUD
         // over a fresh world, or yesterday's clouds over today's weather.
         this.render.invalidateAll();
+        // The beacon beam, breaking overlay, end portal and stale LOD entries are keyed on things that
+        // mean nothing in the next world. invalidateAll covers the HUD and mesh caches; these are separate
+        // because they are not per-frame state and survive an ordinary invalidation.
+        this.render.invalidateWorldCaches();
         // Clears the world generation caches. Re-seeding happens when the next world is joined and its seed is
         // known; inventing a seed here would key the noise cache to a world that does not exist, and the first
         // lookup in the real world would then be answered from it.
