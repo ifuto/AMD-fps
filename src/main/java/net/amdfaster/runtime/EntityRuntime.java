@@ -1,5 +1,13 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.entity.EntityGrid;
+import net.amdfaster.entity.EntitySkinnedMesh;
+import net.amdfaster.entity.SpatialEntityBatcher;
+import net.amdfaster.mob.BreedingDensityCap;
+import net.amdfaster.mob.GoalEvaluationScheduler;
+import net.amdfaster.mob.SpawnCandidateCache;
+import net.amdfaster.pathfinding.PathCache;
+import net.amdfaster.pathfinding.SharedPathCache;
 import net.amdfaster.entity.AsyncVisibilityWorker;
 import net.amdfaster.entity.CullingExclusionList;
 import net.amdfaster.entity.EntityLodSelector;
@@ -68,6 +76,23 @@ public final class EntityRuntime {
     private long entitiesSeen;
     private long drawn;
     private long culled;
+
+    /** Buckets entities by cell and model for instancing. */
+    private final EntityGrid grid = new EntityGrid();
+    /** Builds skinned meshes on the GPU instead of per bone per frame. */
+    private final EntitySkinnedMesh skinned = new EntitySkinnedMesh();
+    /** Batches nearby entities into instanced draws. */
+    private final SpatialEntityBatcher batcher = new SpatialEntityBatcher();
+    /** Caps breeding attempts by local density. */
+    private final BreedingDensityCap breeding = new BreedingDensityCap();
+    /** Spreads mob goal evaluation across ticks. */
+    private final GoalEvaluationScheduler goals = new GoalEvaluationScheduler();
+    /** Caches spawn candidates per section. */
+    private final SpawnCandidateCache spawnCandidates = new SpawnCandidateCache();
+    /** Caches pathfinding results. */
+    private final PathCache paths = new PathCache();
+    /** Shares one path between mobs walking to the same place. */
+    private final SharedPathCache sharedPaths = new SharedPathCache();
 
     /**
      * The worker holding one entity's visibility answer, creating it on first sight.
@@ -236,5 +261,45 @@ public final class EntityRuntime {
         this.drawn = 0;
         this.culled = 0;
         this.workers.clear();
+    }
+
+    /** The entity grid. */
+    public EntityGrid grid() {
+        return this.grid;
+    }
+
+    /** The skinned mesh builder. */
+    public EntitySkinnedMesh skinned() {
+        return this.skinned;
+    }
+
+    /** The spatial entity batcher. */
+    public SpatialEntityBatcher batcher() {
+        return this.batcher;
+    }
+
+    /** The breeding density cap. */
+    public BreedingDensityCap breeding() {
+        return this.breeding;
+    }
+
+    /** The goal evaluation scheduler. */
+    public GoalEvaluationScheduler goals() {
+        return this.goals;
+    }
+
+    /** The spawn candidate cache. */
+    public SpawnCandidateCache spawnCandidates() {
+        return this.spawnCandidates;
+    }
+
+    /** The path cache. */
+    public PathCache paths() {
+        return this.paths;
+    }
+
+    /** The shared path cache. */
+    public SharedPathCache sharedPaths() {
+        return this.sharedPaths;
     }
 }

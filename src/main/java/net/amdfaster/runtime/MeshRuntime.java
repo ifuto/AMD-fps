@@ -1,5 +1,6 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.mesh.VertexPullingLayout;
 import net.amdfaster.mesh.AtlasPacker;
 import net.amdfaster.mesh.AxisPassScheduler;
 import net.amdfaster.mesh.BlockVertexLadder;
@@ -116,6 +117,9 @@ public final class MeshRuntime {
 
     private long sectionsBuilt;
     private long sectionsReused;
+
+    /** Pulls vertex attributes instead of binding a pipeline per format. */
+    private final VertexPullingLayout pulling = new VertexPullingLayout(new int[] {12, 4, 4, 4});
 
     public MeshRuntime() {
         this(DEFAULT_WORKERS);
@@ -310,5 +314,10 @@ public final class MeshRuntime {
         this.sectionsBuilt = 0;
         this.sectionsReused = 0;
         this.deduplicator.clear();
+    }
+
+    /** The vertex pulling layout. */
+    public VertexPullingLayout pulling() {
+        return this.pulling;
     }
 }

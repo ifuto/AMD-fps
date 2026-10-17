@@ -1,5 +1,8 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.blockentity.BlockEntityOcclusionCuller;
+import net.amdfaster.blockentity.SleepTracker;
+import net.amdfaster.blockentity.TickScheduler;
 import net.amdfaster.blockentity.AnimationSkipper;
 import net.amdfaster.blockentity.ContainerScreenUpdater;
 import net.amdfaster.blockentity.ModRendererCuller;
@@ -55,6 +58,13 @@ public final class BlockEntityRuntime {
     private long drawn;
     private long culledFrustum;
     private long culledOcclusion;
+
+    /** Skips block entities that are provably hidden. */
+    private final BlockEntityOcclusionCuller occlusion = new BlockEntityOcclusionCuller();
+    /** Tracks which block entities are awake, so a sleeping one is not animated. */
+    private final SleepTracker sleep = new SleepTracker(true);
+    /** Spreads block-entity ticks instead of doing them all in one tick. */
+    private final TickScheduler beTicks = new TickScheduler();
 
     /**
      * Decides what a block entity costs this frame.
@@ -185,5 +195,20 @@ public final class BlockEntityRuntime {
         this.drawn = 0;
         this.culledFrustum = 0;
         this.culledOcclusion = 0;
+    }
+
+    /** The block-entity occlusion culler. */
+    public BlockEntityOcclusionCuller occlusion() {
+        return this.occlusion;
+    }
+
+    /** The sleep tracker. */
+    public SleepTracker sleep() {
+        return this.sleep;
+    }
+
+    /** The block-entity tick scheduler. */
+    public TickScheduler beTicks() {
+        return this.beTicks;
     }
 }

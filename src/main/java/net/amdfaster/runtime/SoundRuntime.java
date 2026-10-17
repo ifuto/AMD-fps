@@ -1,5 +1,8 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.sound.SoundPressureController;
+import net.amdfaster.sound.SoundWorkOffloader;
+import net.amdfaster.sound.StreamingSoundSplitter;
 import net.amdfaster.sound.AdaptiveSoundPressure;
 import net.amdfaster.sound.CategoryBudgetAllocator;
 import net.amdfaster.sound.CriticalSoundWhitelist;
@@ -105,6 +108,13 @@ public final class SoundRuntime {
     private long categoryRefused;
     private long sourceCapped;
     private long behindCamera;
+
+    /** Adapts how many sounds may play to the measured tick cost. */
+    private final SoundPressureController pressure = new SoundPressureController();
+    /** Moves sound work off the render thread. */
+    private final SoundWorkOffloader offload = new SoundWorkOffloader();
+    /** Streams long sounds instead of decoding them whole. */
+    private final StreamingSoundSplitter streaming = new StreamingSoundSplitter();
 
     public SoundRuntime() {
         this.whitelist.protectDefaults();
@@ -293,5 +303,20 @@ public final class SoundRuntime {
         this.regions.endTick();
         this.categories.endTick();
         this.fairness.endTick();
+    }
+
+    /** The sound pressure controller. */
+    public SoundPressureController pressure() {
+        return this.pressure;
+    }
+
+    /** The sound work offloader. */
+    public SoundWorkOffloader offload() {
+        return this.offload;
+    }
+
+    /** The streaming sound splitter. */
+    public StreamingSoundSplitter streaming() {
+        return this.streaming;
     }
 }
