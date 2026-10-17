@@ -183,6 +183,14 @@ public final class AmdFasterRuntime {
 
     private long lastFrameAtMs = -1L;
     private long framesClosed;
+
+    /** Where the player was last tick, so a movement packet can be priced against a real delta. */
+    private double lastPlayerX;
+    private double lastPlayerY;
+    private double lastPlayerZ;
+    private float lastPlayerYaw;
+    private float lastPlayerPitch;
+    private boolean hasLastPlayer;
     private int restoredFramerateLimit = -1;
     private boolean limitApplied;
     private boolean installed;
@@ -445,6 +453,7 @@ public final class AmdFasterRuntime {
         // tiers exist to avoid; missing the second would test the same entities every tick and none of the
         // others, which is a staggered schedule that does not stagger.
         this.entities.endTick();
+        onPlayerMoved();
     }
 
     /**
@@ -496,6 +505,10 @@ public final class AmdFasterRuntime {
             if (elapsedMs > 0 && elapsedMs < 60_000L) {
                 this.recorder.record(elapsedMs * 1_000_000L);
                 this.framesTimed++;
+                // The same measurement that feeds the percentile window feeds the controller that trades
+                // render distance for frame time. Two sources of truth here would let the overlay report a
+                // frame time the controller is not acting on.
+                onFrameTimed(client, elapsedMs);
             }
         }
         this.lastFrameAtMs = nowMs;
@@ -522,6 +535,72 @@ public final class AmdFasterRuntime {
      * issued; the GPU frame closes next, since the bindless table's retirement is counted against what was
      * drawn; particles close last, as their batching is consumed by the renderer's decision.
      */
+    /**
+     * Feeds a measured frame into the pacing and quality controllers.
+     *
+     * <p>Everything here comes from something already known: the elapsed wall time between HUD callbacks,
+     * the framerate limit the player asked for, and whether the window has focus. No value is invented,
+     * because a controller driven by a guessed number converges on the wrong answer and looks like it is
+     * working while it does.
+     *
+     * <p>The target interval is derived from the framerate limit rather than set to a constant, so a player
+     * who asks for 144 fps gets a 6.9 ms target and one who asks for 30 gets 33 ms. A limit of zero means
+     * uncapped, which has no interval, so the pacer is left alone rather than told to pace at infinity.
+     *
+     * @param client the client, for the framerate limit and window focus
+     * @param elapsedMs the measured frame time, already guarded positive and sane by the caller
+     */
+    private void onFrameTimed(Minecraft client, long elapsedMs) {
+        this.platform.quality().record(elapsedMs);
+
+        int limit = client.options.framerateLimit().get();
+        if (limit > 0) {
+            this.platform.pacer().setTargetInterval(1_000_000_000L / limit);
+        }
+
+        boolean focused = client.isWindowActive();
+        this.platform.unfocused().setFocused(focused);
+        this.render.updateGate().setWindowActive(focused);
+    }
+
+    /**
+     * Prices this tick's movement against last tick's.
+     *
+     * <p>A movement packet is 16 bytes and a rotation-only one is 5, so a player standing still who turns
+     * their head costs three times what it needs to. The suppressor decides which of the four cases this
+     * tick is, and the decision is only as good as the delta fed to it -- hence positions and angles are
+     * both taken, and the first tick after a world change is skipped because there is no previous position
+     * to measure against and a delta from zero would read as a teleport.
+     */
+    private void onPlayerMoved() {
+        var player = Minecraft.getInstance().player;
+        if (player == null) {
+            this.hasLastPlayer = false;
+            return;
+        }
+        double x = player.getX();
+        double y = player.getY();
+        double z = player.getZ();
+        float yaw = player.getYRot();
+        float pitch = player.getXRot();
+        if (!this.hasLastPlayer) {
+            this.hasLastPlayer = true;
+        } else {
+            double dx = x - this.lastPlayerX;
+            double dy = y - this.lastPlayerY;
+            double dz = z - this.lastPlayerZ;
+            double moved = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            double dYaw = Math.abs(yaw - this.lastPlayerYaw);
+            double dPitch = Math.abs(pitch - this.lastPlayerPitch);
+            this.network.movement().decide(moved, dYaw + dPitch);
+        }
+        this.lastPlayerX = x;
+        this.lastPlayerY = y;
+        this.lastPlayerZ = z;
+        this.lastPlayerYaw = yaw;
+        this.lastPlayerPitch = pitch;
+    }
+
     private void endFrame() {
         this.render.endFrame();
         this.gpu.endFrame();
@@ -629,6 +708,7 @@ public final class AmdFasterRuntime {
         this.entityWorld.onWorldChange();
         this.gpu.onWorldChange();
         this.lastFrameAtMs = -1L;
+        this.hasLastPlayer = false;
         restoreFramerateLimit();
     }
 
