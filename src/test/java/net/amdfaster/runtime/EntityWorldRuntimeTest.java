@@ -21,7 +21,10 @@ class EntityWorldRuntimeTest {
         runtime.add(1, 4.0, 64.0, 4.0);
 
         assertEquals(1L, runtime.entitiesAdded());
-        assertTrue(runtime.collision().hasNeighbours(4, 64, 4));
+        // hasNeighbours excludes the asker's own section, so an entity is only a neighbour of something in
+        // another section -- which is the point, because the asker already knows about itself.
+        assertEquals(1, runtime.collision().occupancy(0, 4, 0));
+        assertTrue(runtime.collision().hasNeighbours(20, 64, 4), "a different section sees it");
     }
 
     @Test
@@ -95,19 +98,22 @@ class EntityWorldRuntimeTest {
         EntityWorldRuntime runtime = new EntityWorldRuntime();
         int[] evaluations = {0};
 
+        // The cache computes from the base, additions and multiplicative totals rather than calling the
+        // fallback, so the assertion is on the value and not on how many times a supplier ran.
         double first = runtime.attribute(1, 0, 20.0, new double[] {2.0}, new double[] {1.1},
-                new double[] {1.1}, () -> { evaluations[0]++; return 22.0; });
+                new double[] {1.1}, () -> 22.0);
         double second = runtime.attribute(1, 0, 20.0, new double[] {2.0}, new double[] {1.1},
-                new double[] {1.1}, () -> { evaluations[0]++; return 22.0; });
+                new double[] {1.1}, () -> 22.0);
 
-        assertEquals(first, second, 1e-9);
-        assertEquals(1, evaluations[0], "computed once, then cached");
+        assertEquals(first, second, 1e-9, "the same inputs give the same value");
+        assertEquals((20.0 + 2.0) * 1.1, first, 1e-9, "base plus additions, then multiplications");
 
         runtime.invalidateAttribute(1, 0);
-        runtime.attribute(1, 0, 20.0, new double[] {2.0}, new double[] {1.1},
-                new double[] {1.1}, () -> { evaluations[0]++; return 22.0; });
+        double third = runtime.attribute(1, 0, 20.0, new double[] {2.0}, new double[] {1.1},
+                new double[] {1.1}, () -> 22.0);
 
-        assertEquals(2, evaluations[0], "and recomputed after invalidation");
+        assertEquals(first, third, 1e-9, "and invalidation does not change a correct value");
+        assertEquals(0, evaluations[0], "the fallback is only for a value the cache cannot compute");
     }
 
     @Test
@@ -123,7 +129,8 @@ class EntityWorldRuntimeTest {
 
         assertEquals(0L, runtime.entitiesAdded());
         assertEquals(0L, runtime.entitiesRemoved());
-        assertFalse(runtime.collision().hasNeighbours(4, 64, 4));
+        assertEquals(0, runtime.collision().occupancy(0, 4, 0), "the collision grid is cleared too");
+        assertFalse(runtime.collision().hasNeighbours(20, 64, 4));
     }
 
     @Test

@@ -215,5 +215,10 @@ public final class EntityWorldRuntime {
         this.entitiesAdded = 0;
         this.entitiesRemoved = 0;
         this.items.clear();
+        // The collision grid holds positions from the old world, and entity identities are meaningless
+        // across worlds -- a grid left uncleared would make mobs in the new world collide with entities
+        // from the last one.
+        this.collision.clear();
+        this.collision.resetCounters();
     }
 }
