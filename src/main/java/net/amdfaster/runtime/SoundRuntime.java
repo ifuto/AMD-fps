@@ -110,7 +110,7 @@ public final class SoundRuntime {
     private long behindCamera;
 
     /** Adapts how many sounds may play to the measured tick cost. */
-    private final SoundPressureController pressure = new SoundPressureController();
+    private final SoundPressureController pressureController = new SoundPressureController();
     /** Moves sound work off the render thread. */
     private final SoundWorkOffloader offload = new SoundWorkOffloader();
     /** Streams long sounds instead of decoding them whole. */
@@ -306,8 +306,8 @@ public final class SoundRuntime {
     }
 
     /** The sound pressure controller. */
-    public SoundPressureController pressure() {
-        return this.pressure;
+    public SoundPressureController pressureController() {
+        return this.pressureController;
     }
 
     /** The sound work offloader. */
