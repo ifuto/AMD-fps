@@ -308,6 +308,10 @@ tasks.register("verifyJar") {
                         // its absence would not fail loudly: every subsystem would simply stay on, and the
                         // failure would be two mods meshing the same sections rather than a missing class.
                         "net/amdfaster/compat/SodiumCoexistence.class",
+                        // Chunk rebuild time, one of the five benchmark figures. Asserted because a missing
+                        // timing class would not break the build -- it would quietly drop the figure from
+                        // the overlay and the benchmark would report four numbers instead of five.
+                        "net/amdfaster/perf/MeshBuildTimer.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",

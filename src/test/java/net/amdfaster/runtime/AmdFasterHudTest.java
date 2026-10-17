@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import net.amdfaster.perf.FrameTimeRecorder;
+import net.amdfaster.perf.MeshBuildTimer;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -95,6 +96,36 @@ class AmdFasterHudTest {
         }
         assertTrue(heap > variance, "the heap line follows the frame-time lines");
         assertEquals(lines.size() - 1, heap, "and is last when no governor or stages are present");
+    }
+
+    @Test
+    void theRebuildLineShowsMeanAndWorst() {
+        // The case the figure exists for: twenty ordinary builds and one that stalls. The mean reads as
+        // fine and the worst is the frame that was actually lost.
+        MeshBuildTimer buildTimes = new MeshBuildTimer();
+        for (int i = 0; i < 20; i++) {
+            buildTimes.record(1_000_000L);
+        }
+        buildTimes.record(40_000_000L);
+
+        List<AmdFasterHud.Line> lines =
+                AmdFasterHud.build(null, null, null, null, 0L, 0L, buildTimes);
+
+        // Index 2: the header, then "no frame timings yet" because no recorder was passed, then this.
+        assertEquals("no frame timings yet", lines.get(1).text());
+        assertEquals("rebuild  mean 2.86 ms  worst 40.00 ms over 21 sections",
+                lines.get(2).text(), "it follows the frame-time lines");
+    }
+
+    @Test
+    void noBuildsYetMeansNoRebuildLine() {
+        MeshBuildTimer buildTimes = new MeshBuildTimer();
+
+        List<AmdFasterHud.Line> lines =
+                AmdFasterHud.build(null, null, null, null, 0L, 0L, buildTimes);
+
+        assertTrue(lines.stream().noneMatch(line -> line.text().startsWith("rebuild")),
+                "0.00 ms over 0 sections would read as 'meshing is free'");
     }
 
     @Test

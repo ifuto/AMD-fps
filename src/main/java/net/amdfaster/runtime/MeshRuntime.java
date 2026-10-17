@@ -25,6 +25,7 @@ import net.amdfaster.mesh.SectionMeshDeduplicator;
 import net.amdfaster.mesh.job.MeshJobPrioritizer;
 import net.amdfaster.mesh.job.MeshJobQueue;
 import net.amdfaster.mesh.job.MeshWorkerPool;
+import net.amdfaster.perf.MeshBuildTimer;
 
 /**
  * Runs the meshing decisions in one place, and drives the worker pool that builds the meshes.
@@ -133,6 +134,15 @@ public final class MeshRuntime {
      * draining it, because the work then looks finished.
      */
     private MeshWorkerPool pool;
+
+    /**
+     * How long section builds take.
+     *
+     * <p>Not a {@code StageTimer} stage: mesh builds run on several worker threads at once and
+     * {@code StageTimer} is not thread safe, so recording into the shared one would corrupt its arrays and
+     * report a rebuild time that is wrong in a way that looks plausible.
+     */
+    private final MeshBuildTimer buildTimes = new MeshBuildTimer();
 
     /** Pulls vertex attributes instead of binding a pipeline per format. */
     private final VertexPullingLayout pulling = new VertexPullingLayout(new int[] {12, 4, 4, 4});
@@ -288,9 +298,20 @@ public final class MeshRuntime {
         if (this.pool != null) {
             throw new IllegalStateException("a builder has already been supplied");
         }
-        this.pool = new MeshWorkerPool(this.queue, builder, Math.max(1, threads));
+        // Wrapped so the duration is measured around the build itself rather than trusted from a caller.
+        // The wrapper is what makes the figure mean anything: a duration handed in by the builder is a
+        // duration the builder measured, and a builder that times only its own inner loop would report
+        // less than the build cost.
+        MeshWorkerPool.Builder timed = (sectionKey, kind) ->
+                this.buildTimes.time(() -> builder.build(sectionKey, kind));
+        this.pool = new MeshWorkerPool(this.queue, timed, Math.max(1, threads));
         this.pool.start();
         return this;
+    }
+
+    /** How long section builds take. */
+    public MeshBuildTimer buildTimes() {
+        return this.buildTimes;
     }
 
     /** Whether a builder has been supplied and the pool is draining the queue. */
@@ -395,6 +416,9 @@ public final class MeshRuntime {
         this.sectionsBuilt = 0;
         this.sectionsReused = 0;
         this.deduplicator.clear();
+        // The rebuild timings describe the last world's geometry. Keeping them would report a rebuild
+        // cost for chunks that no longer exist, and the worst would linger from a world the player left.
+        this.buildTimes.clear();
     }
 
     /** The vertex pulling layout. */

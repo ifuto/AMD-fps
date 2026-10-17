@@ -696,7 +696,8 @@ public final class AmdFasterRuntime {
     private void drawOverlay(Minecraft client, net.minecraft.client.gui.GuiGraphics graphics) {
         Runtime runtime = Runtime.getRuntime();
         var lines = AmdFasterHud.build(this.recorder, this.stages, this.blockCache, this.governor,
-                runtime.totalMemory() - runtime.freeMemory(), runtime.maxMemory());
+                runtime.totalMemory() - runtime.freeMemory(), runtime.maxMemory(),
+                this.mesh.buildTimes());
         int y = AmdFasterHud.marginY();
         for (var line : lines) {
             graphics.drawString(client.font, line.text(), AmdFasterHud.marginX(), y, line.colour());

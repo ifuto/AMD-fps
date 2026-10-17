@@ -6,6 +6,7 @@ import java.util.List;
 import net.amdfaster.mc.BlockStateCache;
 import net.amdfaster.mem.MemoryPressureMonitor;
 import net.amdfaster.perf.FrameTimeRecorder;
+import net.amdfaster.perf.MeshBuildTimer;
 import net.amdfaster.perf.StageTimer;
 
 /**
@@ -63,6 +64,28 @@ public final class AmdFasterHud {
      */
     public static List<Line> build(FrameTimeRecorder recorder, StageTimer stages, BlockStateCache cache,
             FrameGovernor governor, long heapUsed, long heapMax) {
+        return build(recorder, stages, cache, governor, heapUsed, heapMax, null);
+    }
+
+    /**
+     * Builds the overlay.
+     *
+     * <p>Chunk rebuild time is the last of the five figures the benchmark has to report, and it is the one
+     * that explains a hitch no other figure covers: a chunk arriving costs a mesh build, and a build that
+     * takes forty milliseconds is a frame the player lost even when the average frame time says nothing is
+     * wrong. Mean and worst are both shown for that reason -- the mean says what meshing costs overall, the
+     * worst says what the slowest single chunk did.
+     *
+     * @param recorder   frame timings, or null if none have been collected yet
+     * @param stages     per-stage timings, or null
+     * @param cache      the block state cache, or null if it is disabled
+     * @param governor   the frame governor, or null if it is disabled
+     * @param heapUsed   bytes of heap in use, or 0 when not yet sampled
+     * @param heapMax    bytes the heap can grow to, or 0 when not yet sampled
+     * @param buildTimes section mesh build timings, or null when meshing is not running
+     */
+    public static List<Line> build(FrameTimeRecorder recorder, StageTimer stages, BlockStateCache cache,
+            FrameGovernor governor, long heapUsed, long heapMax, MeshBuildTimer buildTimes) {
         List<Line> lines = new ArrayList<>(12);
         lines.add(new Line("AMD-Faster", HEADER_COLOUR));
 
@@ -88,6 +111,13 @@ public final class AmdFasterHud {
             long total = (long) hits + misses;
             lines.add(new Line(String.format("block cache  %d / %d  (%.0f%% hit)", hits, total,
                     total == 0 ? 0.0 : 100.0 * hits / total), DEFAULT_COLOUR));
+        }
+
+        if (buildTimes != null && buildTimes.builds() > 0) {
+            lines.add(new Line(String.format("rebuild  mean %.2f ms  worst %.2f ms over %d sections",
+                    buildTimes.meanNanos() / 1_000_000.0,
+                    buildTimes.worstNanos() / 1_000_000.0,
+                    buildTimes.builds()), DEFAULT_COLOUR));
         }
 
         if (heapMax > 0) {
