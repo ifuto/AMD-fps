@@ -304,6 +304,10 @@ tasks.register("verifyJar") {
                         "net/amdfaster/AmdFasterClient.class",
                         "net/amdfaster/platform/GpuReport.class",
                         "net/amdfaster/platform/GpuIdentity.class",
+                        // Decides what AMD-Faster yields when Sodium is really rendering. Asserted because
+                        // its absence would not fail loudly: every subsystem would simply stay on, and the
+                        // failure would be two mods meshing the same sections rather than a missing class.
+                        "net/amdfaster/compat/SodiumCoexistence.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
