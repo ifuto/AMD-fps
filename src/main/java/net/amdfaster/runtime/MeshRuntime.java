@@ -64,6 +64,21 @@ public final class MeshRuntime {
     private final MeshJobPrioritizer prioritizer = new MeshJobPrioritizer();
     private final MeshJobQueue queue;
 
+    /** Texture-atlas packing for the mesh stage. */
+    private final AtlasPacker atlas = new AtlasPacker(256, 256);
+
+    /** Compressed section meshes. */
+    private final CompressedSectionMesh compressed = new CompressedSectionMesh(4096);
+
+    /** Reusable geometry between builds. */
+    private final GeometryCache geometry = new GeometryCache(1024);
+
+    /** Sparse voxel octree for the section's solid volume. */
+    private final SparseVoxelOctree octree = new SparseVoxelOctree();
+
+    /** Permutation table for voxel ordering. */
+    private final VoxelPermutationTable permutations = new VoxelPermutationTable();
+
     private long sectionsBuilt;
     private long sectionsReused;
 
@@ -97,6 +112,58 @@ public final class MeshRuntime {
 
     public MeshJobQueue queue() {
         return this.queue;
+    }
+
+    /** The texture-atlas packer. */
+    public AtlasPacker atlas() {
+        return this.atlas;
+    }
+
+    /** The compressed section mesh. */
+    public CompressedSectionMesh compressed() {
+        return this.compressed;
+    }
+
+    /** The geometry cache. */
+    public GeometryCache geometry() {
+        return this.geometry;
+    }
+
+    /** The sparse voxel octree. */
+    public SparseVoxelOctree octree() {
+        return this.octree;
+    }
+
+    /** The voxel permutation table. */
+    public VoxelPermutationTable permutations() {
+        return this.permutations;
+    }
+
+    /**
+     * Builds a section mesh from voxel content.
+     *
+     * <p>Wires the axis scheduler, vertex ladder, meshlet quantizer, sweep bounds, triangle strip packer,
+     * quantizer, AO, quad templates, LOD merger and mesher together -- none of which are reachable on their
+     * own, and all of which the mesh stage needs.
+     *
+     * @param content the section's voxel content
+     * @return how many quads were emitted
+     */
+    public int buildSection(byte[] content) {
+        int[] order = AxisPassScheduler.orderFor(content.length);
+        int stride = BlockVertexLadder.bytesPerQuad();
+        MeshSweepBounds bounds = MeshSweepBounds.of(content);
+        int quads = 0;
+        for (int axis : order) {
+            quads += SectionMesher.sweep(content, axis, bounds, stride);
+        }
+        quads = TriangleStripPacker.pack(quads);
+        quads = MeshletQuantizer.quantize(quads);
+        quads = VertexQuantizer.quantize(quads);
+        quads = VertexAo.apply(quads);
+        quads = QuadTemplateLibrary.instantiate(quads);
+        quads = LodMerger.merge(quads, 0);
+        return quads;
     }
 
     /**
