@@ -1,5 +1,14 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.pacing.AdaptiveQuality;
+import net.amdfaster.pacing.FramePacer;
+import net.amdfaster.pacing.RenderDistanceController;
+import net.amdfaster.pacing.UnfocusedFrameLimiter;
+import net.amdfaster.vk.CommandRecordScheduler;
+import net.amdfaster.vk.FrameRing;
+import net.amdfaster.vk.GeneratedCommandScheduler;
+import net.amdfaster.vk.RootSignatureBudget;
+import net.amdfaster.vk.TransferQueueSelector;
 import net.amdfaster.platform.AmdArchitecture;
 import net.amdfaster.platform.CoreAffinityPlanner;
 import net.amdfaster.platform.DynamicVgprPlanner;
@@ -74,6 +83,30 @@ public final class PlatformRuntime {
     private final int performanceCores;
     private final int efficientCores;
 
+    /** Splits command recording across cores. */
+    private final CommandRecordScheduler commandRecording;
+
+    /** The per-frame upload ring. */
+    private final FrameRing frameRing = new FrameRing(16L << 20, 3);
+
+    /** Whether device-generated commands are used. */
+    private final GeneratedCommandScheduler generatedCommands;
+
+    /** The root signature's dword budget. */
+    private final RootSignatureBudget rootSignature = new RootSignatureBudget();
+
+    /** Paces frames against a target interval. */
+    private final FramePacer pacer = FramePacer.lowLatency();
+
+    /** Trades render distance for frame time. */
+    private final AdaptiveQuality quality;
+
+    /** Moves render distance to hit a frame-time target. */
+    private final RenderDistanceController distance;
+
+    /** Drops the frame rate when the window is not focused. */
+    private final UnfocusedFrameLimiter unfocused = new UnfocusedFrameLimiter();
+
     public PlatformRuntime() {
         this(GpuReport.probe(), false, 0, 0);
     }
@@ -97,6 +130,16 @@ public final class PlatformRuntime {
         this.amdArchitecture = match.architecture();
         this.shape = VendorProfile.fromDeviceName(name);
         this.vendor = classifyVendor(name);
+
+        // Command recording splits across the cores the JVM can actually use; one thread per core is the
+        // point, so zero cores would mean no recording at all.
+        int cores = Math.max(1, Runtime.getRuntime().availableProcessors());
+        this.commandRecording = new CommandRecordScheduler(cores);
+        // Device-generated commands need the extension, which is a device property and not a choice.
+        this.generatedCommands = new GeneratedCommandScheduler(
+                report != null && report.succeeded() && report.preferred() != null);
+        this.quality = new AdaptiveQuality(12, 32);
+        this.distance = new RenderDistanceController(16_666_667L, 12);
     }
 
     private static Vendor classifyVendor(String deviceName) {
@@ -269,5 +312,63 @@ public final class PlatformRuntime {
     /** Whether the CPU has two kinds of core. */
     public boolean isHybridCpu() {
         return this.hybridCpu;
+    }
+
+    /** The command-recording scheduler. */
+    public CommandRecordScheduler commandRecording() {
+        return this.commandRecording;
+    }
+
+    /** The per-frame upload ring. */
+    public FrameRing frameRing() {
+        return this.frameRing;
+    }
+
+    /** The device-generated command scheduler. */
+    public GeneratedCommandScheduler generatedCommands() {
+        return this.generatedCommands;
+    }
+
+    /** The root signature budget. */
+    public RootSignatureBudget rootSignature() {
+        return this.rootSignature;
+    }
+
+    /** The frame pacer. */
+    public FramePacer pacer() {
+        return this.pacer;
+    }
+
+    /** The adaptive-quality controller. */
+    public AdaptiveQuality quality() {
+        return this.quality;
+    }
+
+    /** The render-distance controller. */
+    public RenderDistanceController distance() {
+        return this.distance;
+    }
+
+    /** The unfocused frame limiter. */
+    public UnfocusedFrameLimiter unfocused() {
+        return this.unfocused;
+    }
+
+    /**
+     * Chooses which queue a copy should go through.
+     *
+     * <p>Exposed because the answer depends on where both ends live, and a caller that guessed would put
+     * on-GPU copies on the transfer queue -- which is the one thing the architecture notes say never to do.
+     *
+     * @param sourceInVideoMemory whether the source is device-local
+     * @param destinationInVideoMemory whether the destination is device-local
+     * @param bytes how much is moving
+     * @param unifiedMemory whether this is an APU with one pool
+     * @return the route to use
+     */
+    public TransferQueueSelector.Route transferRoute(boolean sourceInVideoMemory,
+            boolean destinationInVideoMemory, long bytes, boolean unifiedMemory) {
+        return TransferQueueSelector.choose(sourceInVideoMemory, destinationInVideoMemory,
+                bytes, unifiedMemory);
     }
 }
