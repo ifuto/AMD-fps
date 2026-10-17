@@ -138,6 +138,14 @@ public final class AmdFasterRuntime {
      */
     private final LightRuntime light = new LightRuntime();
 
+    /**
+     * What the hardware turned out to be.
+     *
+     * <p>Owned here because every other component asks it rather than guessing, and the answer does not change
+     * while the game runs -- so it is decided once, here, from the device the game actually picked.
+     */
+    private final PlatformRuntime platform = new PlatformRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -303,6 +311,18 @@ public final class AmdFasterRuntime {
      */
     public LightRuntime light() {
         return this.light;
+    }
+
+    /**
+     * What the hardware is, for every component that has to decide something hardware-dependent.
+     *
+     * <p>Asked rather than guessed, because a rule keyed on a vendor would be wrong twice -- some Intel parts
+     * have capabilities an AMD rule assumes and some AMD parts do not have the ones an Intel rule assumes.
+     * When the probe fails this answers with safe defaults rather than throwing, because a mod that cannot
+     * start without a GPU is worse than one that starts and runs its CPU-side work.
+     */
+    public PlatformRuntime platform() {
+        return this.platform;
     }
 
     private void register() {
