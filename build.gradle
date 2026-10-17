@@ -514,6 +514,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/runtime/BlockEntityRuntime.class",
                         "net/amdfaster/runtime/RenderRuntime.class",
                         "net/amdfaster/runtime/WorldGenRuntime.class",
+                        "net/amdfaster/runtime/MinecraftRuntime.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
