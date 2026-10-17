@@ -118,6 +118,22 @@ public final class MeshRuntime {
     private long sectionsBuilt;
     private long sectionsReused;
 
+    /** Pushes the queue accepted. */
+    private long queuedAccepted;
+
+    /** Pushes the queue refused because a worker's ring was full. */
+    private long queuedRejected;
+
+    /**
+     * The worker pool, or {@code null} until a builder is supplied.
+     *
+     * <p>A builder turns a section key into geometry, which needs the section's voxels, and only the game
+     * has those. So the pool cannot be built here: without a builder there is nothing for a worker to do,
+     * and a pool started without one would drain the queue and produce no meshes -- which is worse than not
+     * draining it, because the work then looks finished.
+     */
+    private MeshWorkerPool pool;
+
     /** Pulls vertex attributes instead of binding a pipeline per format. */
     private final VertexPullingLayout pulling = new VertexPullingLayout(new int[] {12, 4, 4, 4});
 
@@ -231,8 +247,73 @@ public final class MeshRuntime {
     public int enqueue(int sectionX, int sectionY, int sectionZ, int kind, boolean visible,
             long ticksWaiting) {
         int priority = this.prioritizer.priority(visible, ticksWaiting);
-        this.queue.push(sectionX, sectionY, sectionZ, kind);
+        // The return matters. Each worker's ring is bounded, and a full one refuses the job rather than
+        // growing, so counting every enqueue as queued would report work that was silently dropped.
+        if (this.queue.push(sectionX, sectionY, sectionZ, kind)) {
+            this.queuedAccepted++;
+        } else {
+            this.queuedRejected++;
+        }
         return priority;
+    }
+
+    /** Pushes the queue accepted. */
+    public long queuedAccepted() {
+        return this.queuedAccepted;
+    }
+
+    /** Pushes refused because a worker's ring was full. */
+    public long queuedRejected() {
+        return this.queuedRejected;
+    }
+
+    /**
+     * Supplies the builder and starts the pool on the queue this runtime already owns.
+     *
+     * <p>The pool is built around the existing queue rather than through
+     * {@link MeshWorkerPool#forCores(int, MeshWorkerPool.Builder)}, because that factory makes its own
+     * queue -- and a pool draining a queue nothing pushes to would report a healthy, permanently empty
+     * pipeline while the real one filled up and started refusing jobs.
+     *
+     * <p>The builder runs on worker threads, so anything it touches has to be safe to touch from one.
+     *
+     * @param builder turns a section key into geometry
+     * @param threads how many worker threads to run
+     * @return this runtime
+     */
+    public MeshRuntime withBuilder(MeshWorkerPool.Builder builder, int threads) {
+        if (builder == null) {
+            throw new IllegalArgumentException("a builder is required");
+        }
+        if (this.pool != null) {
+            throw new IllegalStateException("a builder has already been supplied");
+        }
+        this.pool = new MeshWorkerPool(this.queue, builder, Math.max(1, threads));
+        this.pool.start();
+        return this;
+    }
+
+    /** Whether a builder has been supplied and the pool is draining the queue. */
+    public boolean isBuilding() {
+        return this.pool != null && this.pool.isRunning();
+    }
+
+    /** How many sections the workers have finished. */
+    public long buildsCompleted() {
+        return this.pool == null ? 0L : this.pool.buildsCompleted();
+    }
+
+    /**
+     * Stops the workers.
+     *
+     * <p>Called on shutdown rather than left to the JVM, because a worker thread that outlives the client
+     * would keep calling a builder against a game that is no longer there.
+     *
+     * @param timeoutMillis how long to wait for the threads to finish
+     * @return whether they stopped in time
+     */
+    public boolean stopBuilding(long timeoutMillis) {
+        return this.pool == null || this.pool.stop(timeoutMillis);
     }
 
     /**

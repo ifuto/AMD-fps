@@ -188,11 +188,11 @@ public final class AmdFasterRuntime {
     private long lastFrameAtMs = -1L;
     private long framesClosed;
 
-    /** Sections queued for meshing. */
-    private long sectionsQueued;
-
     /** Chunk columns left to Sodium rather than meshed here. */
     private long meshingDeferredToSodium;
+
+    /** Chunk columns not queued because the game has not supplied a section builder yet. */
+    private long meshingWaitingOnBuilder;
 
     /** Where the player was last tick, so a movement packet can be priced against a real delta. */
     private double lastPlayerX;
@@ -424,9 +424,25 @@ public final class AmdFasterRuntime {
         return this.framesClosed;
     }
 
-    /** How many sections have been queued for meshing. */
+    /**
+     * How many sections the queue actually accepted.
+     *
+     * <p>Read from the mesh runtime rather than counted here, because each worker's ring is bounded and a
+     * full one refuses the job. A counter incremented per attempt would report sections as queued that were
+     * silently dropped, which is the kind of number that makes a stall look like progress.
+     */
     public long sectionsQueued() {
-        return this.sectionsQueued;
+        return this.mesh.queuedAccepted();
+    }
+
+    /** How many sections the queue refused because a worker's ring was full. */
+    public long sectionsQueueRejected() {
+        return this.mesh.queuedRejected();
+    }
+
+    /** How many chunk columns were not queued for want of a section builder. */
+    public long meshingWaitingOnBuilder() {
+        return this.meshingWaitingOnBuilder;
     }
 
     /** How many chunk columns were left to Sodium instead of being meshed here. */
@@ -698,12 +714,19 @@ public final class AmdFasterRuntime {
             this.meshingDeferredToSodium++;
             return;
         }
+        // No builder means no worker has anything to do, so queueing would fill a bounded ring that
+        // nobody drains until it started refusing jobs -- and every one of those would have been
+        // counted as queued. Reporting that honestly is the difference between a mod that is waiting
+        // for the game to hand it section data and one that silently does nothing.
+        if (!this.mesh.isBuilding()) {
+            this.meshingWaitingOnBuilder++;
+            return;
+        }
         int lowest = SectionCoords.sectionOf(HeightmapIndex.WORLD_MIN_Y);
         int highest = SectionCoords.sectionOf(HeightmapIndex.WORLD_MAX_Y);
         for (int sectionY = lowest; sectionY <= highest; sectionY++) {
             this.mesh.enqueue(chunkX, sectionY, chunkZ,
                     MeshJobQueue.KIND_GEOMETRY, true, 0L);
-            this.sectionsQueued++;
         }
     }
 
@@ -767,6 +790,8 @@ public final class AmdFasterRuntime {
         this.minecraft.onWorldChange();
         this.light.onWorldChange();
         this.cull.onWorldChange();
+        // The mesh queue is per-world: sections from the last world are coordinates that no longer mean
+        // anything, so the queue and the deduplicator go with them.
         this.mesh.onWorldChange();
         this.entityWorld.onWorldChange();
         this.gpu.onWorldChange();
