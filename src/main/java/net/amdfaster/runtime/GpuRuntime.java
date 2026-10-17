@@ -1,5 +1,14 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.gpu.BlockBindings;
+import net.amdfaster.gpu.CullingPipeline;
+import net.amdfaster.gpu.EntityUploadLayout;
+import net.amdfaster.gpu.GpuBuffer;
+import net.amdfaster.gpu.IndirectDrawBatcher;
+import net.amdfaster.gpu.MeshUploadLayout;
+import net.amdfaster.gpu.MeshletGpuLayout;
+import net.amdfaster.gpu.SectionUpload;
+import net.amdfaster.mesh.SectionMesh;
 import net.amdfaster.gpu.BindlessTextureTable;
 import net.amdfaster.gpu.BufferArena;
 import net.amdfaster.gpu.FrameSlotScheduler;
@@ -73,6 +82,24 @@ public final class GpuRuntime {
     private final UberShaderSelector shaders = new UberShaderSelector();
     private final BindlessTextureTable bindless = new BindlessTextureTable();
     private final VramBudget vram = new VramBudget();
+
+    /** Batches draws into indirect commands instead of one call each. */
+    private final IndirectDrawBatcher indirect = new IndirectDrawBatcher();
+
+    /**
+     * The compute pipeline that culls on the GPU, or {@code null} until a device is supplied.
+     *
+     * <p>It needs a {@code VkContext}, which only the device can provide, so it is handed one rather than
+     * built here -- a pipeline created against the wrong device would not be valid for the one in use.
+     */
+    private CullingPipeline cullingPipeline;
+
+    /**
+     * The staging buffer for uploads, or {@code null} until a device is supplied.
+     *
+     * <p>Same reason as the pipeline: the buffer belongs to a device and cannot be built without one.
+     */
+    private GpuBuffer staging;
 
     private long frames;
 
@@ -204,5 +231,59 @@ public final class GpuRuntime {
     public void onWorldChange() {
         this.frames = 0;
         this.instances.clear();
+    }
+
+    /** The indirect-draw batcher. */
+    public IndirectDrawBatcher indirect() {
+        return this.indirect;
+    }
+
+    /** Supplies the compute pipeline once a device exists. */
+    public GpuRuntime withCullingPipeline(CullingPipeline pipeline) {
+        this.cullingPipeline = pipeline;
+        return this;
+    }
+
+    /** The GPU culling pipeline, or {@code null} before a device supplied one. */
+    public CullingPipeline cullingPipeline() {
+        return this.cullingPipeline;
+    }
+
+    /** Supplies the staging buffer once a device exists. */
+    public GpuRuntime withStaging(GpuBuffer buffer) {
+        this.staging = buffer;
+        return this;
+    }
+
+    /** The staging buffer, or {@code null} before a device supplied one. */
+    public GpuBuffer staging() {
+        return this.staging;
+    }
+
+    /** The descriptor bindings the pipelines expect. */
+    public java.util.List<BlockBindings.Binding> bindings() {
+        return BlockBindings.bindings();
+    }
+
+    /**
+     * Plans the upload for one section.
+     *
+     * <p>Wires the meshlet layout, the section upload buffers, the mesh upload layout and the entity
+     * instance layout together -- the offsets have to agree across all four or the GPU reads one section's
+     * data as another's.
+     *
+     * @param mesh the section's mesh
+     * @param instances how many entity instances this frame carries
+     * @return how many bytes the section's positions occupy
+     */
+    public int planUpload(SectionMesh mesh, int instances) {
+        MeshletGpuLayout meshlets = MeshletGpuLayout.forSection(mesh);
+        SectionUpload.Buffers buffers = SectionUpload.allocate(meshlets);
+        MeshUploadLayout layout = MeshUploadLayout.forSection(mesh, 0L);
+        EntityUploadLayout entities = EntityUploadLayout.of(instances);
+        return SectionUpload.positionBytes(meshlets)
+                + SectionUpload.attributeBytes(meshlets)
+                + layout.positionsBytes()
+                + entities.instanceCount();
     }
 }
