@@ -1,5 +1,10 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.resource.LazyDataFixer;
+import net.amdfaster.resource.LazyLanguageLoader;
+import net.amdfaster.resource.LazyModelLoader;
+import net.amdfaster.resource.ModelBakeCache;
+import net.amdfaster.resource.ResourceLookupCache;
 import net.amdfaster.mem.AtlasUploadCleanup;
 import net.amdfaster.mem.CrossModAssetDeduplicator;
 import net.amdfaster.mem.MemoryPressureMonitor;
@@ -56,6 +61,21 @@ public final class AssetRuntime {
     private final NbtStringCache nbt = new NbtStringCache();
     private final AtlasUploadCleanup atlas = new AtlasUploadCleanup();
     private final MemoryPressureMonitor heap = new MemoryPressureMonitor();
+
+    /** Builds the data fixer only when a world of an older version is opened. */
+    private final LazyDataFixer dataFixer = new LazyDataFixer();
+
+    /** Loads languages on demand rather than at startup. */
+    private final LazyLanguageLoader languages = new LazyLanguageLoader();
+
+    /** Loads model definitions on demand. */
+    private final LazyModelLoader models = new LazyModelLoader();
+
+    /** Reuses a baked model set when nothing that would change it has changed. */
+    private final ModelBakeCache bakedModels = new ModelBakeCache();
+
+    /** Caches resource lookups by namespace and path. */
+    private final ResourceLookupCache lookups = new ResourceLookupCache();
 
     public AssetRuntime() {
         // Registered rather than cleared by name, so a cache added later is cleared by registering itself
@@ -154,5 +174,47 @@ public final class AssetRuntime {
      */
     public double sharedPercent() {
         return this.assets.sharedPercent();
+    }
+
+    /** The lazy data fixer. */
+    public LazyDataFixer dataFixer() {
+        return this.dataFixer;
+    }
+
+    /** The lazy language loader. */
+    public LazyLanguageLoader languages() {
+        return this.languages;
+    }
+
+    /** The lazy model loader. */
+    public LazyModelLoader models() {
+        return this.models;
+    }
+
+    /** The model bake cache. */
+    public ModelBakeCache bakedModels() {
+        return this.bakedModels;
+    }
+
+    /** The resource lookup cache. */
+    public ResourceLookupCache lookups() {
+        return this.lookups;
+    }
+
+    /**
+     * Whether the baked model set on disk can be reused.
+     *
+     * <p>The identity covers resource packs, mods and game version, because all three change baked output.
+     * A cache keyed on fewer than those would hand back models baked for a pack that is no longer loaded,
+     * which shows up as wrong geometry rather than as a crash.
+     *
+     * @param resourcePacks the loaded pack list
+     * @param mods the loaded mod list
+     * @param gameVersion the game version
+     * @return whether the cached bake matches
+     */
+    public boolean canReuseBakedModels(String resourcePacks, String mods, String gameVersion) {
+        return this.bakedModels.matches(
+                ModelBakeCache.identity(resourcePacks, mods, gameVersion));
     }
 }

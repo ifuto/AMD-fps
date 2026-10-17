@@ -1,5 +1,9 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.draw.DeltaFramePlanner;
+import net.amdfaster.draw.DrawBatchOrder;
+import net.amdfaster.draw.SortKeyRadixSort;
+import net.amdfaster.draw.TranslucentSortCache;
 import net.amdfaster.render.BeaconBeamCache;
 import net.amdfaster.render.BreakingOverlayCache;
 import net.amdfaster.render.ConnectedTextureSelector;
@@ -96,6 +100,15 @@ public final class RenderRuntime {
 
     /** Chunks kept across a reconnect instead of re-requested. */
     private final RetainedChunkCache retainedChunks = new RetainedChunkCache();
+
+    /** Tracks which sections changed so a frame only redraws those. */
+    private final DeltaFramePlanner deltas = new DeltaFramePlanner();
+
+    /** Sorts draws by pipeline, then texture, then depth. */
+    private final SortKeyRadixSort drawSort = new SortKeyRadixSort();
+
+    /** Skips re-sorting translucency when the camera has not moved enough. */
+    private final TranslucentSortCache translucency = new TranslucentSortCache();
 
     /**
      * The HUD's bounds in pixels, which the texture is sized to.
@@ -333,5 +346,36 @@ public final class RenderRuntime {
      */
     public double hudBlitPercent() {
         return this.hudTexture.blitPercent();
+    }
+
+    /** The delta-frame planner. */
+    public DeltaFramePlanner deltas() {
+        return this.deltas;
+    }
+
+    /** The draw sort. */
+    public SortKeyRadixSort drawSort() {
+        return this.drawSort;
+    }
+
+    /** The translucency sort cache. */
+    public TranslucentSortCache translucency() {
+        return this.translucency;
+    }
+
+    /**
+     * Builds the sort key for one draw.
+     *
+     * <p>Exposed so the sort and the draw use the same key. Pipeline comes first because switching pipelines
+     * is the expensive change, texture second, and depth last -- sorting by depth first would break batching
+     * to save nothing, since translucent draws are already ordered by the sort cache.
+     *
+     * @param pipeline the pipeline the draw uses
+     * @param texture the texture it binds
+     * @param depth distance from the camera
+     * @return the packed sort key
+     */
+    public long drawKey(int pipeline, int texture, float depth) {
+        return DrawBatchOrder.key(pipeline, texture, depth);
     }
 }
