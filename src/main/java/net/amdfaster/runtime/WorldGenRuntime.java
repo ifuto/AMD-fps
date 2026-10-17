@@ -93,6 +93,20 @@ public final class WorldGenRuntime {
     }
 
     /**
+     * Leaves a world without knowing which one comes next.
+     *
+     * <p>Clears rather than re-seeds, because at this point there is no seed to re-seed with -- inventing one
+     * would key the noise cache to a world that does not exist, and the first lookup in the real world would
+     * then be answered from it.
+     */
+    public void onDisconnect() {
+        this.worldChanges++;
+        this.noise.clear();
+        this.structures.clear();
+        this.recycled.clear();
+    }
+
+    /**
      * Moves to a new world.
      *
      * <p>The noise cache is re-seeded rather than cleared, because the samples for the new world are simply

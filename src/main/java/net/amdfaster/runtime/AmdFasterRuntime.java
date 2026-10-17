@@ -113,6 +113,15 @@ public final class AmdFasterRuntime {
      */
     private final RenderRuntime render = new RenderRuntime();
 
+    /**
+     * The world generation decisions.
+     *
+     * <p>Owned here because the caches hold data derived from a seed, and one that keeps the last world's noise
+     * while the block cache holds the new one generates terrain that does not match the world the player is
+     * standing in.
+     */
+    private final WorldGenRuntime worldGen = new WorldGenRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -246,6 +255,17 @@ public final class AmdFasterRuntime {
      */
     public RenderRuntime render() {
         return this.render;
+    }
+
+    /**
+     * The world generation decisions, for the chunk generation path to use.
+     *
+     * <p>The distant terrain inside it is a picture rather than a world, and the accessor that says whether it
+     * may be used for gameplay returns false unconditionally -- a player who walks into ground that is only a
+     * picture falls through the world.
+     */
+    public WorldGenRuntime worldGen() {
+        return this.worldGen;
     }
 
     private void register() {
@@ -410,6 +430,10 @@ public final class AmdFasterRuntime {
         // Invalidates the HUD, cloud, weather, icon and text caches together. Missing one means a stale HUD
         // over a fresh world, or yesterday's clouds over today's weather.
         this.render.invalidateAll();
+        // Clears the world generation caches. Re-seeding happens when the next world is joined and its seed is
+        // known; inventing a seed here would key the noise cache to a world that does not exist, and the first
+        // lookup in the real world would then be answered from it.
+        this.worldGen.onDisconnect();
         this.lastFrameAtMs = -1L;
         restoreFramerateLimit();
     }
