@@ -171,6 +171,14 @@ public final class AmdFasterRuntime {
      */
     private final EntityWorldRuntime entityWorld = new EntityWorldRuntime();
 
+    /**
+     * The indirect-draw and GPU-culling decisions.
+     *
+     * <p>Owned here because a frame's draw list has to be cleared between worlds: the slots, groups and
+     * uniform values all describe geometry from a world that is gone.
+     */
+    private final GpuRuntime gpu = new GpuRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -382,6 +390,16 @@ public final class AmdFasterRuntime {
         return this.entityWorld;
     }
 
+    /**
+     * The indirect-draw and GPU-culling pipeline.
+     *
+     * <p>Cleared on world change, because the uniform values and draw slots describe the last world's
+     * geometry and would be uploaded for geometry that no longer exists.
+     */
+    public GpuRuntime gpu() {
+        return this.gpu;
+    }
+
     private void register() {
         ClientTickEvents.START_CLIENT_TICK.register(this::onStartTick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onEndTick);
@@ -555,6 +573,7 @@ public final class AmdFasterRuntime {
         this.cull.onWorldChange();
         this.mesh.onWorldChange();
         this.entityWorld.onWorldChange();
+        this.gpu.onWorldChange();
         this.lastFrameAtMs = -1L;
         restoreFramerateLimit();
     }
