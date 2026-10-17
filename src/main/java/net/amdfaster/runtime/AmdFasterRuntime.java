@@ -105,6 +105,14 @@ public final class AmdFasterRuntime {
      */
     private final BlockEntityRuntime blockEntities = new BlockEntityRuntime();
 
+    /**
+     * The render-side decisions.
+     *
+     * <p>Owned here because the HUD, cloud, weather and text caches all have to be invalidated at the same
+     * moment, and missing one means the player sees a stale HUD over a fresh world.
+     */
+    private final RenderRuntime render = new RenderRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -228,6 +236,16 @@ public final class AmdFasterRuntime {
      */
     public BlockEntityRuntime blockEntities() {
         return this.blockEntities;
+    }
+
+    /**
+     * The render-side decisions, for the HUD, GUI and render paths to drive.
+     *
+     * <p>The frame has to be driven from the render path rather than from the tick, because the HUD is drawn
+     * every frame and the cloud and weather meshes are rebuilt on the frame that needs them.
+     */
+    public RenderRuntime render() {
+        return this.render;
     }
 
     private void register() {
@@ -389,6 +407,9 @@ public final class AmdFasterRuntime {
         // of blocks from a world that no longer exists.
         this.assets.onWorldChange();
         this.blockEntities.reset();
+        // Invalidates the HUD, cloud, weather, icon and text caches together. Missing one means a stale HUD
+        // over a fresh world, or yesterday's clouds over today's weather.
+        this.render.invalidateAll();
         this.lastFrameAtMs = -1L;
         restoreFramerateLimit();
     }
