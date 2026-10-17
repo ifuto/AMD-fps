@@ -1,5 +1,20 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.craft.RecipeSearchCache;
+import net.amdfaster.explosion.ChainReactionDeduplicator;
+import net.amdfaster.explosion.ExplosionBlockCache;
+import net.amdfaster.fluid.FlowDirectionCache;
+import net.amdfaster.fluid.FluidSurfaceMerger;
+import net.amdfaster.fluid.FluidTickFilter;
+import net.amdfaster.hopper.HopperTransferCache;
+import net.amdfaster.hopper.OccludedPositionSkipper;
+import net.amdfaster.redstone.PowerCache;
+import net.amdfaster.redstone.WireNetworkResolver;
+import net.amdfaster.tick.DynamicLoadController;
+import net.amdfaster.tick.RandomTickFilter;
+import net.amdfaster.tick.WorkBudget;
+import net.amdfaster.village.PoiIndex;
+import net.amdfaster.village.StuckVillagerThrottler;
 import net.amdfaster.block.BoxShape;
 import net.amdfaster.block.HardnessCache;
 import net.amdfaster.block.PistonShapes;
@@ -134,6 +149,37 @@ public final class MinecraftRuntime {
 
     private long blockChanges;
     private long invalidations;
+
+    /** Caches recipe lookups for the crafting grid. */
+    private final RecipeSearchCache recipes = new RecipeSearchCache();
+    /** Caches block resistance during an explosion. */
+    private final ExplosionBlockCache explosionBlocks = new ExplosionBlockCache();
+    /** Stops one blast re-resolving blocks another blast already destroyed. */
+    private final ChainReactionDeduplicator chainReaction = new ChainReactionDeduplicator();
+    /** Caches fluid flow direction, which recomputing every tick is what makes water expensive. */
+    private final FlowDirectionCache flow = new FlowDirectionCache();
+    /** Merges fluid surfaces into one quad instead of one per block. */
+    private final FluidSurfaceMerger fluidSurface = new FluidSurfaceMerger();
+    /** Skips fluid ticks where nothing can move. */
+    private final FluidTickFilter fluidTicks = new FluidTickFilter();
+    /** Caches what a hopper points at. */
+    private final HopperTransferCache hoppers = new HopperTransferCache();
+    /** Skips hopper checks on positions that are fully enclosed. */
+    private final OccludedPositionSkipper occludedPositions = new OccludedPositionSkipper();
+    /** Caches redstone signal strength. */
+    private final PowerCache power = new PowerCache();
+    /** Resolves a wire network once instead of per wire. */
+    private final WireNetworkResolver wires = new WireNetworkResolver();
+    /** Moves mob cap and simulation distance with the measured tick cost. */
+    private final DynamicLoadController load = new DynamicLoadController();
+    /** Skips random-tick sampling in sections with nothing tickable. */
+    private final RandomTickFilter randomTickFilter = new RandomTickFilter();
+    /** Spreads deferred tick work across frames. */
+    private final WorkBudget budget = new WorkBudget();
+    /** Indexes points of interest by position. */
+    private final PoiIndex pois = new PoiIndex();
+    /** Throttles villagers that cannot move. */
+    private final StuckVillagerThrottler stuckVillagers = new StuckVillagerThrottler();
 
     /** The block state cache. */
     public BlockStateCache blockStates() {
@@ -362,5 +408,80 @@ public final class MinecraftRuntime {
      */
     public BoxShape pistonShape(int axis, boolean positive, boolean extended) {
         return PistonShapes.instance().shape(axis, positive, extended);
+    }
+
+    /** The recipe search cache. */
+    public RecipeSearchCache recipes() {
+        return this.recipes;
+    }
+
+    /** The explosion block cache. */
+    public ExplosionBlockCache explosionBlocks() {
+        return this.explosionBlocks;
+    }
+
+    /** The chain reaction deduplicator. */
+    public ChainReactionDeduplicator chainReaction() {
+        return this.chainReaction;
+    }
+
+    /** The flow direction cache. */
+    public FlowDirectionCache flow() {
+        return this.flow;
+    }
+
+    /** The fluid surface merger. */
+    public FluidSurfaceMerger fluidSurface() {
+        return this.fluidSurface;
+    }
+
+    /** The fluid tick filter. */
+    public FluidTickFilter fluidTicks() {
+        return this.fluidTicks;
+    }
+
+    /** The hopper transfer cache. */
+    public HopperTransferCache hoppers() {
+        return this.hoppers;
+    }
+
+    /** The occluded position skipper. */
+    public OccludedPositionSkipper occludedPositions() {
+        return this.occludedPositions;
+    }
+
+    /** The redstone power cache. */
+    public PowerCache power() {
+        return this.power;
+    }
+
+    /** The wire network resolver. */
+    public WireNetworkResolver wires() {
+        return this.wires;
+    }
+
+    /** The dynamic load controller. */
+    public DynamicLoadController load() {
+        return this.load;
+    }
+
+    /** The random tick filter. */
+    public RandomTickFilter randomTickFilter() {
+        return this.randomTickFilter;
+    }
+
+    /** The work budget. */
+    public WorkBudget budget() {
+        return this.budget;
+    }
+
+    /** The point-of-interest index. */
+    public PoiIndex pois() {
+        return this.pois;
+    }
+
+    /** The stuck villager throttler. */
+    public StuckVillagerThrottler stuckVillagers() {
+        return this.stuckVillagers;
     }
 }

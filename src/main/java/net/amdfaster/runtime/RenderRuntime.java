@@ -1,5 +1,9 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.dirty.RebuildScheduler;
+import net.amdfaster.dirty.SectionSet;
+import net.amdfaster.runtime.GuiUpdateThrottle;
+import net.amdfaster.runtime.RenderUpdateGate;
 import net.amdfaster.draw.DeltaFramePlanner;
 import net.amdfaster.draw.DrawBatchOrder;
 import net.amdfaster.draw.SortKeyRadixSort;
@@ -125,6 +129,15 @@ public final class RenderRuntime {
     public static final int DEFAULT_HUD_HEIGHT = 120;
 
     private long frames;
+
+    /** Schedules section rebuilds against a per-frame budget. */
+    private final RebuildScheduler rebuilds = new RebuildScheduler();
+    /** The set of sections a block change dirties. */
+    private final SectionSet dirtySections = new SectionSet();
+    /** Throttles GUI layer updates. */
+    private final GuiUpdateThrottle guiThrottle = new GuiUpdateThrottle();
+    /** Gates render updates on whether the window is active. */
+    private final RenderUpdateGate updateGate = new RenderUpdateGate();
 
     /** Sets the HUD's bounds, so the texture is the right size. */
     public void setHudBounds(int width, int height) {
@@ -377,5 +390,25 @@ public final class RenderRuntime {
      */
     public long drawKey(int pipeline, int texture, float depth) {
         return DrawBatchOrder.key(pipeline, texture, depth);
+    }
+
+    /** The rebuild scheduler. */
+    public RebuildScheduler rebuilds() {
+        return this.rebuilds;
+    }
+
+    /** The dirty section set. */
+    public SectionSet dirtySections() {
+        return this.dirtySections;
+    }
+
+    /** The GUI update throttle. */
+    public GuiUpdateThrottle guiThrottle() {
+        return this.guiThrottle;
+    }
+
+    /** The render update gate. */
+    public RenderUpdateGate updateGate() {
+        return this.updateGate;
     }
 }

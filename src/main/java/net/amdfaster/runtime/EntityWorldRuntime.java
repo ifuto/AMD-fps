@@ -1,5 +1,7 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.collision.EntityPairDeduplicator;
+import net.amdfaster.collision.MovementRegion;
 import net.amdfaster.entity.ActivationRangeScheduler;
 import net.amdfaster.entity.AttributeCache;
 import net.amdfaster.entity.BlockEntityCuller;
@@ -60,6 +62,11 @@ public final class EntityWorldRuntime {
 
     private long entitiesAdded;
     private long entitiesRemoved;
+
+    /** Stops one entity pair being examined twice in a tick. */
+    private final EntityPairDeduplicator pairs = new EntityPairDeduplicator();
+    /** Confines collision queries to the sections an entity can reach. */
+    private final MovementRegion movement = new MovementRegion();
 
     public EntityCollisionGrid collision() {
         return this.collision;
@@ -220,5 +227,15 @@ public final class EntityWorldRuntime {
         // from the last one.
         this.collision.clear();
         this.collision.resetCounters();
+    }
+
+    /** The entity pair deduplicator. */
+    public EntityPairDeduplicator pairs() {
+        return this.pairs;
+    }
+
+    /** The movement region. */
+    public MovementRegion movement() {
+        return this.movement;
     }
 }

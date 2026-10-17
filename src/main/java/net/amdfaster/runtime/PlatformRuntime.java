@@ -1,5 +1,8 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.boot.StartupPriorityController;
+import net.amdfaster.cpu.CacheTopology;
+import net.amdfaster.cpu.SimdSupport;
 import net.amdfaster.pacing.AdaptiveQuality;
 import net.amdfaster.pacing.FramePacer;
 import net.amdfaster.pacing.RenderDistanceController;
@@ -107,6 +110,13 @@ public final class PlatformRuntime {
 
     /** Drops the frame rate when the window is not focused. */
     private final UnfocusedFrameLimiter unfocused = new UnfocusedFrameLimiter();
+
+    /** Raises the render thread's priority during startup. */
+    private final StartupPriorityController startup = new StartupPriorityController();
+    /** The cache hierarchy, which decides how big a working set can be. */
+    private final CacheTopology cacheTopology = new CacheTopology(32 << 10, 1 << 20, 32 << 20, 1, false);
+    /** Whether the vector API is usable, resolved once. */
+    private final SimdSupport.Resolution simd = SimdSupport.resolve();
 
     public PlatformRuntime() {
         this(GpuReport.probe(), false, 0, 0);
@@ -385,5 +395,20 @@ public final class PlatformRuntime {
             boolean destinationInVideoMemory, boolean unifiedMemory) {
         return TransferQueueSelector.choose(sourceInVideoMemory, destinationInVideoMemory,
                 unifiedMemory);
+    }
+
+    /** The startup priority controller. */
+    public StartupPriorityController startup() {
+        return this.startup;
+    }
+
+    /** The cache topology. */
+    public CacheTopology cacheTopology() {
+        return this.cacheTopology;
+    }
+
+    /** The SIMD resolution. */
+    public SimdSupport.Resolution simd() {
+        return this.simd;
     }
 }
