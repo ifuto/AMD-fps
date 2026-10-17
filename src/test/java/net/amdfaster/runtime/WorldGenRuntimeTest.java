@@ -120,7 +120,7 @@ class WorldGenRuntimeTest {
         int[] encoded = runtime.codec().encode(uniform);
 
         assertTrue(encoded.length < uniform.length, "a uniform section collapses");
-        assertEquals(1, encoded.length);
+        assertEquals(2, encoded.length, "one run, encoded as a value and a length");
         assertTrue(runtime.codec().compressionRatio() > 1.0);
     }
 
