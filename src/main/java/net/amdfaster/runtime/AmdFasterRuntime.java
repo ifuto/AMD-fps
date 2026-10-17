@@ -130,6 +130,14 @@ public final class AmdFasterRuntime {
      */
     private final MinecraftRuntime minecraft = new MinecraftRuntime();
 
+    /**
+     * The lighting decisions.
+     *
+     * <p>Owned here because a light change has to reach the meshes that draw the blocks it changed, and a
+     * batcher that is never processed leaves every light update pending forever.
+     */
+    private final LightRuntime light = new LightRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -285,6 +293,16 @@ public final class AmdFasterRuntime {
      */
     public MinecraftRuntime minecraft() {
         return this.minecraft;
+    }
+
+    /**
+     * The lighting decisions, for the block change and chunk load paths to use.
+     *
+     * <p>The batcher inside it has to be processed on the client thread, because a batcher that is never
+     * processed leaves every light update pending forever and the world stays dark where blocks were placed.
+     */
+    public LightRuntime light() {
+        return this.light;
     }
 
     private void register() {
@@ -456,6 +474,7 @@ public final class AmdFasterRuntime {
         // Invalidates the block, sampler, model, section and heightmap caches. The positions are meaningless
         // across worlds, so a cache keyed on position would otherwise answer for a world that no longer exists.
         this.minecraft.onWorldChange();
+        this.light.onWorldChange();
         this.lastFrameAtMs = -1L;
         restoreFramerateLimit();
     }
