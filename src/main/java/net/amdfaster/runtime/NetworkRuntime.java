@@ -1,5 +1,12 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.net.ChunkSectionReader;
+import net.amdfaster.net.EmptyLightSectionSkipper;
+import net.amdfaster.net.FlushConsolidator;
+import net.amdfaster.net.InflaterPool;
+import net.amdfaster.net.MovementPacketSuppressor;
+import net.amdfaster.net.PacketPriorityScheduler;
+import net.amdfaster.net.SpiralChunkOrder;
 import net.amdfaster.net.ChunkBatchAckPacer;
 import net.amdfaster.net.EntityUpdateCoalescer;
 import net.amdfaster.net.ReconnectChunkReuse;
@@ -44,6 +51,27 @@ public final class NetworkRuntime {
     private final ChunkBatchAckPacer pacer = new ChunkBatchAckPacer();
     private final EntityUpdateCoalescer coalescer = new EntityUpdateCoalescer();
     private final ReconnectChunkReuse chunks = new ReconnectChunkReuse();
+
+    /** Reads a chunk section's palette container. */
+    private final ChunkSectionReader sectionReader = new ChunkSectionReader();
+
+    /** Skips light sections that carry nothing. */
+    private final EmptyLightSectionSkipper lightSkipper = new EmptyLightSectionSkipper();
+
+    /** Coalesces socket writes to the end of a tick. */
+    private final FlushConsolidator flush = new FlushConsolidator();
+
+    /** Pools inflaters instead of allocating one per packet. */
+    private final InflaterPool inflaters = new InflaterPool();
+
+    /** Drops movement packets that change nothing. */
+    private final MovementPacketSuppressor movement = new MovementPacketSuppressor();
+
+    /** Orders packets by priority rather than arrival. */
+    private final PacketPriorityScheduler priority = new PacketPriorityScheduler();
+
+    /** Requests chunks in a spiral, nearest first. */
+    private final SpiralChunkOrder spiral = new SpiralChunkOrder();
 
     /**
      * The entities with an update pending this tick, by id.
@@ -195,5 +223,40 @@ public final class NetworkRuntime {
      */
     public double entityUpdateSavedPercent() {
         return this.coalescer.savedPercent();
+    }
+
+    /** The chunk-section reader. */
+    public ChunkSectionReader sectionReader() {
+        return this.sectionReader;
+    }
+
+    /** The empty light-section skipper. */
+    public EmptyLightSectionSkipper lightSkipper() {
+        return this.lightSkipper;
+    }
+
+    /** The socket-write consolidator. */
+    public FlushConsolidator flush() {
+        return this.flush;
+    }
+
+    /** The inflater pool. */
+    public InflaterPool inflaters() {
+        return this.inflaters;
+    }
+
+    /** The movement-packet suppressor. */
+    public MovementPacketSuppressor movement() {
+        return this.movement;
+    }
+
+    /** The packet priority scheduler. */
+    public PacketPriorityScheduler priority() {
+        return this.priority;
+    }
+
+    /** The spiral chunk-request order. */
+    public SpiralChunkOrder spiral() {
+        return this.spiral;
     }
 }
