@@ -1,6 +1,7 @@
 package net.amdfaster.perf;
 
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkDevice;
 import org.lwjgl.vulkan.VkQueryPoolCreateInfo;
 
@@ -135,7 +136,7 @@ public final class GpuTimestampQuery {
      * @param commandBuffer the buffer being recorded
      * @param slot          which frame slot
      */
-    public void writeStart(long commandBuffer, int slot) {
+    public void writeStart(VkCommandBuffer commandBuffer, int slot) {
         checkSlot(slot);
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                 this.pool, slot * QUERIES_PER_FRAME);
@@ -147,7 +148,7 @@ public final class GpuTimestampQuery {
      * @param commandBuffer the buffer being recorded
      * @param slot          which frame slot
      */
-    public void writeEnd(long commandBuffer, int slot) {
+    public void writeEnd(VkCommandBuffer commandBuffer, int slot) {
         checkSlot(slot);
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                 this.pool, slot * QUERIES_PER_FRAME + 1);
