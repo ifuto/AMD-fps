@@ -97,6 +97,14 @@ public final class AmdFasterRuntime {
      */
     private final AssetRuntime assets = new AssetRuntime();
 
+    /**
+     * The block entity decisions.
+     *
+     * <p>Owned here because it holds the shared static geometry baker -- two instances would each bake the same
+     * chest body and each claim the draw calls it removed.
+     */
+    private final BlockEntityRuntime blockEntities = new BlockEntityRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -210,6 +218,16 @@ public final class AmdFasterRuntime {
      */
     public AssetRuntime assets() {
         return this.assets;
+    }
+
+    /**
+     * The block entity decisions, for the block entity tick and render paths to use.
+     *
+     * <p>The baker inside it is the shared one, so a chest body baked by one path is not baked again by
+     * another -- which is the whole point of baking it rather than drawing it.
+     */
+    public BlockEntityRuntime blockEntities() {
+        return this.blockEntities;
     }
 
     private void register() {
@@ -370,6 +388,7 @@ public final class AmdFasterRuntime {
         // Clears the world-specific caches. This is the thing that makes a cache a cache rather than a source
         // of blocks from a world that no longer exists.
         this.assets.onWorldChange();
+        this.blockEntities.reset();
         this.lastFrameAtMs = -1L;
         restoreFramerateLimit();
     }
