@@ -505,6 +505,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/net/ReconnectChunkReuse.class",
                         "net/amdfaster/mem/CrossModAssetDeduplicator.class",
                         "net/amdfaster/blockentity/ModRendererCuller.class",
+                        "net/amdfaster/particle/CrossModParticleBudget.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
