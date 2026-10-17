@@ -2,7 +2,6 @@ package net.amdfaster.perf;
 
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkDevice;
-import org.lwjgl.vulkan.VkQueryPool;
 import org.lwjgl.vulkan.VkQueryPoolCreateInfo;
 
 import java.nio.LongBuffer;
@@ -96,18 +95,22 @@ public final class GpuTimestampQuery {
         this.lastNanos = new long[slots];
         java.util.Arrays.fill(this.lastNanos, -1L);
 
-        long handle = 0L;
+        long handle;
         try (MemoryStack stack = stackPush()) {
             VkQueryPoolCreateInfo createInfo = VkQueryPoolCreateInfo.calloc(stack)
-                    .sType(org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_QUERY_POOL)
+                    .sType$Default()
                     .queryType(VK_QUERY_TYPE_TIMESTAMP)
                     .queryCount(slots * QUERIES_PER_FRAME);
-            VkQueryPool out = VkQueryPool.calloc(stack);
+            // A LongBuffer and a raw handle, which is how every other non-dispatchable handle in this
+            // codebase is taken -- Swapchain does the same for the swapchain and its image views. There is
+            // no VkQueryPool wrapper class in this LWJGL, and reaching for one is how a build breaks on a
+            // symbol that reads like it ought to exist.
+            LongBuffer out = stack.mallocLong(1);
             int result = vkCreateQueryPool(device, createInfo, null, out);
             if (result != VK_SUCCESS) {
                 throw new IllegalStateException("vkCreateQueryPool failed: " + result);
             }
-            handle = out.get();
+            handle = out.get(0);
         }
         this.pool = handle;
     }
@@ -135,7 +138,7 @@ public final class GpuTimestampQuery {
     public void writeStart(long commandBuffer, int slot) {
         checkSlot(slot);
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                wrap(this.pool), slot * QUERIES_PER_FRAME);
+                this.pool, slot * QUERIES_PER_FRAME);
     }
 
     /**
@@ -147,7 +150,7 @@ public final class GpuTimestampQuery {
     public void writeEnd(long commandBuffer, int slot) {
         checkSlot(slot);
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                wrap(this.pool), slot * QUERIES_PER_FRAME + 1);
+                this.pool, slot * QUERIES_PER_FRAME + 1);
     }
 
     /**
@@ -164,8 +167,9 @@ public final class GpuTimestampQuery {
         checkSlot(slot);
         try (MemoryStack stack = stackPush()) {
             LongBuffer out = stack.mallocLong(QUERIES_PER_FRAME);
-            int result = vkGetQueryPoolResults(this.device, wrap(this.pool),
-                    slot * QUERIES_PER_FRAME, QUERIES_PER_FRAME, out, Long.BYTES, VK_QUERY_RESULT_64_BIT);
+            int result = vkGetQueryPoolResults(this.device, this.pool,
+                    slot * QUERIES_PER_FRAME, QUERIES_PER_FRAME, out,
+                    (long) Long.BYTES, VK_QUERY_RESULT_64_BIT);
             if (result == VK_NOT_READY) {
                 return -1L;
             }
@@ -178,7 +182,7 @@ public final class GpuTimestampQuery {
             // Reset so the next frame using this slot does not read a stale pair. Resetting after the read
             // rather than before the write keeps a frame that never finishes from leaving a half-written
             // pair behind.
-            vkResetQueryPool(this.device, wrap(this.pool),
+            vkResetQueryPool(this.device, this.pool,
                     slot * QUERIES_PER_FRAME, QUERIES_PER_FRAME);
             return nanos;
         }
@@ -211,7 +215,7 @@ public final class GpuTimestampQuery {
     /** Releases the pool. */
     public void close() {
         if (this.pool != 0L) {
-            vkDestroyQueryPool(this.device, wrap(this.pool), null);
+            vkDestroyQueryPool(this.device, this.pool, null);
         }
     }
 
@@ -219,16 +223,6 @@ public final class GpuTimestampQuery {
         if (slot < 0 || slot >= this.slots) {
             throw new IllegalArgumentException("slot " + slot + " outside " + this.slots);
         }
-    }
-
-    /**
-     * Re-wraps a handle for LWJGL, which wants a {@code VkQueryPool} rather than a raw pointer.
-     *
-     * <p>Kept in one place because doing it inline at four call sites is four chances to get it wrong, and
-     * a wrong wrapper here is a crash inside the driver with no Java stack frame to explain it.
-     */
-    private static VkQueryPool wrap(long handle) {
-        return new VkQueryPool(handle, null);
     }
 
     /**
