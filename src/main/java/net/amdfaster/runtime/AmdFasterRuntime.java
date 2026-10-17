@@ -63,6 +63,15 @@ public final class AmdFasterRuntime {
      */
     private final SoundRuntime sound = new SoundRuntime();
 
+    /**
+     * The multiplayer network decisions.
+     *
+     * <p>Owned here for the same reason as the sound pipeline: it holds per-tick state that has to be cleared
+     * once per tick, and a connection lifecycle it has to be told about. A second instance would keep its own
+     * pending entities and apply them twice.
+     */
+    private final NetworkRuntime network = new NetworkRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -135,6 +144,17 @@ public final class AmdFasterRuntime {
         return this.sound;
     }
 
+    /**
+     * The multiplayer network decisions, for the connection handlers and the chunk and entity paths to use.
+     *
+     * <p>Exposed rather than driven from a hook, because the decisions have to happen where the packet
+     * arrives -- a hook on a tick boundary would decide after the packet had already been processed, which is
+     * the cost these exist to remove.
+     */
+    public NetworkRuntime network() {
+        return this.network;
+    }
+
     private void register() {
         ClientTickEvents.START_CLIENT_TICK.register(this::onStartTick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onEndTick);
@@ -163,6 +183,9 @@ public final class AmdFasterRuntime {
         // accumulate for the whole session and eventually refuse everything, which the player would
         // experience as the world going quiet for no reason.
         this.sound.endTick();
+        // Applies the entity updates the coalescer held. Missing this would leave every entity a tick behind
+        // where the server says it is, forever, because nothing would ever apply the held updates.
+        this.network.endTick();
     }
 
     /**
@@ -277,6 +300,7 @@ public final class AmdFasterRuntime {
         this.stages.clear();
         this.governor.clear();
         this.sound.reset();
+        this.network.disconnect();
         this.lastFrameAtMs = -1L;
         restoreFramerateLimit();
     }
