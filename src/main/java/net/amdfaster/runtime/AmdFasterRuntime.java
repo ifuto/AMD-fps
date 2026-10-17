@@ -3,7 +3,11 @@ package net.amdfaster.runtime;
 import java.nio.file.Path;
 
 import net.amdfaster.AmdFasterClient;
+import net.amdfaster.compat.SodiumCoexistence;
 import net.amdfaster.mc.BlockStateCache;
+import net.amdfaster.mc.HeightmapIndex;
+import net.amdfaster.mc.SectionCoords;
+import net.amdfaster.mesh.job.MeshJobQueue;
 import net.amdfaster.perf.FrameTimeRecorder;
 import net.amdfaster.perf.StageTimer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
@@ -183,6 +187,12 @@ public final class AmdFasterRuntime {
 
     private long lastFrameAtMs = -1L;
     private long framesClosed;
+
+    /** Sections queued for meshing. */
+    private long sectionsQueued;
+
+    /** Chunk columns left to Sodium rather than meshed here. */
+    private long meshingDeferredToSodium;
 
     /** Where the player was last tick, so a movement packet can be priced against a real delta. */
     private double lastPlayerX;
@@ -412,6 +422,16 @@ public final class AmdFasterRuntime {
     /** How many frames have had their per-frame windows closed. */
     public long framesClosed() {
         return this.framesClosed;
+    }
+
+    /** How many sections have been queued for meshing. */
+    public long sectionsQueued() {
+        return this.sectionsQueued;
+    }
+
+    /** How many chunk columns were left to Sodium instead of being meshed here. */
+    public long meshingDeferredToSodium() {
+        return this.meshingDeferredToSodium;
     }
 
     private void register() {
@@ -653,6 +673,38 @@ public final class AmdFasterRuntime {
         this.network.chunkReceived();
         this.network.chunkStored();
         this.worldGen.chunkArrived();
+        enqueueChunkMeshing(chunkX, chunkZ);
+    }
+
+    /**
+     * Queues the sections of a newly arrived chunk column for meshing.
+     *
+     * <p>Gated on owning terrain meshing, which is the gate that actually matters when Sodium is installed:
+     * Sodium has its own chunk meshing pipeline, so queueing here as well would build every section twice
+     * and throw one of the two away. That is slower than either mod alone, which is the opposite of what
+     * co-installing them is for.
+     *
+     * <p>The column is twenty-four sections, from {@code WORLD_MIN_Y} -64 to {@code WORLD_MAX_Y} 319 at
+     * sixteen blocks each. Both bounds are the ones the heightmap index already uses, so the meshing range
+     * and the light range agree; inventing a range here would mesh sections the light engine never
+     * populated, and those would come out black.
+     *
+     * <p>Each section is queued as visible with no wait, because a chunk that has just arrived is by
+     * definition where the player is looking. Priority is returned per section and the lowest kept, so the
+     * HUD can report the worst case rather than an average that hides a starved column.
+     */
+    private void enqueueChunkMeshing(int chunkX, int chunkZ) {
+        if (!AmdFasterClient.owns(SodiumCoexistence.Subsystem.TERRAIN_MESHING)) {
+            this.meshingDeferredToSodium++;
+            return;
+        }
+        int lowest = SectionCoords.sectionOf(HeightmapIndex.WORLD_MIN_Y);
+        int highest = SectionCoords.sectionOf(HeightmapIndex.WORLD_MAX_Y);
+        for (int sectionY = lowest; sectionY <= highest; sectionY++) {
+            this.mesh.enqueue(chunkX, sectionY, chunkZ,
+                    MeshJobQueue.KIND_GEOMETRY, true, 0L);
+            this.sectionsQueued++;
+        }
     }
 
     /** A chunk the client no longer holds. */
@@ -669,6 +721,17 @@ public final class AmdFasterRuntime {
         // decisions that were made from the old light have to be dropped with it. Without this the
         // culler keeps answering from light levels that belong to a chunk that is no longer loaded.
         this.cull.onLightChange();
+
+        // The column's geometry has to be re-meshed, but only if this mod is the one meshing it. Sodium
+        // owns its own build queue, and feeding ours as well would schedule work that Sodium then does
+        // anyway.
+        if (AmdFasterClient.owns(SodiumCoexistence.Subsystem.CHUNK_BUILD_SCHEDULING)) {
+            int lowest = SectionCoords.sectionOf(HeightmapIndex.WORLD_MIN_Y);
+            int highest = SectionCoords.sectionOf(HeightmapIndex.WORLD_MAX_Y);
+            for (int sectionY = lowest; sectionY <= highest; sectionY++) {
+                this.render.rebuilds().markGeometry(chunkX, sectionY, chunkZ);
+            }
+        }
     }
 
     private void onDisconnect() {
