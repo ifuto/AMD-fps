@@ -89,6 +89,14 @@ public final class AmdFasterRuntime {
      */
     private final EntityRuntime entities = new EntityRuntime();
 
+    /**
+     * The memory caches.
+     *
+     * <p>Owned here because they have to be cleared together on a world change, and clearing some of them and
+     * not others is worse than clearing none.
+     */
+    private final AssetRuntime assets = new AssetRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -192,6 +200,16 @@ public final class AmdFasterRuntime {
      */
     public EntityRuntime entities() {
         return this.entities;
+    }
+
+    /**
+     * The memory caches, and the registry other caches can register with.
+     *
+     * <p>Exposed so a cache added later is cleared on a world change by registering itself, rather than by
+     * someone remembering to add it to the list of things this class clears.
+     */
+    public AssetRuntime assets() {
+        return this.assets;
     }
 
     private void register() {
@@ -349,6 +367,9 @@ public final class AmdFasterRuntime {
         this.sound.reset();
         this.network.disconnect();
         this.entities.reset();
+        // Clears the world-specific caches. This is the thing that makes a cache a cache rather than a source
+        // of blocks from a world that no longer exists.
+        this.assets.onWorldChange();
         this.lastFrameAtMs = -1L;
         restoreFramerateLimit();
     }
