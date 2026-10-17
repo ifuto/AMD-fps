@@ -199,7 +199,8 @@ class SoundRuntimeTest {
 
         for (int tick = 0; tick < 200; tick++) {
             for (int i = 0; i < 4; i++) {
-                Decision decision = runtime.decide("ambient." + i, "ambientmod", Category.AMBIENT,
+                // WEATHER is the ambience category; there is no separate AMBIENT one.
+                Decision decision = runtime.decide("ambient." + i, "ambientmod", Category.WEATHER,
                         100.0 + i * 16, 64.0, 100.0 + i * 16, 0.0, FOV, false);
                 if (decision.plays()) {
                     playedOverSession++;
