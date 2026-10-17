@@ -15,9 +15,15 @@ class ParticleRuntimeTest {
     private static final String TEX = "particle/flame";
     private static final double HALF_FOV = 35.0;
 
-    /** A particle close by, in front, and with nothing in the way. */
+    /**
+     * A particle close by, in front, and with nothing in the way.
+     *
+     * <p>The screen bounds are a small billboard well inside the frame, and the depth is in front of
+     * everything, so the occlusion test keeps it.
+     */
     private static Spawn spawnNear(ParticleRuntime runtime) {
-        return runtime.spawn(MOD, TEX, 4.0, 64.0, 4.0, 0.2f, 16.0f, 20.0f, 0.0, HALF_FOV);
+        return runtime.spawn(MOD, TEX, 0.2f, 16.0f, 20.0f, 0.0, HALF_FOV,
+                900, 500, 940, 540, 0.5f);
     }
 
     @Test
@@ -36,8 +42,8 @@ class ParticleRuntimeTest {
     void aParticleBehindTheCameraIsNotDrawn() {
         ParticleRuntime runtime = new ParticleRuntime();
 
-        Spawn spawn = runtime.spawn(MOD, TEX, 4.0, 64.0, 4.0, 0.2f, 16.0f, 20.0f,
-                180.0, HALF_FOV);
+        Spawn spawn = runtime.spawn(MOD, TEX, 0.2f, 16.0f, 20.0f, 180.0, HALF_FOV,
+                900, 500, 940, 540, 0.5f);
 
         assertEquals(Verdict.OFF_SCREEN, spawn.verdict());
         assertEquals(1L, runtime.offScreen());
@@ -50,8 +56,8 @@ class ParticleRuntimeTest {
         // A comparison rather than a test, so it comes before both culling stages.
         ParticleRuntime runtime = new ParticleRuntime();
 
-        Spawn spawn = runtime.spawn(MOD, TEX, 4.0, 64.0, 4.0, 0.001f, 100_000.0f, 0.001f,
-                0.0, HALF_FOV);
+        Spawn spawn = runtime.spawn(MOD, TEX, 0.001f, 100_000.0f, 0.001f, 0.0, HALF_FOV,
+                900, 500, 940, 540, 0.5f);
 
         assertEquals(Verdict.TOO_SMALL, spawn.verdict());
         assertEquals(1L, runtime.tooSmall());
@@ -80,7 +86,8 @@ class ParticleRuntimeTest {
 
         for (int i = 0; i < 3; i++) {
             assertEquals(Verdict.DRAWN, runtime.spawn("mod" + i, TEX,
-                    4.0 + i * 16, 64.0, 4.0, 0.2f, 16.0f, 20.0f, 0.0, HALF_FOV).verdict());
+                    0.2f, 16.0f, 20.0f, 0.0, HALF_FOV,
+                    900 + i * 40, 500, 940 + i * 40, 540, 0.5f).verdict());
         }
 
         assertEquals(3, runtime.budget().sources());
@@ -123,7 +130,8 @@ class ParticleRuntimeTest {
         for (int i = 0; i < 10; i++) {
             spawnNear(runtime);
         }
-        runtime.spawn(MOD, "particle/smoke", 4.0, 64.0, 4.0, 0.2f, 16.0f, 20.0f, 0.0, HALF_FOV);
+        runtime.spawn(MOD, "particle/smoke", 0.2f, 16.0f, 20.0f, 0.0, HALF_FOV,
+                900, 500, 940, 540, 0.5f);
         runtime.endFrame();
 
         assertEquals(2L, runtime.batcher().calls());
@@ -135,8 +143,9 @@ class ParticleRuntimeTest {
         ParticleRuntime runtime = new ParticleRuntime();
 
         for (int i = 0; i < 100; i++) {
-            runtime.spawn(MOD, TEX, 4.0 + i * 16, 64.0, 4.0, 0.2f, 16.0f, 20.0f,
-                    i % 2 == 0 ? 0.0 : 180.0, HALF_FOV);
+            runtime.spawn(MOD, TEX, 0.2f, 16.0f, 20.0f,
+                    i % 2 == 0 ? 0.0 : 180.0, HALF_FOV,
+                    900, 500, 940, 540, 0.5f);
         }
 
         assertEquals(100L, runtime.spawned());
@@ -151,9 +160,9 @@ class ParticleRuntimeTest {
         ParticleRuntime runtime = new ParticleRuntime();
 
         assertThrows(IllegalArgumentException.class,
-                () -> runtime.spawn(null, TEX, 0, 0, 0, 0.2f, 16.0f, 20.0f, 0, HALF_FOV));
+                () -> runtime.spawn(null, TEX, 0.2f, 16.0f, 20.0f, 0, HALF_FOV, 0, 0, 4, 4, 0.5f));
         assertThrows(IllegalArgumentException.class,
-                () -> runtime.spawn(MOD, null, 0, 0, 0, 0.2f, 16.0f, 20.0f, 0, HALF_FOV));
+                () -> runtime.spawn(MOD, null, 0.2f, 16.0f, 20.0f, 0, HALF_FOV, 0, 0, 4, 4, 0.5f));
         assertThrows(IllegalArgumentException.class, () -> new ParticleRuntime(0));
     }
 

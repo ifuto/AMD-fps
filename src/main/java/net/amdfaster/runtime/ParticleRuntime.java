@@ -71,7 +71,7 @@ public final class ParticleRuntime {
     private final ParticlePool pool;
     private final ParticleLod lod = new ParticleLod();
     private final OffscreenParticleCuller offscreen = new OffscreenParticleCuller();
-    private final ParticleCuller occlusion = new ParticleCuller();
+    private final ParticleCuller occlusion;
     private final ParticleDrawBatcher batcher = new ParticleDrawBatcher();
 
     private long spawned;
@@ -86,12 +86,26 @@ public final class ParticleRuntime {
     /** How many particles the pool holds by default. */
     public static final int DEFAULT_POOL_CAPACITY = 4096;
 
+    /** Screen size the occlusion test tiles, used when the caller does not supply one. */
+    public static final int DEFAULT_SCREEN_WIDTH = 1920;
+    public static final int DEFAULT_SCREEN_HEIGHT = 1080;
+
     public ParticleRuntime() {
-        this(DEFAULT_POOL_CAPACITY);
+        this(DEFAULT_POOL_CAPACITY, DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT);
     }
 
     public ParticleRuntime(int poolCapacity) {
+        this(poolCapacity, DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT);
+    }
+
+    /**
+     * @param poolCapacity how many particles may be alive at once
+     * @param screenWidth the screen width in pixels, which the occlusion test tiles
+     * @param screenHeight the screen height in pixels
+     */
+    public ParticleRuntime(int poolCapacity, int screenWidth, int screenHeight) {
         this.pool = new ParticlePool(poolCapacity);
+        this.occlusion = new ParticleCuller(screenWidth, screenHeight);
     }
 
     /**
@@ -99,19 +113,21 @@ public final class ParticleRuntime {
      *
      * @param source what is spawning it, such as a mod's namespace
      * @param texture the texture it draws with
-     * @param x the centre x
-     * @param y the centre y
-     * @param z the centre z
      * @param size the particle's radius in blocks
      * @param distanceSquared how far it is, squared
      * @param pixelsPerBlock how many screen pixels one block covers at that distance
      * @param angleFromCentre how far it is from the centre of the view, in degrees
      * @param halfFieldOfView half the field of view, in degrees
+     * @param screenX0 the billboard's left edge in pixels
+     * @param screenY0 its top edge in pixels
+     * @param screenX1 its right edge in pixels, exclusive
+     * @param screenY1 its bottom edge in pixels, exclusive
+     * @param depth its depth, reversed Z
      * @return the verdict, and the slot if it was drawn
      */
-    public Spawn spawn(String source, String texture, double x, double y, double z, float size,
-            float distanceSquared, float pixelsPerBlock, double angleFromCentre,
-            double halfFieldOfView) {
+    public Spawn spawn(String source, String texture, float size, float distanceSquared,
+            float pixelsPerBlock, double angleFromCentre, double halfFieldOfView,
+            int screenX0, int screenY0, int screenX1, int screenY1, float depth) {
         if (source == null || source.isEmpty()) {
             throw new IllegalArgumentException("a source is required");
         }
@@ -151,12 +167,9 @@ public final class ParticleRuntime {
             return new Spawn(Verdict.OFF_SCREEN, -1);
         }
 
-        // 5. Occlusion, the most expensive test, so it comes last.
-        int bx = (int) Math.floor(x);
-        int by = (int) Math.floor(y);
-        int bz = (int) Math.floor(z);
-        float depth = (float) Math.sqrt(distanceSquared);
-        if (!this.occlusion.keep(bx, by, bz, bx, by, bz, depth, 1.0f)) {
+        // 5. Occlusion, the most expensive test, so it comes last. It works in screen space, because that is
+        // what the tile depth buffer holds -- the caller projects, and this does not guess at a projection.
+        if (!this.occlusion.keep(screenX0, screenY0, screenX1, screenY1, depth, 1.0f)) {
             this.pool.release(slot);
             this.budget.release(source);
             this.occluded++;
