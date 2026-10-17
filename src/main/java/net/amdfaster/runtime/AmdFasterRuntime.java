@@ -146,6 +146,15 @@ public final class AmdFasterRuntime {
      */
     private final PlatformRuntime platform = new PlatformRuntime();
 
+    /**
+     * The culling decisions.
+     *
+     * <p>Owned here because the reuse tracker has to be told when the cull runs, and a tracker that is never
+     * told can never reuse anything -- which would make the walk run every frame and the saving silently
+     * absent.
+     */
+    private final CullRuntime cull = new CullRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -325,6 +334,17 @@ public final class AmdFasterRuntime {
         return this.platform;
     }
 
+    /**
+     * The culling decisions, for the render path to drive once per frame.
+     *
+     * <p>Driven from the render path rather than the tick, because culling depends on the camera and the depth
+     * pyramid, both of which are per frame -- and the reuse tracker has to be told the cull ran, which is what
+     * makes the reuse path do anything rather than be dead code.
+     */
+    public CullRuntime cull() {
+        return this.cull;
+    }
+
     private void register() {
         ClientTickEvents.START_CLIENT_TICK.register(this::onStartTick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onEndTick);
@@ -495,6 +515,7 @@ public final class AmdFasterRuntime {
         // across worlds, so a cache keyed on position would otherwise answer for a world that no longer exists.
         this.minecraft.onWorldChange();
         this.light.onWorldChange();
+        this.cull.onWorldChange();
         this.lastFrameAtMs = -1L;
         restoreFramerateLimit();
     }
