@@ -512,6 +512,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/runtime/EntityRuntime.class",
                         "net/amdfaster/runtime/AssetRuntime.class",
                         "net/amdfaster/runtime/BlockEntityRuntime.class",
+                        "net/amdfaster/runtime/RenderRuntime.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
