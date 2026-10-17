@@ -106,7 +106,10 @@ class EntityWorldRuntimeTest {
                 new double[] {1.1}, () -> 22.0);
 
         assertEquals(first, second, 1e-9, "the same inputs give the same value");
-        assertEquals((20.0 + 2.0) * 1.1, first, 1e-9, "base plus additions, then multiplications");
+        // The order is the value: base plus additions, times the multiplications, times one plus the sum of
+        // the multiplicative totals. Dropping the last factor is the mistake this asserts against.
+        assertEquals((20.0 + 2.0) * 1.1 * (1.0 + 1.1), first, 1e-9,
+                "base plus additions, times multiplications, times one plus the totals");
 
         runtime.invalidateAttribute(1, 0);
         double third = runtime.attribute(1, 0, 20.0, new double[] {2.0}, new double[] {1.1},
