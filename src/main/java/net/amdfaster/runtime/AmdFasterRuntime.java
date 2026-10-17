@@ -80,6 +80,15 @@ public final class AmdFasterRuntime {
      */
     private final ParticleRuntime particles = new ParticleRuntime();
 
+    /**
+     * The entity decisions.
+     *
+     * <p>Owned here because it holds one worker per entity and one shared exclusion list. Two instances would
+     * each keep their own list, so a player adding a beacon to one would not have added it to the other, and
+     * the entity path would silently disagree with the block entity path.
+     */
+    private final EntityRuntime entities = new EntityRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -174,6 +183,17 @@ public final class AmdFasterRuntime {
         return this.particles;
     }
 
+    /**
+     * The entity decisions, for the entity tick and the entity render path to use.
+     *
+     * <p>The exclusion list inside it is the one the block entity culling should also consult, so that a
+     * player adding a type to it has added it everywhere rather than to one of two lists that silently
+     * disagree.
+     */
+    public EntityRuntime entities() {
+        return this.entities;
+    }
+
     private void register() {
         ClientTickEvents.START_CLIENT_TICK.register(this::onStartTick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onEndTick);
@@ -208,6 +228,11 @@ public final class AmdFasterRuntime {
         // Clears the occlusion counters. Missing this would let last tick's terrain decide this tick's
         // particles, which is a culler that is wrong in a way that looks like particles disappearing.
         this.particles.endTick();
+        // Refills the activation scheduler's wake-up budget and advances the visibility schedule's phase.
+        // Missing the first would let every distant entity wake on the same tick, which is the spike the
+        // tiers exist to avoid; missing the second would test the same entities every tick and none of the
+        // others, which is a staggered schedule that does not stagger.
+        this.entities.endTick();
     }
 
     /**
@@ -323,6 +348,7 @@ public final class AmdFasterRuntime {
         this.governor.clear();
         this.sound.reset();
         this.network.disconnect();
+        this.entities.reset();
         this.lastFrameAtMs = -1L;
         restoreFramerateLimit();
     }
