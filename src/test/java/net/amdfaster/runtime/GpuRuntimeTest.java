@@ -82,8 +82,10 @@ class GpuRuntimeTest {
         GpuRuntime runtime = new GpuRuntime();
         long key = InstanceDeduplicator.groupKey(1, 2, 3, 0);
 
-        int first = runtime.instances().add(key, new float[] {0, 0, 0});
-        int second = runtime.instances().add(key, new float[] {0, 0, 0});
+        // A transform is a 3 by 4 matrix, so twelve floats.
+        float[] transform = new float[12];
+        int first = runtime.instances().add(key, transform);
+        int second = runtime.instances().add(key, transform);
 
         assertEquals(first, second, "the same group");
         assertEquals(1, runtime.instances().instanceCount(
@@ -127,7 +129,7 @@ class GpuRuntimeTest {
     void aWorldChangeClearsTheInstances() {
         GpuRuntime runtime = new GpuRuntime();
 
-        runtime.instances().add(InstanceDeduplicator.groupKey(1, 1, 1, 0), new float[] {0, 0, 0});
+        runtime.instances().add(InstanceDeduplicator.groupKey(1, 1, 1, 0), new float[12]);
         runtime.endFrame();
 
         runtime.onWorldChange();
@@ -140,7 +142,8 @@ class GpuRuntimeTest {
         GpuRuntime runtime = new GpuRuntime();
 
         assertThrows(IllegalArgumentException.class,
-                () -> runtime.setUniform(1, 0, new float[] {1.0f}, null));
+                () -> runtime.instances().add(InstanceDeduplicator.groupKey(1, 1, 1, 0), new float[3]),
+                "a 3 by 4 transform is twelve floats");
     }
 
     @Test
