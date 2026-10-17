@@ -65,7 +65,32 @@ public final class RenderRuntime {
     private final InventoryIconCache icons = new InventoryIconCache();
     private final Map<String, TextVertexBuffer> textBuffers = new HashMap<>();
 
+    /**
+     * The HUD's bounds in pixels, which the texture is sized to.
+     *
+     * <p>The texture is the size of the HUD rather than of the screen, because a texture covering the whole
+     * window would waste most of its pixels on empty space. It cannot be zero, so it has a default and the
+     * render path should set the real value.
+     */
+    private int hudWidth = DEFAULT_HUD_WIDTH;
+    private int hudHeight = DEFAULT_HUD_HEIGHT;
+
+    /** The HUD bounds used when the render path has not set them. */
+    public static final int DEFAULT_HUD_WIDTH = 400;
+    public static final int DEFAULT_HUD_HEIGHT = 120;
+
     private long frames;
+
+    /** Sets the HUD's bounds, so the texture is the right size. */
+    public void setHudBounds(int width, int height) {
+        if (width < 1 || height < 1) {
+            throw new IllegalArgumentException(
+                    "the HUD has a size: " + width + "x" + height);
+        }
+        this.hudWidth = width;
+        this.hudHeight = height;
+        this.hudTexture.invalidate();
+    }
 
     /** The element toggles, so a player can turn clouds or weather off. */
     public RenderElementToggle toggles() {
@@ -140,7 +165,8 @@ public final class RenderRuntime {
 
         // 2. Update schedule, then the cache.
         boolean hudUpdated = this.hudSchedule.shouldUpdate(playerActed, debugOpen);
-        boolean blit = this.hudTexture.canBlit(screenWidth, screenHeight, hudUpdated, 0, 0);
+        boolean blit = this.hudTexture.canBlit(screenWidth, screenHeight, hudUpdated,
+                this.hudWidth, this.hudHeight);
 
         // 3. Meshes that change slowly.
         boolean rebuildClouds = cloudsOn && this.clouds.needsRebuild(CloudMeshCache.shapeAt(worldTime));
