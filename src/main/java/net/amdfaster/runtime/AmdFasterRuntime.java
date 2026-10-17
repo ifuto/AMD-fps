@@ -697,7 +697,7 @@ public final class AmdFasterRuntime {
         Runtime runtime = Runtime.getRuntime();
         var lines = AmdFasterHud.build(this.recorder, this.stages, this.blockCache, this.governor,
                 runtime.totalMemory() - runtime.freeMemory(), runtime.maxMemory(),
-                this.mesh.buildTimes());
+                this.mesh.buildTimes(), this.gpu.gpuTime());
         int y = AmdFasterHud.marginY();
         for (var line : lines) {
             graphics.drawString(client.font, line.text(), AmdFasterHud.marginX(), y, line.colour());

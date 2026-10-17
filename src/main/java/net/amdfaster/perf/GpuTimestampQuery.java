@@ -196,6 +196,22 @@ public final class GpuTimestampQuery {
     }
 
     /**
+     * Whether any slot has produced a reading yet.
+     *
+     * <p>Needed because {@link #meanNanos()} returns zero when nothing has been measured, and "the GPU took
+     * no time" and "the GPU has not been measured" are different claims. Showing 0.00 ms for the second one
+     * would report the GPU as free on a machine where the query has simply not completed a frame yet.
+     */
+    public boolean hasReading() {
+        for (long value : this.lastNanos) {
+            if (value >= 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * The mean GPU time across slots that have produced a reading.
      *
      * <p>Zero when no slot has, rather than a mean of the -1 sentinels, which would report a negative

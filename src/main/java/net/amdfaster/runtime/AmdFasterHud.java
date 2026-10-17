@@ -6,6 +6,7 @@ import java.util.List;
 import net.amdfaster.mc.BlockStateCache;
 import net.amdfaster.mem.MemoryPressureMonitor;
 import net.amdfaster.perf.FrameTimeRecorder;
+import net.amdfaster.perf.GpuTimestampQuery;
 import net.amdfaster.perf.MeshBuildTimer;
 import net.amdfaster.perf.StageTimer;
 
@@ -86,6 +87,28 @@ public final class AmdFasterHud {
      */
     public static List<Line> build(FrameTimeRecorder recorder, StageTimer stages, BlockStateCache cache,
             FrameGovernor governor, long heapUsed, long heapMax, MeshBuildTimer buildTimes) {
+        return build(recorder, stages, cache, governor, heapUsed, heapMax, buildTimes, null);
+    }
+
+    /**
+     * Builds the overlay.
+     *
+     * <p>GPU time is the last of the five benchmark figures, and it is the only one that can say whether a
+     * slow frame was the CPU's fault or the GPU's. Frame time alone cannot: a 30 ms frame is the same number
+     * either way, and the fix for one is the opposite of the fix for the other.
+     *
+     * @param recorder   frame timings, or null if none have been collected yet
+     * @param stages     per-stage timings, or null
+     * @param cache      the block state cache, or null if it is disabled
+     * @param governor   the frame governor, or null if it is disabled
+     * @param heapUsed   bytes of heap in use, or 0 when not yet sampled
+     * @param heapMax    bytes the heap can grow to, or 0 when not yet sampled
+     * @param buildTimes section mesh build timings, or null when meshing is not running
+     * @param gpuTime    the GPU timestamp query, or null before a device supplies one
+     */
+    public static List<Line> build(FrameTimeRecorder recorder, StageTimer stages, BlockStateCache cache,
+            FrameGovernor governor, long heapUsed, long heapMax, MeshBuildTimer buildTimes,
+            GpuTimestampQuery gpuTime) {
         List<Line> lines = new ArrayList<>(12);
         lines.add(new Line("AMD-Faster", HEADER_COLOUR));
 
@@ -111,6 +134,14 @@ public final class AmdFasterHud {
             long total = (long) hits + misses;
             lines.add(new Line(String.format("block cache  %d / %d  (%.0f%% hit)", hits, total,
                     total == 0 ? 0.0 : 100.0 * hits / total), DEFAULT_COLOUR));
+        }
+
+        // Guarded on hasReading rather than on the mean being non-zero, because a mean of zero also means
+        // "nothing measured yet" and reporting that as 0.00 ms would say the GPU is free when it has simply
+        // not completed a frame under the query.
+        if (gpuTime != null && gpuTime.hasReading()) {
+            lines.add(new Line(String.format("gpu  %.2f ms", gpuTime.meanNanos() / 1_000_000.0),
+                    DEFAULT_COLOUR));
         }
 
         if (buildTimes != null && buildTimes.builds() > 0) {

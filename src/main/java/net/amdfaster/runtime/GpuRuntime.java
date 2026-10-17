@@ -9,6 +9,7 @@ import net.amdfaster.gpu.MeshUploadLayout;
 import net.amdfaster.gpu.MeshletGpuLayout;
 import net.amdfaster.gpu.SectionUpload;
 import net.amdfaster.mesh.SectionMesh;
+import net.amdfaster.perf.GpuTimestampQuery;
 import net.amdfaster.gpu.BindlessTextureTable;
 import net.amdfaster.gpu.BufferArena;
 import net.amdfaster.gpu.FrameSlotScheduler;
@@ -78,6 +79,16 @@ public final class GpuRuntime {
      * being drawn to, which is a texture that never arrives.
      */
     private TextureUploadBatcher textures;
+
+    /**
+     * The GPU timestamp query, or {@code null} until a device supplies one.
+     *
+     * <p>It needs a {@code VkDevice} and the device's own {@code timestampPeriod} and
+     * {@code timestampValidBits}, none of which exist before the adapter is chosen. Building it early would
+     * mean inventing a tick resolution, and a wrong one does not round off -- it scales every GPU figure by
+     * a factor.
+     */
+    private GpuTimestampQuery gpuTime;
     private final TileBinner binner = new TileBinner();
     private final UberShaderSelector shaders = new UberShaderSelector();
     private final BindlessTextureTable bindless = new BindlessTextureTable();
@@ -127,6 +138,27 @@ public final class GpuRuntime {
     public GpuRuntime withUploader(TextureUploadBatcher.Uploader uploader) {
         this.textures = new TextureUploadBatcher(uploader);
         return this;
+    }
+
+    /**
+     * Supplies the timestamp query once a device exists.
+     *
+     * @param query the query pool, built against the chosen device and its reported limits
+     * @return this runtime
+     */
+    public GpuRuntime withGpuTime(GpuTimestampQuery query) {
+        this.gpuTime = query;
+        return this;
+    }
+
+    /**
+     * The GPU time query, or {@code null} before a device supplied one.
+     *
+     * <p>Null is a real state here and not a gap: there is no GPU figure to report until a device exists,
+     * and reporting zero would say the GPU is idle rather than unmeasured.
+     */
+    public GpuTimestampQuery gpuTime() {
+        return this.gpuTime;
     }
 
     /**
