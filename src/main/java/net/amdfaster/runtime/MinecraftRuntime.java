@@ -1,5 +1,11 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.mem.BlockStatePacker;
+import net.amdfaster.mem.Canonicalizer;
+import net.amdfaster.mem.DerivedStateCache;
+import net.amdfaster.mem.EnumValuesCache;
+import net.amdfaster.mem.ModelDeduplicator;
+import net.amdfaster.mem.ScratchObjectPool;
 import net.amdfaster.mc.BlockStateCache;
 import net.amdfaster.mc.HeightmapIndex;
 import net.amdfaster.mc.LevelBlockSampler;
@@ -58,6 +64,50 @@ public final class MinecraftRuntime {
     private final ModelCache<Object> models = new ModelCache<>(DEFAULT_MODEL_CAPACITY);
     private final Map<Long, SectionSnapshot> sections = new HashMap<>();
     private final Map<Long, HeightmapIndex> heightmaps = new HashMap<>();
+
+    /** Packs block-state properties into one int instead of an object per state. */
+    private final BlockStatePacker statePacker = new BlockStatePacker();
+
+    /** Interns derived state arrays so identical ones share storage. */
+    private final DerivedStateCache derivedStates = new DerivedStateCache();
+
+    /** Returns the shared enum-values array instead of cloning one per call. */
+    private final EnumValuesCache enumValues = new EnumValuesCache();
+
+    /** Interns model quads, which is where most of the model heap goes. */
+    private final ModelDeduplicator modelQuads = new ModelDeduplicator();
+
+    /**
+     * Canonicalises model geometry.
+     *
+     * <p>Content is supplied here rather than built inside the canonicalizer, because only the caller knows
+     * what makes two pieces of geometry interchangeable and what one is worth in bytes.
+     */
+    private final Canonicalizer<long[]> geometry = new Canonicalizer<>(new Canonicalizer.Content<>() {
+        @Override
+        public int hash(long[] value) {
+            return java.util.Arrays.hashCode(value);
+        }
+
+        @Override
+        public boolean equal(long[] a, long[] b) {
+            return java.util.Arrays.equals(a, b);
+        }
+
+        @Override
+        public int bytes(long[] value) {
+            return value.length * Long.BYTES;
+        }
+    });
+
+    /**
+     * Pools scratch arrays used while baking.
+     *
+     * <p>The reset empties the array rather than dropping it, so a caller that reuses one cannot read the
+     * previous bake out of it.
+     */
+    private final ScratchObjectPool<long[]> scratch =
+            new ScratchObjectPool<>(() -> new long[64], array -> java.util.Arrays.fill(array, 0L));
 
     /**
      * The level block sampler, or {@code null} when the game has not supplied one.
@@ -232,5 +282,40 @@ public final class MinecraftRuntime {
     public double modelReusePercent() {
         long total = this.models.loads() + this.models.reused();
         return total == 0 ? 0.0 : 100.0 * this.models.reused() / total;
+    }
+
+    /** The block-state packer. */
+    public BlockStatePacker statePacker() {
+        return this.statePacker;
+    }
+
+    /** The derived-state cache. */
+    public DerivedStateCache derivedStates() {
+        return this.derivedStates;
+    }
+
+    /** The shared enum-values cache. */
+    public EnumValuesCache enumValues() {
+        return this.enumValues;
+    }
+
+    /** The model quad deduplicator. */
+    public ModelDeduplicator modelQuads() {
+        return this.modelQuads;
+    }
+
+    /** The geometry canonicalizer. */
+    public Canonicalizer<long[]> geometry() {
+        return this.geometry;
+    }
+
+    /** Takes a scratch array, to be given back when the bake is done. */
+    public long[] takeScratch() {
+        return this.scratch.take();
+    }
+
+    /** Returns a scratch array to the pool. */
+    public void giveScratch(long[] array) {
+        this.scratch.give(array);
     }
 }
