@@ -72,6 +72,14 @@ public final class AmdFasterRuntime {
      */
     private final NetworkRuntime network = new NetworkRuntime();
 
+    /**
+     * The particle decisions.
+     *
+     * <p>Owned here because it holds a pool that has to be the same one for the whole session -- two
+     * instances would each hand out the same slot numbers and two particles would share a position.
+     */
+    private final ParticleRuntime particles = new ParticleRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -155,6 +163,17 @@ public final class AmdFasterRuntime {
         return this.network;
     }
 
+    /**
+     * The particle decisions, for the particle spawner and the renderer to use.
+     *
+     * <p>The frame end has to be driven from the render path rather than from the tick, because particles are
+     * drawn every frame even when they do not move, and flushing the draw batch on the tick would draw the
+     * last particles of a frame with the first particles of the next.
+     */
+    public ParticleRuntime particles() {
+        return this.particles;
+    }
+
     private void register() {
         ClientTickEvents.START_CLIENT_TICK.register(this::onStartTick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onEndTick);
@@ -186,6 +205,9 @@ public final class AmdFasterRuntime {
         // Applies the entity updates the coalescer held. Missing this would leave every entity a tick behind
         // where the server says it is, forever, because nothing would ever apply the held updates.
         this.network.endTick();
+        // Clears the occlusion counters. Missing this would let last tick's terrain decide this tick's
+        // particles, which is a culler that is wrong in a way that looks like particles disappearing.
+        this.particles.endTick();
     }
 
     /**
