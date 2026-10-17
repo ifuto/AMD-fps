@@ -51,7 +51,19 @@ public final class CullRuntime {
     private final BehindCameraCuller behindCamera = new BehindCameraCuller();
     private final CameraCutDetector cuts = new CameraCutDetector();
     private final CullReuse reuse = new CullReuse();
-    private final SoftwareRasterizer rasterizer = new SoftwareRasterizer();
+    /**
+     * The software rasterizer, and the depth buffer it rasterizes into.
+     *
+     * <p>Sized to the default screen dimensions, rounded up to whole tiles. A partial tile would need bounds
+     * checks on every sub-tile access and the inner loop is exactly where those checks cannot be afforded.
+     */
+    private final SoftwareRasterizer rasterizer =
+            new SoftwareRasterizer(new net.amdfaster.cull.TileDepthBuffer(DEFAULT_SCREEN_WIDTH,
+                    DEFAULT_SCREEN_HEIGHT));
+
+    /** The screen size the depth buffer covers when the caller does not say. */
+    public static final int DEFAULT_SCREEN_WIDTH = 1920;
+    public static final int DEFAULT_SCREEN_HEIGHT = 1080;
 
     private long frames;
     private long reuses;
