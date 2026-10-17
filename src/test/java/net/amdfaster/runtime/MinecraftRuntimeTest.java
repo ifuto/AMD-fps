@@ -88,21 +88,36 @@ class MinecraftRuntimeTest {
     }
 
     @Test
-    void aWorldChangeClearsEverything() {
+    void aWorldChangeClearsThePositionCaches() {
         // The positions are meaningless across worlds, so a cache keyed on position would otherwise answer for
         // a world that no longer exists.
         MinecraftRuntime runtime = new MinecraftRuntime();
 
         runtime.section(0, 4, 0);
         runtime.heightmap(0, 0);
-        runtime.models().acquire(7, id -> new Object());
 
         runtime.onWorldChange();
 
         assertEquals(0, runtime.sectionsHeld());
         assertEquals(0, runtime.heightmapsHeld());
-        assertEquals(0, runtime.modelsResident());
         assertEquals(0L, runtime.blockChanges());
+    }
+
+    @Test
+    void aWorldChangeDoesNotEvictAModelSomethingStillReferences() {
+        // Evicting a referenced model would leave the block holding it with no geometry, which is worse than
+        // keeping a model from the last world -- the block is going away too, and it releases on the way.
+        MinecraftRuntime runtime = new MinecraftRuntime();
+
+        runtime.models().acquire(7, id -> new Object());
+        runtime.models().acquire(8, id -> new Object());
+        runtime.models().release(8);
+
+        runtime.onWorldChange();
+
+        assertEquals(1, runtime.modelsResident(), "the referenced one survives");
+        assertTrue(runtime.models().isResident(7));
+        assertFalse(runtime.models().isResident(8), "and the unreferenced one goes");
     }
 
     @Test
