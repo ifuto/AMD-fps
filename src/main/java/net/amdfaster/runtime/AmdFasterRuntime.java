@@ -410,8 +410,8 @@ public final class AmdFasterRuntime {
         ClientTickEvents.START_CLIENT_TICK.register(this::onStartTick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onEndTick);
         HudRenderCallback.EVENT.register((graphics, tickCounter) -> onHudRender(Minecraft.getInstance(), graphics));
-        ClientChunkEvents.CHUNK_LOAD.register((world, chunk) -> invalidateAround(chunk.getPos().x, chunk.getPos().z));
-        ClientChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> invalidateAround(chunk.getPos().x, chunk.getPos().z));
+        ClientChunkEvents.CHUNK_LOAD.register((world, chunk) -> onChunkLoaded(chunk.getPos().x, chunk.getPos().z));
+        ClientChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> onChunkUnloaded(chunk.getPos().x, chunk.getPos().z));
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> onDisconnect());
     }
 
@@ -561,6 +561,26 @@ public final class AmdFasterRuntime {
      * a stale entry is not a small error -- it is a block that is no longer there being reported as
      * present, and it stays wrong until something else happens to evict it.
      */
+    /**
+     * A chunk the client now holds.
+     *
+     * <p>Split from unload because the two mean different things to the pipelines that count chunks. A
+     * chunk arriving is one the server sent and the client stored, which is what the network pacer and the
+     * worldgen counters measure; counting an unload as an arrival would inflate both, and the pacer would
+     * then ask the server for a faster rate than the connection is actually delivering.
+     */
+    private void onChunkLoaded(int chunkX, int chunkZ) {
+        invalidateAround(chunkX, chunkZ);
+        this.network.chunkReceived();
+        this.network.chunkStored();
+        this.worldGen.chunkArrived();
+    }
+
+    /** A chunk the client no longer holds. */
+    private void onChunkUnloaded(int chunkX, int chunkZ) {
+        invalidateAround(chunkX, chunkZ);
+    }
+
     private void invalidateAround(int chunkX, int chunkZ) {
         if (this.blockCache != null) {
             this.blockCache.clear();
