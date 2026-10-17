@@ -122,6 +122,14 @@ public final class AmdFasterRuntime {
      */
     private final WorldGenRuntime worldGen = new WorldGenRuntime();
 
+    /**
+     * The Minecraft-facing caches.
+     *
+     * <p>Owned here because a block that changes has to invalidate every one of them that cached that position,
+     * and missing one means the player sees a block that is not there or a hole where a block is.
+     */
+    private final MinecraftRuntime minecraft = new MinecraftRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -266,6 +274,17 @@ public final class AmdFasterRuntime {
      */
     public WorldGenRuntime worldGen() {
         return this.worldGen;
+    }
+
+    /**
+     * The Minecraft-facing caches, for the block lookup and chunk load paths to use.
+     *
+     * <p>The level block sampler inside it is absent until the game supplies one, because it needs a level and
+     * a block face source which only the game can provide. Until then it is absent rather than wrong -- a
+     * sampler built against the wrong level would answer for a world that is not loaded.
+     */
+    public MinecraftRuntime minecraft() {
+        return this.minecraft;
     }
 
     private void register() {
@@ -434,6 +453,9 @@ public final class AmdFasterRuntime {
         // known; inventing a seed here would key the noise cache to a world that does not exist, and the first
         // lookup in the real world would then be answered from it.
         this.worldGen.onDisconnect();
+        // Invalidates the block, sampler, model, section and heightmap caches. The positions are meaningless
+        // across worlds, so a cache keyed on position would otherwise answer for a world that no longer exists.
+        this.minecraft.onWorldChange();
         this.lastFrameAtMs = -1L;
         restoreFramerateLimit();
     }
