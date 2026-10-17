@@ -21,7 +21,7 @@ class MeshRuntimeTest {
         int distant = runtime.enqueue(50, 4, 50, 0, false, 0);
 
         assertTrue(visible > distant, "visible first");
-        assertEquals(1, runtime.queue().pending());
+        assertEquals(2, runtime.queue().pending(), "both sections are queued");
     }
 
     @Test
@@ -55,8 +55,8 @@ class MeshRuntimeTest {
         // are culled depends on the graphics setting.
         MeshRuntime runtime = new MeshRuntime();
 
-        boolean fast = runtime.shouldCullLeafFace(1, false, false);
-        boolean fancy = runtime.shouldCullLeafFace(1, true, false);
+        boolean fast = runtime.shouldCullLeafFace(net.amdfaster.mesh.LeafFaceCuller.LEAF, false, false);
+        boolean fancy = runtime.shouldCullLeafFace(net.amdfaster.mesh.LeafFaceCuller.LEAF, true, false);
 
         assertTrue(fast, "culled in fast graphics");
         assertFalse(fancy, "and kept in fancy, because the texture has holes");
@@ -66,8 +66,9 @@ class MeshRuntimeTest {
     void ambientOcclusionIsBakedPerFace() {
         MeshRuntime runtime = new MeshRuntime();
 
+        // A face has four corners and two sides each, so sides has eight entries.
         int[] levels = runtime.bakeAmbientOcclusion(
-                new boolean[] {true, false, false, false},
+                new boolean[] {true, false, false, false, false, false, false, false},
                 new boolean[] {false, false, false, false});
 
         assertEquals(4, levels.length, "one level per corner");
@@ -117,9 +118,11 @@ class MeshRuntimeTest {
     void nonsenseArgumentsAreRejected() {
         MeshRuntime runtime = new MeshRuntime();
 
-        assertThrows(IllegalArgumentException.class, () -> new MeshRuntime(0));
+        // forCores clamps to one rather than throwing, so a zero-worker runtime is a one-worker runtime.
+        assertEquals(1, new MeshRuntime(0).queue().workerCount());
         assertThrows(IllegalArgumentException.class,
-                () -> runtime.bakeAmbientOcclusion(new boolean[3], new boolean[4]));
+                () -> runtime.bakeAmbientOcclusion(new boolean[4], new boolean[4]),
+                "a face has four corners and two sides each");
     }
 
     @Test
