@@ -60,7 +60,15 @@ public final class GpuRuntime {
     private final FrameSlotScheduler slots = new FrameSlotScheduler();
     private final UniformCache uniforms = new UniformCache();
     private final InstanceDeduplicator instances = new InstanceDeduplicator();
-    private final TextureUploadBatcher textures = new TextureUploadBatcher();
+    /**
+     * The texture upload batcher, or {@code null} until the caller supplies an uploader.
+     *
+     * <p>It needs somewhere for textures to go, which only a device can provide, so this class cannot build it
+     * -- it is handed one when the wiring layer has a device, and until then the batcher is absent rather than
+     * sending textures nowhere. A batcher built against the wrong device would upload to a device that is not
+     * being drawn to, which is a texture that never arrives.
+     */
+    private TextureUploadBatcher textures;
     private final TileBinner binner = new TileBinner();
     private final UberShaderSelector shaders = new UberShaderSelector();
     private final BindlessTextureTable bindless = new BindlessTextureTable();
@@ -84,6 +92,19 @@ public final class GpuRuntime {
         return this.instances;
     }
 
+    /**
+     * Supplies the texture uploader, once the wiring layer has a device to upload to.
+     *
+     * @return this, so the caller can chain
+     */
+    public GpuRuntime withUploader(TextureUploadBatcher.Uploader uploader) {
+        this.textures = new TextureUploadBatcher(uploader);
+        return this;
+    }
+
+    /**
+     * The texture upload batcher, or {@code null} if no uploader has been supplied.
+     */
     public TextureUploadBatcher textures() {
         return this.textures;
     }

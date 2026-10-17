@@ -144,6 +144,20 @@ class GpuRuntimeTest {
     }
 
     @Test
+    void theTextureBatcherIsAbsentUntilAnUploaderIsSupplied() {
+        // It needs somewhere for textures to go, which only a device can provide. A batcher built against the
+        // wrong device would upload to a device that is not being drawn to, which is a texture that never
+        // arrives.
+        GpuRuntime runtime = new GpuRuntime();
+
+        assertEquals(null, runtime.textures());
+
+        runtime.withUploader(entry -> true);
+
+        assertTrue(runtime.textures() != null, "and present once supplied");
+    }
+
+    @Test
     void aFreshRuntimeReportsZeroNotNaN() {
         // A runtime that has drawn nothing has technically uploaded everything, and reporting that as a rate
         // would describe an unused one as though it had measured something.
