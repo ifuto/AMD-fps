@@ -54,6 +54,15 @@ public final class AmdFasterRuntime {
     private final FrameGovernor governor;
     private final BlockStateCache blockCache;
 
+    /**
+     * The sound decision pipeline.
+     *
+     * <p>Owned here rather than created per sound because it holds per-tick state that has to be cleared
+     * exactly once per tick, and two instances would each keep their own counts and each refuse things the
+     * other allowed.
+     */
+    private final SoundRuntime sound = new SoundRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -115,6 +124,17 @@ public final class AmdFasterRuntime {
         return this.installed;
     }
 
+    /**
+     * The sound decision pipeline, for the sound engine to consult before starting a sound.
+     *
+     * <p>Exposed rather than called from inside a hook, because deciding whether a sound plays has to happen
+     * where the sound is about to start -- a hook that ran on a tick boundary would decide too late, after
+     * the channel was already allocated.
+     */
+    public SoundRuntime sound() {
+        return this.sound;
+    }
+
     private void register() {
         ClientTickEvents.START_CLIENT_TICK.register(this::onStartTick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onEndTick);
@@ -139,6 +159,10 @@ public final class AmdFasterRuntime {
         if (isPlayerActive(client)) {
             this.governor.noteInput(System.currentTimeMillis());
         }
+        // Clears every per-tick window in the sound pipeline. Missing this would make the sound limiters
+        // accumulate for the whole session and eventually refuse everything, which the player would
+        // experience as the world going quiet for no reason.
+        this.sound.endTick();
     }
 
     /**
@@ -252,6 +276,7 @@ public final class AmdFasterRuntime {
         this.recorder.clear();
         this.stages.clear();
         this.governor.clear();
+        this.sound.reset();
         this.lastFrameAtMs = -1L;
         restoreFramerateLimit();
     }
