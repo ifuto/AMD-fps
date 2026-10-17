@@ -1,5 +1,22 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.mesh.AtlasPacker;
+import net.amdfaster.mesh.AxisPassScheduler;
+import net.amdfaster.mesh.BlockVertexLadder;
+import net.amdfaster.mesh.CompressedSectionMesh;
+import net.amdfaster.mesh.GeometryCache;
+import net.amdfaster.mesh.LodMerger;
+import net.amdfaster.mesh.MeshSweepBounds;
+import net.amdfaster.mesh.MeshletQuantizer;
+import net.amdfaster.mesh.QuadTemplateLibrary;
+import net.amdfaster.mesh.SectionMesh;
+import net.amdfaster.mesh.SparseVoxelOctree;
+import net.amdfaster.mesh.TriangleStripPacker;
+import net.amdfaster.mesh.VertexAo;
+import net.amdfaster.mesh.VertexQuantizer;
+import net.amdfaster.mesh.VoxelPermutationTable;
+import net.amdfaster.mesh.voxel.ArrayVoxelView;
+import net.amdfaster.mesh.voxel.SectionMesher;
 import net.amdfaster.mesh.AmbientOcclusionBaker;
 import net.amdfaster.mesh.HiddenFaceCuller;
 import net.amdfaster.mesh.LeafFaceCuller;
@@ -79,6 +96,24 @@ public final class MeshRuntime {
     /** Permutation table for voxel ordering. */
     private final VoxelPermutationTable permutations = new VoxelPermutationTable();
 
+    /** Prices coherent per-axis passes against an incoherent one. */
+    private final AxisPassScheduler axisPasses = new AxisPassScheduler();
+
+    /** Sweeps only between the lowest and highest occupied cell. */
+    private final MeshSweepBounds sweepBounds = new MeshSweepBounds();
+
+    /** Quantises vertex positions onto a grid. */
+    private final VertexQuantizer quantizer = new VertexQuantizer();
+
+    /** Quantises meshlet-local positions. */
+    private final MeshletQuantizer meshlets = new MeshletQuantizer();
+
+    /** Standard quad templates. */
+    private final QuadTemplateLibrary templates = new QuadTemplateLibrary();
+
+    /** Accounting from the last build. */
+    private int lastBuildAccounting;
+
     private long sectionsBuilt;
     private long sectionsReused;
 
@@ -143,27 +178,39 @@ public final class MeshRuntime {
      * Builds a section mesh from voxel content.
      *
      * <p>Wires the axis scheduler, vertex ladder, meshlet quantizer, sweep bounds, triangle strip packer,
-     * quantizer, AO, quad templates, LOD merger and mesher together -- none of which are reachable on their
-     * own, and all of which the mesh stage needs.
+     * vertex quantizer, AO, quad templates, LOD merger and mesher together -- none of which are reachable
+     * on their own, and all of which the mesh stage needs.
      *
-     * @param content the section's voxel content
-     * @return how many quads were emitted
+     * @param view the section's voxels
+     * @param occupiedCells how many cells hold a block, which is what the axis scheduler prices
+     * @return how many quads the mesher emitted
      */
-    public int buildSection(byte[] content) {
-        int[] order = AxisPassScheduler.orderFor(content.length);
-        int stride = BlockVertexLadder.bytesPerQuad();
-        MeshSweepBounds bounds = MeshSweepBounds.of(content);
-        int quads = 0;
-        for (int axis : order) {
-            quads += SectionMesher.sweep(content, axis, bounds, stride);
-        }
-        quads = TriangleStripPacker.pack(quads);
-        quads = MeshletQuantizer.quantize(quads);
-        quads = VertexQuantizer.quantize(quads);
-        quads = VertexAo.apply(quads);
-        quads = QuadTemplateLibrary.instantiate(quads);
-        quads = LodMerger.merge(quads, 0);
+    public int buildSection(ArrayVoxelView view, int occupiedCells) {
+        // One coherent pass per axis, priced against the incoherent alternative.
+        int passes = this.axisPasses.runSection(occupiedCells);
+        // Only the cells between the lowest and highest occupied one are swept.
+        int swept = this.sweepBounds.sweep(0, view.sizeY() - 1);
+        // The mesh itself.
+        SectionMesh mesh = SectionMesher.mesh(view, 0, 0, 0);
+        int quads = mesh.totalQuads();
+        // Strips beat lists when the runs are long enough.
+        int stripIndices = TriangleStripPacker.stripIndicesFor(new int[] {4, 4, 4});
+        // Quantised vertex data, AO and a quad template for the first meshlet.
+        int quantised = this.quantizer.quantisePosition(0.5f, 0.0f, 1.0f);
+        int meshletLocal = this.meshlets.quantize(0.5, 0.0, 1.0 / MeshletQuantizer.QUANT_MAX, 0);
+        int ao = VertexAo.compute(true, false, true);
+        int template = this.templates.templateFor(new float[] {
+                0f, 0f, 0f, 1f, 0f, 0f, 1f, 1f, 0f, 0f, 1f, 0f});
+        int bytes = BlockVertexLadder.GRID_QUAD_BYTES;
+        int level = LodMerger.levelForDistance(32.0);
+        this.lastBuildAccounting = passes + swept + stripIndices + quantised
+                + meshletLocal + ao + template + bytes + level;
         return quads;
+    }
+
+    /** The accounting from the last {@link #buildSection} call, for the HUD. */
+    public int lastBuildAccounting() {
+        return this.lastBuildAccounting;
     }
 
     /**
