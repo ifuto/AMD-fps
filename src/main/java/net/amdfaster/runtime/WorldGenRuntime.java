@@ -1,5 +1,9 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.worldgen.BiomeLookupCache;
+import net.amdfaster.worldgen.ChunkStageScheduler;
+import net.amdfaster.worldgen.GpuTerrainGenerator;
+import net.amdfaster.worldgen.RandomTickSkipper;
 import net.amdfaster.worldgen.BiomeBlendCache;
 import net.amdfaster.worldgen.ChunkRecycleCache;
 import net.amdfaster.worldgen.DistantTerrainGenerator;
@@ -53,6 +57,18 @@ public final class WorldGenRuntime {
     private final StructureLayoutCache structures = new StructureLayoutCache();
     private final RunLengthCodec codec = new RunLengthCodec();
     private final ChunkRecycleCache recycled = new ChunkRecycleCache();
+
+    /** Caches biome and surface lookups, which are the expensive part of generation. */
+    private final BiomeLookupCache biomes = new BiomeLookupCache();
+
+    /** Decides which generation stage a chunk can advance to next. */
+    private final ChunkStageScheduler stages = new ChunkStageScheduler();
+
+    /** Generates terrain on the GPU when a device is available. */
+    private GpuTerrainGenerator gpuTerrain = new GpuTerrainGenerator(false);
+
+    /** Skips random ticks in chunks with nothing that can grow. */
+    private final RandomTickSkipper randomTicks = new RandomTickSkipper();
     private final DistantTerrainGenerator distant;
 
     /** Workers the distant terrain generator uses when the caller does not say. */
@@ -181,5 +197,35 @@ public final class WorldGenRuntime {
     /** The compression the run-length codec achieved. */
     public double codecCompressionRatio() {
         return this.codec.compressionRatio();
+    }
+
+    /** The biome lookup cache. */
+    public BiomeLookupCache biomes() {
+        return this.biomes;
+    }
+
+    /** The chunk stage scheduler. */
+    public ChunkStageScheduler stages() {
+        return this.stages;
+    }
+
+    /** The GPU terrain generator. */
+    public GpuTerrainGenerator gpuTerrain() {
+        return this.gpuTerrain;
+    }
+
+    /** The random-tick skipper. */
+    public RandomTickSkipper randomTicks() {
+        return this.randomTicks;
+    }
+
+    /**
+     * Reports that a device is available, so terrain generation can move to it.
+     *
+     * <p>The generator is built without a device because whether one exists is not known until the platform
+     * probe runs, and generating on a device that is not there would fall back per chunk rather than once.
+     */
+    public void gpuTerrainAvailable() {
+        this.gpuTerrain = new GpuTerrainGenerator(true);
     }
 }

@@ -1,5 +1,10 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.block.BoxShape;
+import net.amdfaster.block.HardnessCache;
+import net.amdfaster.block.PistonShapes;
+import net.amdfaster.block.ScheduledTickIndex;
+import net.amdfaster.block.ShapeCache;
 import net.amdfaster.mem.BlockStatePacker;
 import net.amdfaster.mem.Canonicalizer;
 import net.amdfaster.mem.DerivedStateCache;
@@ -108,6 +113,15 @@ public final class MinecraftRuntime {
      */
     private final ScratchObjectPool<long[]> scratch =
             new ScratchObjectPool<>(() -> new long[64], array -> java.util.Arrays.fill(array, 0L));
+
+    /** Caches block hardness, keyed on state and tool. */
+    private final HardnessCache hardness = new HardnessCache();
+
+    /** Interns box shapes so identical ones share storage. */
+    private final ShapeCache shapes = new ShapeCache();
+
+    /** Indexes scheduled block ticks by due tick. */
+    private final ScheduledTickIndex scheduledTicks = new ScheduledTickIndex();
 
     /**
      * The level block sampler, or {@code null} when the game has not supplied one.
@@ -317,5 +331,36 @@ public final class MinecraftRuntime {
     /** Returns a scratch array to the pool. */
     public void giveScratch(long[] array) {
         this.scratch.give(array);
+    }
+
+    /** The hardness cache. */
+    public HardnessCache hardness() {
+        return this.hardness;
+    }
+
+    /** The box-shape cache. */
+    public ShapeCache shapes() {
+        return this.shapes;
+    }
+
+    /** The scheduled block-tick index. */
+    public ScheduledTickIndex scheduledTicks() {
+        return this.scheduledTicks;
+    }
+
+    /**
+     * The piston head or base shape for a facing.
+     *
+     * <p>Goes through PistonShapes rather than building a BoxShape here, because the extended and retracted
+     * shapes differ per axis and a shape built by hand would be wrong for the cases that are not the one
+     * being looked at.
+     *
+     * @param axis the axis the piston faces along
+     * @param positive whether it faces towards positive on that axis
+     * @param extended whether the piston is extended
+     * @return the shape
+     */
+    public BoxShape pistonShape(int axis, boolean positive, boolean extended) {
+        return PistonShapes.instance().shape(axis, positive, extended);
     }
 }
