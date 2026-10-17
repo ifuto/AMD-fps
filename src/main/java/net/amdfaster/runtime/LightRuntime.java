@@ -121,11 +121,18 @@ public final class LightRuntime {
     /**
      * Reports a light change at a position, which the batcher will apply within its budget.
      *
+     * <p>The emission has to be given, because a change from a level to the same level is not a change at all
+     * and the batcher coalesces it away -- which is correct, since a piston moving stone around is the common
+     * case and it should cost nothing.
+     *
      * <p>Applying every pending light update on one frame is the hitch this exists to remove, so the batcher
      * holds the change and applies as many as its budget allows when it is processed.
+     *
+     * @param previousEmission the light the block emitted before
+     * @param newEmission what it emits now
      */
-    public void onLightChange(int x, int y, int z) {
-        this.batcher.addChange(x, y, z);
+    public void onLightChange(int x, int y, int z, int previousEmission, int newEmission) {
+        this.batcher.addChange(x, y, z, previousEmission, newEmission);
     }
 
     /** How many light changes are waiting to be applied. */

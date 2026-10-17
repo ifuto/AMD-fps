@@ -48,11 +48,26 @@ class LightRuntimeTest {
         LightRuntime runtime = new LightRuntime();
 
         for (int i = 0; i < 50; i++) {
-            runtime.onLightChange(i, 64, i);
+            runtime.onLightChange(i, 64, i, 0, 15);
         }
 
         assertEquals(50, runtime.pendingLightChanges());
         assertEquals(50L, runtime.batcher().changesReceived());
+    }
+
+    @Test
+    void aChangeToTheSameEmissionCostsNothing() {
+        // A piston moving stone around is the common case and it should cost nothing, because nothing about
+        // the light can change.
+        LightRuntime runtime = new LightRuntime();
+
+        for (int i = 0; i < 50; i++) {
+            runtime.onLightChange(i, 64, i, 7, 7);
+        }
+
+        assertEquals(0, runtime.pendingLightChanges());
+        assertEquals(50L, runtime.batcher().changesReceived(), "but the changes were still counted");
+        assertEquals(50L, runtime.batcher().updatesCoalesced());
     }
 
     @Test
