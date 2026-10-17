@@ -73,11 +73,13 @@ class CullRuntimeTest {
         // arrive somewhere and see nothing.
         CullRuntime runtime = new CullRuntime();
 
-        frame(runtime, 0.0f, 64.0f, 0.0f);
+        Frame first = frame(runtime, 0.0f, 64.0f, 0.0f);
+        assertTrue(first.rebuildDepthPyramid(), "the first frame is a cut: there is no previous position");
+
         Frame cut = frame(runtime, 5000.0f, 64.0f, 5000.0f);
 
         assertTrue(cut.rebuildDepthPyramid());
-        assertEquals(1L, runtime.cutsDetected());
+        assertEquals(2L, runtime.cutsDetected(), "the first frame and the jump");
     }
 
     @Test

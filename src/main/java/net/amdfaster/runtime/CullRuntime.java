@@ -116,17 +116,19 @@ public final class CullRuntime {
             this.rasterizer.buffer().clear();
         }
 
-        boolean cameraMoved = this.reuse.updateCamera(camX, camY, camZ, yaw, pitch,
+        // updateCamera reports whether the camera is UNCHANGED, not whether it moved -- the name reads the
+        // other way, so the condition below is written against what it actually returns.
+        boolean cameraUnchanged = this.reuse.updateCamera(camX, camY, camZ, yaw, pitch,
                 fovDegrees, screenWidth, screenHeight);
 
-        if (!cameraMoved && this.reuse.canReuseTerrainCull()) {
+        if (cameraUnchanged && this.reuse.canReuseTerrainCull()) {
             // Nothing that would change the result has changed, so the whole walk can be skipped.
             this.reuses++;
             return new Frame(true, false, false);
         }
 
         this.walks++;
-        boolean rebuildPyramid = cut || cameraMoved;
+        boolean rebuildPyramid = cut || !cameraUnchanged;
         return new Frame(false, rebuildPyramid, shadowPass);
     }
 
