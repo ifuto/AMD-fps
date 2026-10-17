@@ -163,6 +163,14 @@ public final class AmdFasterRuntime {
      */
     private final MeshRuntime mesh = new MeshRuntime();
 
+    /**
+     * The entity-world decisions.
+     *
+     * <p>Owned here because an entity that despawns has to be removed from every grid that tracks it, and a
+     * ghost entry answers for an entity that is no longer there.
+     */
+    private final EntityWorldRuntime entityWorld = new EntityWorldRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -363,6 +371,17 @@ public final class AmdFasterRuntime {
         return this.mesh;
     }
 
+    /**
+     * The entity-world decisions, for the entity tick and despawn paths to use.
+     *
+     * <p>Cleared on world change because entity identities are meaningless across worlds -- entity 42 in one
+     * world is a different entity from entity 42 in the next, and a grid left uncleared would make mobs in the
+     * new world collide with entities from the last one.
+     */
+    public EntityWorldRuntime entityWorld() {
+        return this.entityWorld;
+    }
+
     private void register() {
         ClientTickEvents.START_CLIENT_TICK.register(this::onStartTick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onEndTick);
@@ -535,6 +554,7 @@ public final class AmdFasterRuntime {
         this.light.onWorldChange();
         this.cull.onWorldChange();
         this.mesh.onWorldChange();
+        this.entityWorld.onWorldChange();
         this.lastFrameAtMs = -1L;
         restoreFramerateLimit();
     }
