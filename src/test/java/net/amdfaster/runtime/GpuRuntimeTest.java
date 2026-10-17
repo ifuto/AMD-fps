@@ -88,8 +88,10 @@ class GpuRuntimeTest {
         int second = runtime.instances().add(key, transform);
 
         assertEquals(first, second, "the same group");
-        assertEquals(1, runtime.instances().instanceCount(
-                (int) (key & 0xFFFFFFFFL)));
+        // add returns the group index; the packed key is not an index and truncating it into one
+        // lands on a slot that is not this group -- 0x10200030000 becomes 196608.
+        assertEquals(2, runtime.instances().instanceCount(first),
+                "both draws landed in the one group");
     }
 
     @Test
