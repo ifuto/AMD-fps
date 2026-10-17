@@ -92,8 +92,9 @@ public final class PlatformRuntime {
     /** Whether device-generated commands are used. */
     private final GeneratedCommandScheduler generatedCommands;
 
-    /** The root signature's dword budget. */
-    private final RootSignatureBudget rootSignature = new RootSignatureBudget();
+    /** The last root-signature budget check, so the HUD can show whether it fits. */
+    private RootSignatureBudget.Verdict rootSignature =
+            RootSignatureBudget.check(0, 0);
 
     /** Paces frames against a target interval. */
     private final FramePacer pacer = FramePacer.lowLatency();
@@ -329,8 +330,23 @@ public final class PlatformRuntime {
         return this.generatedCommands;
     }
 
-    /** The root signature budget. */
-    public RootSignatureBudget rootSignature() {
+    /** The last root-signature budget check. */
+    public RootSignatureBudget.Verdict rootSignature() {
+        return this.rootSignature;
+    }
+
+    /**
+     * Checks a root signature against the budget.
+     *
+     * <p>Exposed because a root signature that does not fit is not a slow path but a device limit, and the
+     * caller has to know before it records commands rather than after the device rejects them.
+     *
+     * @param pushConstantBytes how many push-constant bytes the signature declares
+     * @param descriptorSets how many descriptor sets it declares
+     * @return the verdict, including how far over it is when it does not fit
+     */
+    public RootSignatureBudget.Verdict checkRootSignature(int pushConstantBytes, int descriptorSets) {
+        this.rootSignature = RootSignatureBudget.check(pushConstantBytes, descriptorSets);
         return this.rootSignature;
     }
 
@@ -362,13 +378,12 @@ public final class PlatformRuntime {
      *
      * @param sourceInVideoMemory whether the source is device-local
      * @param destinationInVideoMemory whether the destination is device-local
-     * @param bytes how much is moving
      * @param unifiedMemory whether this is an APU with one pool
      * @return the route to use
      */
     public TransferQueueSelector.Route transferRoute(boolean sourceInVideoMemory,
-            boolean destinationInVideoMemory, long bytes, boolean unifiedMemory) {
+            boolean destinationInVideoMemory, boolean unifiedMemory) {
         return TransferQueueSelector.choose(sourceInVideoMemory, destinationInVideoMemory,
-                bytes, unifiedMemory);
+                unifiedMemory);
     }
 }
