@@ -135,7 +135,8 @@ class ParticleRuntimeTest {
         runtime.endFrame();
 
         assertEquals(2L, runtime.batcher().calls());
-        assertEquals(1L, runtime.batcher().textureSwitches());
+        assertEquals(2L, runtime.batcher().textureSwitches(),
+                "the first texture is a switch from nothing, and the smoke is a switch from the flame");
     }
 
     @Test
