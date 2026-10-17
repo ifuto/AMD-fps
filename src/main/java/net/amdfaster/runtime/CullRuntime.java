@@ -1,5 +1,6 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.cull.Frustum;
 import net.amdfaster.cull.MeshletCuller;
 import net.amdfaster.cull.MeshletFaceMaskCuller;
 import net.amdfaster.cull.NormalConeCuller;
@@ -281,18 +282,15 @@ public final class CullRuntime {
      * @param originX section origin
      * @param originY section origin
      * @param originZ section origin
-     * @param cameraX camera position
-     * @param cameraY camera position
-     * @param cameraZ camera position
+     * @param frustum this frame's frustum
      * @return whether to draw it
      */
     public boolean cullMeshlet(Meshlet meshlet, int originX, int originY, int originZ,
-                               double cameraX, double cameraY, double cameraZ) {
+                               Frustum frustum) {
         if (MeshletCuller.isBackFacing(meshlet, originX, originY, originZ)) {
             return false;
         }
-        return MeshletCuller.isVisible(meshlet, originX, originY, originZ,
-                cameraX, cameraY, cameraZ);
+        return MeshletCuller.isVisible(meshlet, originX, originY, originZ, frustum);
     }
 
     /**
