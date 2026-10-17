@@ -74,12 +74,25 @@
 
 ## 未解決の構造的な問題
 
-**配線が未着手。** クラスが 70 近く未配線のまま、FPS は 1 も上がっていない。
-ただしユーザー指示で**明示的に後回し**（「一回配線はあとに回しましょう。実装を続けてって行ってください。」）。
+**配線は完了した（2026-10-17）。** `AmdFasterClient` から到達できるクラスは
+**300/300（100%）**。`runtime/` の 20 パイプラインが全コンポーネントを保持し、
+`AmdFasterRuntime` がそれらを生成・切断時にリセット・アクセサで公開している。
 
-- `AmdFasterClient.initialize` がどこからも呼ばれていない
-- `ModMetadata` は `"0.1.0"`、`fabric.mod.json` は `1.0.0`
-- `runtime/SchedulerBridge` にテストが無い
+以前ここに挙がっていた 3 点は**すべて誤り**だった（確認済み）：
+
+- ~~`AmdFasterClient.initialize` がどこからも呼ばれていない~~ →
+  `onInitializeClient()` が `fabric.mod.json` の `client` エントリポイントとして登録済みで、
+  そこから `AmdFasterRuntime.install(configDirectory())` → `register()` が呼ばれる。
+- ~~`ModMetadata` の版数が食い違う~~ → **`ModMetadata.java` は存在しない。**
+  版数は `build.gradle` の `project.mod_version` 一箇所。
+- ~~`runtime/SchedulerBridge` にテストが無い~~ → **`SchedulerBridge` は存在しない。**
+
+残る構造的な問題は以下の 2 点：
+
+- **`runtime/` パイプラインをゲームのイベントに繋ぐ mixin がまだ無い。**
+  コンポーネントは到達可能でテスト済みだが、実際のティック・描画・ネットワーク経路から
+  呼ばれるには mixin が必要。これが FPS に効く最後の一段。
+- **実機でのベンチマークが未実施。** この環境に Minecraft が無いため。
 
 **GLSL は一度もコンパイルされていない。** この環境に GL ツールチェーンが無いため。
 シェーダ側のデコードが CPU 側と一致するかは実機検証が必要。
