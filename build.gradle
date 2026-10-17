@@ -502,6 +502,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/platform/CoreAffinityPlanner.class",
                         "net/amdfaster/net/ChunkBatchAckPacer.class",
                         "net/amdfaster/net/EntityUpdateCoalescer.class",
+                        "net/amdfaster/net/ReconnectChunkReuse.class",
                         "net/amdfaster/particle/OffscreenParticleCuller.class",
                         "net/amdfaster/pathfinding/PathCache.class",
                         "net/amdfaster/worldgen/BiomeLookupCache.class",
