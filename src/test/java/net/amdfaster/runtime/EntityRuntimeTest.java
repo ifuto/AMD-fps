@@ -148,16 +148,15 @@ class EntityRuntimeTest {
     }
 
     @Test
-    void aVisibilityAnswerReachesTheRightWorker() {
+    void aVisibilityAnswerForAnUnknownEntityIsIgnored() {
         EntityRuntime runtime = new EntityRuntime();
 
         runtime.workerFor(3);
         runtime.visibilityAnswer(3, 0, true);
         runtime.visibilityAnswer(99, 0, true);
 
+        assertEquals(1, runtime.tracked(), "answering for entity 99 did not create a worker for it");
         assertFalse(runtime.workerFor(3).isVisible());
-        assertTrue(runtime.workerFor(99).isVisible(), "an unknown entity is ignored, not created hidden");
-        assertEquals(1, runtime.tracked());
     }
 
     @Test

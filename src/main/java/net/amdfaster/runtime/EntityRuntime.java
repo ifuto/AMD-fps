@@ -115,8 +115,11 @@ public final class EntityRuntime {
 
         AsyncVisibilityWorker worker = workerFor(entityId);
 
-        // 1. Exclusion, first, so nothing downstream has to know about it.
+        // 1. Exclusion, first. An excluded type is drawn whatever the occlusion test says, and that has to
+        // carry through to the level-of-detail stage below -- otherwise the exclusion would be honoured here
+        // and then undone by the tier, which is the exact failure the ordering was meant to prevent.
         boolean hidden = occlusionKnown && !worker.isVisible();
+        boolean exempt = this.exclusions.isExcluded(type);
         if (!this.exclusions.shouldDraw(type, hidden)) {
             this.culled++;
             return new Plan(false, false, false, false, EntityLodSelector.Tier.CULL);
@@ -136,8 +139,9 @@ public final class EntityRuntime {
         boolean shadow = this.shadows.shouldDraw(heightAboveGround, distance, hidden, occlusionKnown,
                 pitchDegrees, yawDegrees);
 
-        // 5. Level of detail, the most expensive thing left.
-        EntityLodSelector.Tier tier = hidden
+        // 5. Level of detail, the most expensive thing left. An excluded type is never culled here, because
+        // a beacon beam behind terrain is the whole reason it is on the list.
+        EntityLodSelector.Tier tier = hidden && !exempt
                 ? EntityLodSelector.Tier.CULL
                 : this.lod.select(screenPixels, false);
 
