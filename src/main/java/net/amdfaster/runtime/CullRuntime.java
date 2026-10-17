@@ -1,5 +1,12 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.cull.MeshletCuller;
+import net.amdfaster.cull.MeshletFaceMaskCuller;
+import net.amdfaster.cull.NormalConeCuller;
+import net.amdfaster.cull.SectionBoundaryMask;
+import net.amdfaster.cull.SectionGraph;
+import net.amdfaster.cull.SortKey;
+import net.amdfaster.mesh.Meshlet;
 import net.amdfaster.cull.BehindCameraCuller;
 import net.amdfaster.cull.CameraCutDetector;
 import net.amdfaster.cull.CullReuse;
@@ -51,6 +58,18 @@ public final class CullRuntime {
     private final BehindCameraCuller behindCamera = new BehindCameraCuller();
     private final CameraCutDetector cuts = new CameraCutDetector();
     private final CullReuse reuse = new CullReuse();
+
+    /** Meshlet face-mask culling. */
+    private final MeshletFaceMaskCuller faceMask = new MeshletFaceMaskCuller();
+
+    /** Normal-cone culling for meshlets. */
+    private final NormalConeCuller cones = new NormalConeCuller();
+
+    /** Flood fill across section boundaries, depth-limited. */
+    private final SectionGraph graph = new SectionGraph();
+
+    /** Which faces of a section are sealed by opaque neighbours. */
+    private SectionBoundaryMask boundary = new SectionBoundaryMask(SectionBoundaryMask.SEALED);
     /**
      * The software rasterizer, and the depth buffer it rasterizes into.
      *
@@ -224,5 +243,70 @@ public final class CullRuntime {
         this.cutsDetected = 0;
         this.cuts.invalidate();
         this.rasterizer.buffer().clear();
+    }
+
+    /** The meshlet face-mask culler. */
+    public MeshletFaceMaskCuller faceMask() {
+        return this.faceMask;
+    }
+
+    /** The normal-cone culler. */
+    public NormalConeCuller cones() {
+        return this.cones;
+    }
+
+    /** The section graph used for flood-fill visibility. */
+    public SectionGraph graph() {
+        return this.graph;
+    }
+
+    /** The current section boundary mask. */
+    public SectionBoundaryMask boundary() {
+        return this.boundary;
+    }
+
+    /** Replaces the boundary mask when a neighbour becomes opaque or stops being so. */
+    public void setBoundaryMask(int mask) {
+        this.boundary = new SectionBoundaryMask(mask);
+    }
+
+    /**
+     * Culls one meshlet.
+     *
+     * <p>Both tests have to pass: the meshlet has to face the camera at all, and it has to be inside the
+     * frustum. A meshlet that fails either is not drawn, and neither test alone is enough -- a back-facing
+     * meshlet can still be inside the frustum, and a front-facing one can be behind the camera.
+     *
+     * @param meshlet the meshlet under test
+     * @param originX section origin
+     * @param originY section origin
+     * @param originZ section origin
+     * @param cameraX camera position
+     * @param cameraY camera position
+     * @param cameraZ camera position
+     * @return whether to draw it
+     */
+    public boolean cullMeshlet(Meshlet meshlet, int originX, int originY, int originZ,
+                               double cameraX, double cameraY, double cameraZ) {
+        if (MeshletCuller.isBackFacing(meshlet, originX, originY, originZ)) {
+            return false;
+        }
+        return MeshletCuller.isVisible(meshlet, originX, originY, originZ,
+                cameraX, cameraY, cameraZ);
+    }
+
+    /**
+     * Builds a sort key for translucency ordering.
+     *
+     * <p>Exposed because the draw order has to come from the same key the sort uses, and a caller that
+     * rebuilt the key by hand would sort one way and draw another.
+     *
+     * @param bucket the translucency bucket
+     * @param depth distance from the camera
+     * @param id the draw's identity
+     * @return the packed sort key
+     */
+    public long sortKey(int bucket, float depth, int id) {
+        return SortKey.key(bucket, depth, id);
     }
 }
