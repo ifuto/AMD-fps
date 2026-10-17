@@ -143,19 +143,31 @@ public final class PlatformRuntime {
         return this.device != null;
     }
 
+    /**
+     * Whether the architecture was identified.
+     *
+     * <p>{@code GpuIdentity.classify} returns {@code AmdArchitecture.UNKNOWN} rather than null when it cannot
+     * identify the device, and UNKNOWN deliberately reports zero for everything -- AMD-Faster must not invent a
+     * number for hardware it could not identify. So the check has to be for UNKNOWN, not for null.
+     */
+    private boolean architectureKnown() {
+        return this.amdArchitecture != null
+                && this.amdArchitecture != AmdArchitecture.UNKNOWN;
+    }
+
     /** The native wave size, or 32 as the safe default when the hardware is unknown. */
     public int waveSize() {
-        return this.amdArchitecture != null ? this.amdArchitecture.nativeWaveSize() : 32;
+        return architectureKnown() ? this.amdArchitecture.nativeWaveSize() : 32;
     }
 
     /** The recommended workgroup size, or 64 as the safe default. */
     public int workgroupSize() {
-        return this.amdArchitecture != null ? this.amdArchitecture.recommendedWorkgroupSize() : 64;
+        return architectureKnown() ? this.amdArchitecture.recommendedWorkgroupSize() : 64;
     }
 
     /** The local memory per compute unit, or 64 kilobytes as the safe default. */
     public int ldsBytesPerCu() {
-        return this.amdArchitecture != null ? this.amdArchitecture.ldsBytesPerCu() : 64 * 1024;
+        return architectureKnown() ? this.amdArchitecture.ldsBytesPerCu() : 64 * 1024;
     }
 
     /**
@@ -174,7 +186,7 @@ public final class PlatformRuntime {
         if (this.vendor != Vendor.AMD) {
             return false;
         }
-        boolean wave32 = waveSize() == 32;
+        boolean wave32 = architectureKnown() && waveSize() == 32;
         return DynamicVgprPlanner.isWorthIt(wave32, compute, declaredVgprs, maxVgprs, waves);
     }
 

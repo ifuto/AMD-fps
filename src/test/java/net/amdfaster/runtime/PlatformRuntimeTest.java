@@ -127,6 +127,7 @@ class PlatformRuntimeTest {
         assertEquals(0, runtime.performanceCores());
         assertEquals(0, runtime.efficientCores());
         assertEquals(null, runtime.device());
-        assertEquals(null, runtime.amdArchitecture());
+        assertEquals(net.amdfaster.platform.AmdArchitecture.UNKNOWN, runtime.amdArchitecture(),
+                "classify returns UNKNOWN rather than null, and UNKNOWN reports zero for everything");
     }
 }
