@@ -202,7 +202,7 @@ class SoundRuntimeTest {
         // eventually refused.
         SoundRuntime runtime = new SoundRuntime();
         long playedOverSession = 0;
-        long playedInLastTenTicks = 0;
+        long playedInLastWindow = 0;
 
         for (int tick = 0; tick < 200; tick++) {
             for (int i = 0; i < 4; i++) {
@@ -211,20 +211,21 @@ class SoundRuntimeTest {
                         100.0 + i * 16, 64.0, 100.0 + i * 16, 0.0, FOV, false);
                 if (decision.plays()) {
                     playedOverSession++;
-                    if (tick >= 190) {
-                        playedInLastTenTicks++;
+                    if (tick >= 180) {
+                        playedInLastWindow++;
                     }
                 }
             }
             runtime.endTick();
         }
 
-        // The rate limiter allows six per sound per twenty ticks, so four sounds over two hundred ticks is
-        // 240 -- and the point of this test is that the last ticks still produce some, not that most do. A
-        // component whose endTick was missing would produce zero here and a world that went quiet.
+        // The rate limiter is a sliding window of six per twenty ticks, so each sound plays in a six-tick
+        // burst and is quiet for the rest of its window: four sounds over ten windows is 240. The point of
+        // this test is that the last window still produces plays, because a component whose endTick was
+        // missing would produce zero there and a world that went quiet.
         assertEquals(240L, playedOverSession);
-        assertTrue(playedInLastTenTicks > 0,
-                "sounds still play in the last ten ticks, got " + playedInLastTenTicks);
+        assertEquals(24L, playedInLastWindow,
+                "the last window still plays: four sounds times six");
     }
 
     @Test
