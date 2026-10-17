@@ -312,6 +312,11 @@ tasks.register("verifyJar") {
                         // timing class would not break the build -- it would quietly drop the figure from
                         // the overlay and the benchmark would report four numbers instead of five.
                         "net/amdfaster/perf/MeshBuildTimer.class",
+                        // GPU time, the fifth and last benchmark figure. Asserted because a missing query
+                        // pool would not fail the build -- it would drop the only figure that distinguishes
+                        // a CPU-bound frame from a GPU-bound one, and the benchmark would still look
+                        // complete with four numbers on screen.
+                        "net/amdfaster/perf/GpuTimestampQuery.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
