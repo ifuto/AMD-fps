@@ -194,6 +194,9 @@ public final class AmdFasterRuntime {
     /** Chunk columns not queued because the game has not supplied a section builder yet. */
     private long meshingWaitingOnBuilder;
 
+    /** Heap threshold crossings reported. */
+    private long heapWarnings;
+
     /** Where the player was last tick, so a movement packet can be priced against a real delta. */
     private double lastPlayerX;
     private double lastPlayerY;
@@ -445,6 +448,11 @@ public final class AmdFasterRuntime {
         return this.meshingWaitingOnBuilder;
     }
 
+    /** How many times the heap crossed the warning threshold. */
+    public long heapWarnings() {
+        return this.heapWarnings;
+    }
+
     /** How many chunk columns were left to Sodium instead of being meshed here. */
     public long meshingDeferredToSodium() {
         return this.meshingDeferredToSodium;
@@ -490,6 +498,32 @@ public final class AmdFasterRuntime {
         // others, which is a staggered schedule that does not stagger.
         this.entities.endTick();
         onPlayerMoved();
+        sampleHeap();
+    }
+
+    /**
+     * Samples the heap once a tick.
+     *
+     * <p>Once a tick rather than once a frame because the number does not move faster than allocation does,
+     * and the monitor's whole purpose is to warn before the collector starts working hard -- which is a
+     * trend over seconds, not a per-frame jitter.
+     *
+     * <p>{@code totalMemory() - freeMemory()} is the used heap: {@code totalMemory} is what the runtime has
+     * taken from the OS so far and {@code freeMemory} is the part of that not yet handed out, so the
+     * difference is what is actually live. Using {@code totalMemory} alone would report the reservation
+     * rather than the use, and would read as a heap nearly full from the moment the game started.
+     */
+    private void sampleHeap() {
+        Runtime runtime = Runtime.getRuntime();
+        long max = runtime.maxMemory();
+        long used = runtime.totalMemory() - runtime.freeMemory();
+        if (this.assets.sampleHeap(used, max)) {
+            AmdFasterClient.LOGGER.warn("{}: heap at {}% of {} MB -- the collector is about to start "
+                            + "working hard, which shows up as stutter before it shows up as a crash",
+                    AmdFasterClient.MOD_NAME,
+                    Math.round(100.0 * used / max), max >> 20);
+            this.heapWarnings++;
+        }
     }
 
     /**
@@ -660,7 +694,9 @@ public final class AmdFasterRuntime {
     }
 
     private void drawOverlay(Minecraft client, net.minecraft.client.gui.GuiGraphics graphics) {
-        var lines = AmdFasterHud.build(this.recorder, this.stages, this.blockCache, this.governor);
+        Runtime runtime = Runtime.getRuntime();
+        var lines = AmdFasterHud.build(this.recorder, this.stages, this.blockCache, this.governor,
+                runtime.totalMemory() - runtime.freeMemory(), runtime.maxMemory());
         int y = AmdFasterHud.marginY();
         for (var line : lines) {
             graphics.drawString(client.font, line.text(), AmdFasterHud.marginX(), y, line.colour());

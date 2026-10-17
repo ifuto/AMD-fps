@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.amdfaster.mc.BlockStateCache;
+import net.amdfaster.mem.MemoryPressureMonitor;
 import net.amdfaster.perf.FrameTimeRecorder;
 import net.amdfaster.perf.StageTimer;
 
@@ -23,6 +24,7 @@ public final class AmdFasterHud {
 
     private static final int DEFAULT_COLOUR = 0xFFE0E0E0;
     private static final int HEADER_COLOUR = 0xFFFFC040;
+    private static final int WARN_COLOUR = 0xFFFF6040;
 
     /** One positioned, coloured line of overlay text. */
     public record Line(String text, int colour) {
@@ -32,7 +34,7 @@ public final class AmdFasterHud {
     }
 
     /**
-     * Builds the overlay.
+     * Builds the overlay without a heap reading.
      *
      * @param recorder frame timings, or null if none have been collected yet
      * @param stages   per-stage timings, or null
@@ -41,6 +43,26 @@ public final class AmdFasterHud {
      */
     public static List<Line> build(FrameTimeRecorder recorder, StageTimer stages, BlockStateCache cache,
             FrameGovernor governor) {
+        return build(recorder, stages, cache, governor, 0L, 0L);
+    }
+
+    /**
+     * Builds the overlay.
+     *
+     * <p>The heap line is part of the benchmark the project has to report, and it is the one figure that
+     * explains a class of stutter the frame timings cannot: a heap near its ceiling makes the collector
+     * work, and the pauses that causes look identical to a slow frame from the outside. Without the heap
+     * number beside the frame numbers, that cause is invisible.
+     *
+     * @param recorder  frame timings, or null if none have been collected yet
+     * @param stages    per-stage timings, or null
+     * @param cache     the block state cache, or null if it is disabled
+     * @param governor  the frame governor, or null if it is disabled
+     * @param heapUsed  bytes of heap in use, or 0 when not yet sampled
+     * @param heapMax   bytes the heap can grow to, or 0 when not yet sampled
+     */
+    public static List<Line> build(FrameTimeRecorder recorder, StageTimer stages, BlockStateCache cache,
+            FrameGovernor governor, long heapUsed, long heapMax) {
         List<Line> lines = new ArrayList<>(12);
         lines.add(new Line("AMD-Faster", HEADER_COLOUR));
 
@@ -66,6 +88,15 @@ public final class AmdFasterHud {
             long total = (long) hits + misses;
             lines.add(new Line(String.format("block cache  %d / %d  (%.0f%% hit)", hits, total,
                     total == 0 ? 0.0 : 100.0 * hits / total), DEFAULT_COLOUR));
+        }
+
+        if (heapMax > 0) {
+            // Warned in a different colour at the same fraction the monitor warns at, so the overlay and
+            // the log disagree about nothing: if the line is orange, the log line has been printed too.
+            double fraction = (double) heapUsed / heapMax;
+            int colour = fraction >= MemoryPressureMonitor.WARN_FRACTION ? WARN_COLOUR : DEFAULT_COLOUR;
+            lines.add(new Line(String.format("heap  %d / %d MB  (%.0f%%)",
+                    heapUsed >> 20, heapMax >> 20, fraction * 100.0), colour));
         }
 
         if (governor != null) {
