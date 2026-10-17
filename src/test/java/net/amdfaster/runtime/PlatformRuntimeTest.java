@@ -63,15 +63,23 @@ class PlatformRuntimeTest {
     }
 
     @Test
-    void aConflictFreeStrideIsPaddedOffTheBankCount() {
-        // A stride equal to the bank count puts every lane on the same bank and serialises the reads, which is
-        // invisible in the source because the code looks like an ordinary array read.
+    void aStrideEqualToTheBankCountIsPaddedBecauseItConflicts() {
+        // A stride equal to the bank count puts every lane on bank zero and serialises the reads, which is
+        // invisible in the source because the code looks like an ordinary array read. Padding by one element
+        // moves each lane to its own bank.
         PlatformRuntime runtime = new PlatformRuntime(null, false, 0, 0);
 
         int banks = runtime.ldsBytesPerCu() / 4;
-        assertEquals(banks, runtime.conflictFreeStride(banks),
-                "already conflict-free at the default bank count");
-        assertTrue(runtime.conflictFreeStride(1) >= 1);
+        assertEquals(16384, banks, "64 KiB of local memory in four-byte banks");
+        assertEquals(banks + 1, runtime.conflictFreeStride(banks),
+                "padded by one, which is the smallest change that removes the conflict");
+    }
+
+    @Test
+    void aStrideOfOneNeedsNoPadding() {
+        PlatformRuntime runtime = new PlatformRuntime(null, false, 0, 0);
+
+        assertEquals(1, runtime.conflictFreeStride(1), "consecutive lanes, consecutive banks");
     }
 
     @Test
