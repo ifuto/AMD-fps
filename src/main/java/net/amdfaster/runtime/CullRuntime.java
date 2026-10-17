@@ -123,10 +123,15 @@ public final class CullRuntime {
 
         if (cameraUnchanged && this.reuse.canReuseTerrainCull()) {
             // Nothing that would change the result has changed, so the whole walk can be skipped.
+            this.reuse.terrainCullReused();
             this.reuses++;
             return new Frame(true, false, false);
         }
 
+        // The reuse tracker has to be told the cull ran, or it never records an epoch to compare against and
+        // canReuseTerrainCull stays false forever -- which would make the reuse path dead code and the walk
+        // run every frame.
+        this.reuse.terrainCullRan();
         this.walks++;
         boolean rebuildPyramid = cut || !cameraUnchanged;
         return new Frame(false, rebuildPyramid, shadowPass);
