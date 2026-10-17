@@ -155,6 +155,14 @@ public final class AmdFasterRuntime {
      */
     private final CullRuntime cull = new CullRuntime();
 
+    /**
+     * The meshing decisions and the worker pool that builds the meshes.
+     *
+     * <p>Owned here because building a section's mesh on the render thread is a hitch for every chunk that
+     * loads, which is what makes walking into new terrain stutter.
+     */
+    private final MeshRuntime mesh = new MeshRuntime();
+
     private final int tickStage;
 
     private long lastFrameAtMs = -1L;
@@ -345,6 +353,16 @@ public final class AmdFasterRuntime {
         return this.cull;
     }
 
+    /**
+     * The meshing decisions, for the chunk load path to queue sections through.
+     *
+     * <p>Queued by distance from the camera so the sections under the player are built first, and a section
+     * that has waited long enough is built regardless of visibility so a hole cannot fail to fill.
+     */
+    public MeshRuntime mesh() {
+        return this.mesh;
+    }
+
     private void register() {
         ClientTickEvents.START_CLIENT_TICK.register(this::onStartTick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onEndTick);
@@ -516,6 +534,7 @@ public final class AmdFasterRuntime {
         this.minecraft.onWorldChange();
         this.light.onWorldChange();
         this.cull.onWorldChange();
+        this.mesh.onWorldChange();
         this.lastFrameAtMs = -1L;
         restoreFramerateLimit();
     }
