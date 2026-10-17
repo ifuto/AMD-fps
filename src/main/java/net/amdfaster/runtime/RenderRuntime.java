@@ -1,5 +1,13 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.render.BeaconBeamCache;
+import net.amdfaster.render.BreakingOverlayCache;
+import net.amdfaster.render.ConnectedTextureSelector;
+import net.amdfaster.render.EndPortalCache;
+import net.amdfaster.render.GlintCuller;
+import net.amdfaster.render.LodChunkReducer;
+import net.amdfaster.render.MapTextureCache;
+import net.amdfaster.render.RetainedChunkCache;
 import net.amdfaster.render.AnimatedTextureScheduler;
 import net.amdfaster.render.CloudMeshCache;
 import net.amdfaster.render.GuiBatcher;
@@ -65,6 +73,30 @@ public final class RenderRuntime {
     private final InventoryIconCache icons = new InventoryIconCache();
     private final Map<String, TextVertexBuffer> textBuffers = new HashMap<>();
 
+    /** The beacon beam mesh, cached and scrolled with a uniform. */
+    private final BeaconBeamCache beaconBeam = new BeaconBeamCache();
+
+    /** The block-breaking overlay, rebuilt only when the stage changes. */
+    private final BreakingOverlayCache breakingOverlay = new BreakingOverlayCache();
+
+    /** Connected-texture selection, cached per face. */
+    private final ConnectedTextureSelector connectedTextures = new ConnectedTextureSelector();
+
+    /** The end-portal layers, cached with their order preserved. */
+    private final EndPortalCache endPortal = new EndPortalCache();
+
+    /** Skips enchantment glint that is too far to read. */
+    private final GlintCuller glint = new GlintCuller();
+
+    /** Reduces far chunks to a heightmap-only LOD. */
+    private final LodChunkReducer lod = new LodChunkReducer();
+
+    /** Repaints map textures by column, not by pixel. */
+    private final MapTextureCache mapTextures = new MapTextureCache();
+
+    /** Chunks kept across a reconnect instead of re-requested. */
+    private final RetainedChunkCache retainedChunks = new RetainedChunkCache();
+
     /**
      * The HUD's bounds in pixels, which the texture is sized to.
      *
@@ -123,6 +155,46 @@ public final class RenderRuntime {
 
     public InventoryIconCache icons() {
         return this.icons;
+    }
+
+    /** The beacon beam mesh cache. */
+    public BeaconBeamCache beaconBeam() {
+        return this.beaconBeam;
+    }
+
+    /** The block-breaking overlay cache. */
+    public BreakingOverlayCache breakingOverlay() {
+        return this.breakingOverlay;
+    }
+
+    /** The connected-texture selector. */
+    public ConnectedTextureSelector connectedTextures() {
+        return this.connectedTextures;
+    }
+
+    /** The end-portal layer cache. */
+    public EndPortalCache endPortal() {
+        return this.endPortal;
+    }
+
+    /** The enchantment-glint culler. */
+    public GlintCuller glint() {
+        return this.glint;
+    }
+
+    /** The far-chunk LOD reducer. */
+    public LodChunkReducer lod() {
+        return this.lod;
+    }
+
+    /** The map-texture cache. */
+    public MapTextureCache mapTextures() {
+        return this.mapTextures;
+    }
+
+    /** The chunks retained across a reconnect. */
+    public RetainedChunkCache retainedChunks() {
+        return this.retainedChunks;
     }
 
     /**
@@ -206,6 +278,21 @@ public final class RenderRuntime {
      * <p>They all have to be invalidated at the same moment, because missing one means the player sees a stale
      * HUD over a fresh world, or yesterday's clouds over today's weather.
      */
+    /**
+     * Drops the caches whose contents describe the current world.
+     *
+     * <p>The beacon beam, breaking overlay, end portal, map textures and retained chunks are all keyed on
+     * something that is meaningless in the next world, so they are cleared rather than carried over. The
+     * connected-texture selector, glint culler and LOD reducer only hold counters and decisions, so they
+     * stay.
+     */
+    public void invalidateWorldCaches() {
+        this.beaconBeam.invalidate();
+        this.breakingOverlay.invalidate();
+        this.endPortal.invalidate();
+        this.lod.discardStale();
+    }
+
     public void invalidateAll() {
         this.hudTexture.invalidate();
         this.clouds.invalidate();
