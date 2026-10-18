@@ -346,6 +346,10 @@ tasks.register("verifyJar") {
                         // build -- it would leave the pre-pass either always on or always off, and both are
                         // wrong for some frames.
                         "net/amdfaster/render/DepthPrepassSelector.class",
+                        // The layer-separated rebuild decision. Asserted because a missing class would not
+                        // fail the build -- it would leave every light change rebuilding the whole mesh,
+                        // which is slower but still correct, so nothing would report it.
+                        "net/amdfaster/mesh/LightOnlyRebuildPlanner.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",

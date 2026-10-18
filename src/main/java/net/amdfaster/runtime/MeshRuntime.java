@@ -7,6 +7,7 @@ import net.amdfaster.mesh.BlockVertexLadder;
 import net.amdfaster.mesh.CompressedSectionMesh;
 import net.amdfaster.mesh.GeometryCache;
 import net.amdfaster.mesh.LodMerger;
+import net.amdfaster.mesh.LightOnlyRebuildPlanner;
 import net.amdfaster.mesh.LodStreamScheduler;
 import net.amdfaster.mesh.MeshSweepBounds;
 import net.amdfaster.mesh.MeshletQuantizer;
@@ -123,6 +124,16 @@ public final class MeshRuntime {
      * something on the horizon instead of filling in fine detail at the player's feet while the
      * distance stays empty.
      */
+    /**
+     * Decides whether a dirty section needs its mesh rebuilt or only its light stream rewritten.
+     *
+     * <p>Light is its own vertex stream -- 992 of a meshlet's 5,332 bytes -- so a section whose light
+     * changed but whose blocks did not skips greedy meshing and ambient occlusion entirely. That is the
+     * point of the separated layout: an interleaved renderer would have to rewrite everything to change
+     * any of it, and this decision would not exist to make.
+     */
+    private final LightOnlyRebuildPlanner rebuildKinds = new LightOnlyRebuildPlanner();
+
     private final LodStreamScheduler lodStream = new LodStreamScheduler();
 
     /** Accounting from the last build. */
@@ -190,6 +201,11 @@ public final class MeshRuntime {
     /** The LOD streaming scheduler. */
     public LodStreamScheduler lodStream() {
         return this.lodStream;
+    }
+
+    /** The layer-separated rebuild planner. */
+    public LightOnlyRebuildPlanner rebuildKinds() {
+        return this.rebuildKinds;
     }
 
     public MeshJobQueue queue() {
