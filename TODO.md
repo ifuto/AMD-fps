@@ -64,13 +64,13 @@
 
 | カテゴリ | 状態 | 残作業 |
 |---|---|---|
-| 描画最適化 | 厚い | 99 メッシュシェーダーのみ |
+| 描画最適化 | 完了 | 99 メッシュシェーダーは**判定で閉じた**（`render/MeshShaderBackendSelector`）。AMD では MDI が速いという実測 |
 | 処理最適化 | 厚い | 特定なし。新しい項目を探す |
 | メモリ最適化 | 中程度 | FerriteCore の内訳すべてに対応済み（`ModelDeduplicator` / `BlockStatePacker` / `DerivedStateCache`） |
 | ワールド生成最適化 | 厚い | 特定なし |
-| ネットワーク最適化 | 2件 | zlib 解凍の高速化（ネイティブ inflater が必要で、本プロジェクトは JVM フラグを渡せない） |
+| ネットワーク最適化 | 完了 | **zlib は `net/InflaterPool` で対応済みだった**（`reset()` で native 確保を保持＋出力バッファを成長させて保持、`DataFormatException` の inflater はプールに戻さず `end()`）。JVM フラグは不要 |
 | パーティクル最適化 | 1件 | 半透明の統合（合成色が変わるので「見た目を変えない」制約と衝突する。やるなら明示的に） |
-| **音響最適化（新規）** | 1件 | `sound/SoundCuller`（可聴性＋地域予算）。残る候補は音源のLOD（遠方を低品質サンプルに） |
+| **音響最適化（新規）** | 完了 | `sound/SoundCuller` ＋ **`sound/AudioLodSelector`**（48k/22.05k/16k の 3 tier ＋ virtual voice ＋ control rate 60 Hz）。**線形減衰では -40 dB が距離の 99 % 位置**なので tier は距離比で決める |
 
 **次の候補はここから選ぶ。** 上から順に埋めていく。
 
