@@ -143,19 +143,39 @@ class FrameDispatcherTest {
     void asyncComputeOnlyPaysWhenTheCullOutlastsTheStall() {
         // A dedicated compute queue costs a driver memory fence stall at the hand-off, so a short cull
         // split across two queues is strictly worse than the same cull with a barrier in one buffer.
-        assertFalse(FrameDispatcher.useAsyncCompute(0.02, 0.05, true), "cull shorter than the stall");
-        assertFalse(FrameDispatcher.useAsyncCompute(0.05, 0.05, true), "equal does not pay either");
-        assertTrue(FrameDispatcher.useAsyncCompute(0.2, 0.05, true));
-        assertFalse(FrameDispatcher.useAsyncCompute(5.0, 0.05, false), "no separate queue to use");
+        double stall = 0.4;
+        assertFalse(FrameDispatcher.useAsyncCompute(0.02, stall, true), "cull far shorter than the stall");
+        assertFalse(FrameDispatcher.useAsyncCompute(0.2, stall, true), "still shorter");
+        assertFalse(FrameDispatcher.useAsyncCompute(stall, stall, true), "equal does not pay either");
+        assertTrue(FrameDispatcher.useAsyncCompute(0.41, stall, true));
+        assertTrue(FrameDispatcher.useAsyncCompute(5.0, stall, true));
+        assertFalse(FrameDispatcher.useAsyncCompute(5.0, stall, false), "no separate queue to use");
     }
 
     @Test
-    void theStallIsReportedPerGenerationRatherThanInvented() {
-        assertEquals(0.05, FrameDispatcher.handoffStallMillis(AmdArchitecture.RDNA4), 1e-12);
-        assertEquals(0.05, FrameDispatcher.handoffStallMillis(AmdArchitecture.RDNA1), 1e-12);
-        assertEquals(0.1, FrameDispatcher.handoffStallMillis(AmdArchitecture.GCN5_VEGA), 1e-12,
-                "an unrecognised generation gets the conservative figure");
-        assertEquals(0.1, FrameDispatcher.handoffStallMillis(AmdArchitecture.UNKNOWN), 1e-12);
+    void theStallIsTheFencePlusTheSemaphoreAndComesFromTheQueueSelector() {
+        // Two different physical quantities, and both are charged. Comparing a cull against the semaphore
+        // alone would say async compute pays for a cull the fence stall actually swallows. Restating the
+        // numbers here instead of taking them from ComputeQueueSelector is how this originally went
+        // wrong: it reported 0.05, which is the semaphore, and called it the stall.
+        assertEquals(ComputeQueueSelector.MS_AMD_FENCE_STALL + ComputeQueueSelector.MS_CROSS_QUEUE_SYNC,
+                FrameDispatcher.handoffStallMillis(AmdArchitecture.RDNA4), 1e-12);
+        assertEquals(0.4, FrameDispatcher.handoffStallMillis(AmdArchitecture.RDNA4), 1e-9);
+        assertEquals(0.4, FrameDispatcher.handoffStallMillis(AmdArchitecture.RDNA1), 1e-9);
+        assertEquals(ComputeQueueSelector.MS_CROSS_QUEUE_SYNC,
+                FrameDispatcher.handoffStallMillis(AmdArchitecture.GCN5_VEGA), 1e-12,
+                "non-RDNA hardware does not pay the fence stall, only the semaphore");
+        assertEquals(0.05, FrameDispatcher.handoffStallMillis(AmdArchitecture.UNKNOWN), 1e-9);
+    }
+
+    @Test
+    void aRealisticCullDoesNotOutlastTheStallSoItStaysOnTheGraphicsQueue() {
+        // The cull dispatch is tens of microseconds, well under the 0.4 ms the hand-off costs, which is
+        // the same conclusion ComputeQueueSelector reaches from the other direction. The two agreeing is
+        // the point of sharing the constants.
+        assertFalse(FrameDispatcher.useAsyncCompute(0.05,
+                FrameDispatcher.handoffStallMillis(AmdArchitecture.RDNA4), true));
+        assertEquals(ComputeQueueSelector.Queue.GRAPHICS, ComputeQueueSelector.choose(true, true));
     }
 
     @Test

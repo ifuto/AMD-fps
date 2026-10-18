@@ -264,14 +264,24 @@ public final class FrameDispatcher {
     }
 
     /**
-     * The hand-off stall a dedicated compute queue costs on this hardware, in milliseconds.
+     * What splitting the cull onto a dedicated compute queue costs on this hardware, in milliseconds.
      *
-     * <p>Reported per architecture because it is a driver behaviour rather than a hardware constant, and
-     * an unrecognised device gets the conservative figure rather than an invented one.
+     * <p>Both halves of the cost, and they are different things. The driver inserts a memory-fence stall
+     * on the dedicated compute queue on AMD, which is the large one. Separately, any cross-queue hand-off
+     * needs a semaphore, which is small but not nothing. Adding them is the honest figure to compare a
+     * cull's duration against: comparing against the semaphore alone would say async compute pays for a
+     * cull that the fence stall actually swallows.
+     *
+     * <p>Taken from {@link ComputeQueueSelector} rather than restated, because these are the same two
+     * physical quantities and two numbers for one thing is how a planner ends up disagreeing with the
+     * component that chose the queue in the first place.
+     *
+     * @param architecture the identified generation; non-RDNA hardware does not pay the fence stall
      */
     public static double handoffStallMillis(AmdArchitecture architecture) {
         require(architecture != null, "an architecture is needed");
-        return architecture.isRdna() ? 0.05 : 0.1;
+        double fence = architecture.isRdna() ? ComputeQueueSelector.MS_AMD_FENCE_STALL : 0.0;
+        return fence + ComputeQueueSelector.MS_CROSS_QUEUE_SYNC;
     }
 
     private static void require(boolean condition, String message) {
