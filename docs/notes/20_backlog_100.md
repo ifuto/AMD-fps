@@ -34,7 +34,7 @@
 
 | # | 項目 | 状態 | 場所／何が足りないか |
 |---|---|---|---|
-| 1 | 独自レンダリングバックエンド | 部分 | `vk/VkContext`, `vk/Swapchain`, `gpu/CullingPipeline`。**ディスパッチ層が無い** |
+| 1 | 独自レンダリングバックエンド | ✅ | `vk/VkContext`, `vk/Swapchain`, `gpu/CullingPipeline`, **`vk/FrameDispatcher`**。部品は全てあったが**キュー上で順序付けバリアを挟むものが無かった**。**cull→indirect draw には実行順序（semaphore）とメモリ依存（barrier）の両方が必要**で、片方では不十分。barrier は draw の 2 種類の読み取りを**両方**名指しする必要がある：indirect command read と、quad count→`indexCount` になる side data の **uniform read**（後者を外すと index count が stale で**長さが誤った draw**＝失敗ですらない）。**AMD では専用 compute queue は hand-off でドライバの memory fence stall**を払うため、cull が stall より長い時だけ分割 |
 | 2 | GPU 機能の自動検出 | ✅ | `platform/FeaturePaths`。**検出は既にあったが経路選択が無かった**（＝各呼び出し箇所が独自の fallback を持つ）。6 経路を決定し**理由を結果として返す**（ログではない）。**拡張の露出≠その世代で速い**：`VK_EXT_mesh_shader` があっても RDNA2 以降でなければ mesh 経路にしない。**present にも missing にも無い拡張は不在扱い**（probe 中途失敗で両方不完全なことがある）。`reversedZ` 欠落は低速化でなく**精度損失**として報告 |
 | 3 | Multi-Draw Indirect | ✅ | `gpu/IndirectCountDraw`。シェーダは既に密な `VkDrawIndexedIndirectCommand` と visible count を書く。**n 個のコマンドは `stride×(n-1)+20` B**（`stride×n` ではない＝最後のコマンドは自分の末尾で終わる）。過大申告は描画前の validation error。**count は信頼せず clamp**（`min(countInBuffer, maxDrawCount)`＝壊れた cull シェーダが確保済みバッファを超えて描けない）。`multiDrawIndirect` 欠落時 **drawCount>1 は invalid**（未サポートではない）、`maxDrawIndirectCount` 超過も同様 → `GpuRuntime` は 0 を返し per-meshlet に落とす。stride は **20**（24 に padding すると 13,824 draws で **55 KB** 無駄） |
 | 4 | GPU 生成の描画コマンド | **完了** | `meshlet_cull.comp` が 1 ウェーブ 1 アトミックで圧縮リストを生成 |
@@ -202,6 +202,7 @@
 | Z23 | indirect count draw の検証とサイズ決定 | ✅ | `gpu/IndirectCountDraw` — off-by-one を往復テスト（バッファから導いた count は収まり、+1 は収まらない）。clamp は安全性質なので呼び出し箇所の `Math.min` ではなく名前付きメソッド。**沈黙して壊れるのは multiDrawIndirect 欠落**（invalid であって低速ではない） |
 | Z24 | メッシュシェーダ経路が実際に勝つ条件の判定 | ✅ | `render/MeshShaderBackendSelector` — 新しいステージ＝速い、を仮定せず実測で判定。`meshletWithinGuidance()` は **248 vertices が 64〜128 指針を超えると正直に false**（ブロック面の各頂点は独自の AO/light を持つので共有できない＝勝っても demo より小さい） |
 | Z25 | 爆発の割り当て削減を実際の確保率に対して定量化 | ✅ | `explosion/BlastAllocationModel` — 節約を主張するだけでなく 800 MB/s 基準に対してサイズを測る。young GC 頻度 = rate / eden（**G1 既定 5 % vs 調整値 30 % で 6 倍差**＝爆発が動かす量より大きい）。scalar replaced 1.919 ns/0 B vs 非 3.781 ns/16 B |
+| Z26 | フレームの submission 順序とバリア | ✅ | `vk/FrameDispatcher` — **semaphore は実行を順序付けるがキャッシュを flush しない**ので barrier も別途必要（代替ではなく独立要件）。`validate` は ①cull→draw barrier の存在 ②indirect command read ③uniform read ④acquire 待ち 1 個 ⑤present signal 1 個 ⑥fence 1 個（0 だと slot が再利用されず**2 フレーム目で停止**）を検査。`GpuRuntime.planFrame` は validate 失敗時に null を返す（呼び出し側が record すると失敗が例外でなく**地形**になるため） |
 
 > ## ⛔⛔ この「未」を見つけたら — 先にこれを読め ⛔⛔
 >
