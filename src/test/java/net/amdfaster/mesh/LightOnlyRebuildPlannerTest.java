@@ -74,7 +74,8 @@ class LightOnlyRebuildPlannerTest {
 
         assertEquals(4 * 992, planner.uploadBytes(Work.LIGHT_ONLY, 4));
         assertEquals(4 * 5332, planner.uploadBytes(Work.GEOMETRY_AND_LIGHT, 4));
-        assertEquals(21_328L, planner.bytesPlanned());
+        // uploadBytes accumulates on every call, so this is both of the above and not just the last.
+        assertEquals(25_296L, planner.bytesPlanned(), "3,968 + 21,328");
         // Only the light-only plan avoids anything; the geometry rebuild uploads the whole meshlet.
         assertEquals(4L * 4340, planner.bytesAvoided());
     }
