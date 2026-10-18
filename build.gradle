@@ -375,6 +375,10 @@ tasks.register("verifyJar") {
                         // suppression flag, and a missing class would leave RDNA4 taking forward-pass
                         // decisions as though early-Z still worked.
                         "net/amdfaster/platform/PathSelector.class",
+                        // The buffer pool. Asserted because recycling a buffer whose fence has not
+                        // signalled is not a slowdown, it is geometry belonging to neither section, and
+                        // the draw still completes so nothing reports it.
+                        "net/amdfaster/gpu/BufferPool.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
