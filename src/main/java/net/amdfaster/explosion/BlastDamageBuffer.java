@@ -52,6 +52,17 @@ public final class BlastDamageBuffer {
 
     private static final int INITIAL_CAPACITY = 1024;
 
+    /**
+     * How full the table gets before it doubles: three quarters.
+     *
+     * <p>Not a tuning choice. Open addressing has nowhere to stop once the table is full, so a probe for
+     * a missing key walks every slot and comes back to where it started. The previous version checked
+     * the capacity after probing, which meant the add that filled the table succeeded and the one after
+     * it hung -- and it hung inside a test, which is why the build sat in progress rather than failing.
+     */
+    private static final int LOAD_NUMERATOR = 3;
+    private static final int LOAD_DENOMINATOR = 4;
+
     private long[] positions;
     private long[] table;
     private boolean[] occupied;
@@ -91,14 +102,16 @@ public final class BlastDamageBuffer {
      */
     public boolean add(long packed) {
         this.adds++;
+
+        // Grow before probing. After would hang: see LOAD_NUMERATOR.
+        if (this.size * LOAD_DENOMINATOR >= this.capacity * LOAD_NUMERATOR) {
+            grow();
+        }
+
         int slot = slotFor(packed);
         if (this.occupied[slot]) {
             this.duplicates++;
             return false;
-        }
-        if (this.size == this.positions.length) {
-            grow();
-            slot = slotFor(packed);
         }
         this.table[slot] = packed;
         this.occupied[slot] = true;

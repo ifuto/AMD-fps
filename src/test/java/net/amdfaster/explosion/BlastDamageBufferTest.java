@@ -49,7 +49,10 @@ class BlastDamageBufferTest {
         }
 
         assertEquals(100L, buffer.blasts());
-        assertEquals(0L, buffer.growths(), "grown to 900 on the first blast and never again");
+        // One growth, on the first blast: 900 positions cross the three quarter load mark of the
+        // initial 1024, and at 2048 the same 900 never crosses it again. Ninety-nine blasts allocate
+        // nothing, which is the whole point of keeping the array.
+        assertEquals(1L, buffer.growths(), "grown once on the first blast and never again");
     }
 
     @Test
@@ -105,6 +108,12 @@ class BlastDamageBufferTest {
     void growingKeepsEveryRecordedPosition() {
         // Growth rehashes the dedup table. A rehash that lost entries would not throw -- it would start
         // accepting duplicates, and the symptom is a block destroyed twice and a stray item entity.
+        //
+        // This is also the regression test for a hang. The first version checked the capacity AFTER
+        // probing, so the add that filled the 1024 slot table succeeded and the next one spun forever
+        // looking for a free slot that did not exist -- which is why a build sat in progress rather
+        // than failing. 5,000 positions is well past that boundary. Growth now happens before probing,
+        // at three quarters full, so open addressing always has somewhere to stop.
         BlastDamageBuffer buffer = new BlastDamageBuffer();
         buffer.clear();
         int total = 5000;
@@ -113,7 +122,7 @@ class BlastDamageBufferTest {
             assertTrue(buffer.add(at(i % 200 - 100, 64 + i / 200, i / 40000)), "position " + i);
         }
         assertEquals(total, buffer.size());
-        assertTrue(buffer.growths() >= 1, "past the initial capacity");
+        assertEquals(3L, buffer.growths(), "1024 -> 2048 -> 4096 -> 8192, each at three quarters full");
 
         for (int i = 0; i < total; i++) {
             assertFalse(buffer.add(at(i % 200 - 100, 64 + i / 200, i / 40000)),
