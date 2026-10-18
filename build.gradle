@@ -367,6 +367,10 @@ tasks.register("verifyJar") {
                         // every dispatch would still run, just at a wave size picked by nothing, and the
                         // shader would sit on half the lanes it could have had.
                         "net/amdfaster/gpu/OccupancyPlanner.class",
+                        // The blast phase planner. Asserted because sharing a cache between two
+                        // overlapping explosions produces terrain that survives a blast it should not
+                        // have, and that reads as a weak explosion rather than a wrong one.
+                        "net/amdfaster/explosion/BlastPhasePlanner.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",

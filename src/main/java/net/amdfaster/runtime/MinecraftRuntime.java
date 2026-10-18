@@ -1,6 +1,7 @@
 package net.amdfaster.runtime;
 
 import net.amdfaster.craft.RecipeSearchCache;
+import net.amdfaster.explosion.BlastPhasePlanner;
 import net.amdfaster.explosion.ChainReactionDeduplicator;
 import net.amdfaster.explosion.EntityExposureCache;
 import net.amdfaster.explosion.BlastDamageBuffer;
@@ -451,6 +452,28 @@ public final class MinecraftRuntime {
      */
     public EntityExposureCache explosionExposure() {
         return this.explosionExposure;
+    }
+
+    /**
+     * Works out how this tick's explosions have to be ordered against the shared caches.
+     *
+     * <p>{@link #chainReaction()} and {@link #explosionExposure()} both hold answers that are only valid
+     * while the world has not changed, and an explosion changes it: {@code explode()} casts every ray
+     * against a world nothing has been written to yet, then {@code finalizeExplosion()} removes 823 blocks.
+     * A second explosion in the same tick has to see those holes, so its rays travel further through air
+     * where the first blast put them.
+     *
+     * <p>What this decides is which explosions may share one ray phase. Two whose reach does not overlap
+     * can, because neither destroyed a block the other reads; two that do overlap cannot, and serving the
+     * second one the first one's cached resistances would stop its rays at a wall that is no longer
+     * standing. That is terrain surviving an explosion it should not have, and it presents as a weak
+     * blast rather than an incorrect one, so the criterion is computed per pair rather than assumed.
+     *
+     * @param blasts this tick's explosions, in the order they detonate
+     * @return how many ray phases are needed and how many cache entries have to be dropped between them
+     */
+    public BlastPhasePlanner.Schedule scheduleBlasts(BlastPhasePlanner.Blast... blasts) {
+        return BlastPhasePlanner.schedule(blasts);
     }
 
     /**
