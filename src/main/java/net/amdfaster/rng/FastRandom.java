@@ -292,7 +292,7 @@ public final class FastRandom {
     private static RandomGenerator newGenerator() {
         if (GENERATOR_NAME != null) {
             try {
-                return RandomGeneratorFactory.of(GENERATOR_NAME).getInstance();
+                return RandomGeneratorFactory.of(GENERATOR_NAME).create();
             } catch (Throwable ignored) {
                 // Fall through to the per-thread default rather than throwing from a ThreadLocal
                 // initialiser, which would poison the thread for every later draw.
