@@ -342,6 +342,10 @@ tasks.register("verifyJar") {
                         // build -- it would leave every section tested individually, every frame, and
                         // nothing on the overlay would say so.
                         "net/amdfaster/cull/HierarchicalFrustumCuller.class",
+                        // The depth pre-pass decision. Asserted because a missing class would not fail the
+                        // build -- it would leave the pre-pass either always on or always off, and both are
+                        // wrong for some frames.
+                        "net/amdfaster/render/DepthPrepassSelector.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",

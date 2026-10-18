@@ -11,6 +11,7 @@ import net.amdfaster.draw.TranslucentSortCache;
 import net.amdfaster.render.BeaconBeamCache;
 import net.amdfaster.render.BreakingOverlayCache;
 import net.amdfaster.render.ConnectedTextureSelector;
+import net.amdfaster.render.DepthPrepassSelector;
 import net.amdfaster.render.EndPortalCache;
 import net.amdfaster.render.GlintCuller;
 import net.amdfaster.render.LodChunkReducer;
@@ -70,6 +71,17 @@ import java.util.Map;
  * <p>Not thread safe. Everything here runs on the render thread.
  */
 public final class RenderRuntime {
+
+    /**
+     * Decides per frame whether to render a depth pre-pass.
+     *
+     * <p>The design was already settled -- cutout goes through a Z pre-pass and {@code DEPTH_TEST_EQUAL}
+     * rather than {@code discard} -- but nothing chose when to do it, and a pre-pass that is always on
+     * costs two rounds of vertex work and command submission on the frames where the overdraw does not
+     * pay for it. The break-even is arithmetic rather than a setting: two passes win exactly when the
+     * geometry cost is less than the shading the extra overdraw layers would have done.
+     */
+    private final DepthPrepassSelector prepass = new DepthPrepassSelector();
 
     private final RenderElementToggle toggles = new RenderElementToggle();
     private final HudUpdateScheduler hudSchedule = new HudUpdateScheduler();
@@ -153,6 +165,11 @@ public final class RenderRuntime {
     /** The element toggles, so a player can turn clouds or weather off. */
     public RenderElementToggle toggles() {
         return this.toggles;
+    }
+
+    /** The depth pre-pass selector. */
+    public DepthPrepassSelector prepass() {
+        return this.prepass;
     }
 
     public HudUpdateScheduler hudSchedule() {
