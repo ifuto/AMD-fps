@@ -354,6 +354,11 @@ tasks.register("verifyJar") {
                         // the build -- it would leave every block change re-meshing a whole 4,096 cell
                         // section, which is slower but still correct, so nothing would report it.
                         "net/amdfaster/mesh/SectionDeltaPlanner.class",
+                        // The coalescing check. Asserted because it is a bandwidth check and not a
+                        // correctness one: if the class vanished every stride would still upload and draw
+                        // fine, just fetching half the bytes it needs on the light and index streams, and
+                        // nothing would report that.
+                        "net/amdfaster/gpu/CoalescingVerifier.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",

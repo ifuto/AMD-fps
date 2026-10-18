@@ -1,6 +1,7 @@
 package net.amdfaster.runtime;
 
 import net.amdfaster.gpu.BlockBindings;
+import net.amdfaster.gpu.CoalescingVerifier;
 import net.amdfaster.gpu.CullingPipeline;
 import net.amdfaster.gpu.EntityUploadLayout;
 import net.amdfaster.gpu.GpuBuffer;
@@ -317,5 +318,27 @@ public final class GpuRuntime {
                 + SectionUpload.attributeBytes(meshlets)
                 + layout.positionsBytes()
                 + entities.instanceCount();
+    }
+
+    /**
+     * Reports how much of the fetched bandwidth a section's mesh buffers actually use.
+     *
+     * <p>Asked at layout time rather than per frame, because the answer depends only on the strides and
+     * those are fixed once the meshlet layout is chosen. The worst stream is the one worth reading: the
+     * light and index slots are not whole cache lines, so half the meshlets start partway into one and
+     * the fetch brings data the wave does not read.
+     *
+     * @param mesh a section's mesh, whose meshlet count sets the layout
+     * @return the stream with the lowest worst-case efficiency
+     */
+    public CoalescingVerifier.Verdict worstCoalescing(SectionMesh mesh) {
+        MeshletGpuLayout meshlets = MeshletGpuLayout.forSection(mesh);
+        CoalescingVerifier.Verdict worst = null;
+        for (CoalescingVerifier.Verdict verdict : CoalescingVerifier.verifySection(meshlets)) {
+            if (worst == null || verdict.efficiencyWorst() < worst.efficiencyWorst()) {
+                worst = verdict;
+            }
+        }
+        return worst;
     }
 }
