@@ -6,6 +6,7 @@ import net.amdfaster.particle.ParticleCuller;
 import net.amdfaster.particle.ParticleDrawBatcher;
 import net.amdfaster.particle.ParticleLod;
 import net.amdfaster.particle.ParticlePool;
+import net.amdfaster.rng.FastRandom;
 
 /**
  * Runs the particle decisions in one place, in the order that makes each stage worth doing.
@@ -106,6 +107,76 @@ public final class ParticleRuntime {
     public ParticleRuntime(int poolCapacity, int screenWidth, int screenHeight) {
         this.pool = new ParticlePool(poolCapacity);
         this.occlusion = new ParticleCuller(screenWidth, screenHeight);
+    }
+
+    /** How far a particle is scattered from its nominal spawn point, in blocks. */
+    public static final float DEFAULT_SCATTER = 0.25f;
+
+    /**
+     * Scatters a particle around its nominal spawn point and stores the result in its slot.
+     *
+     * <p>Particles are the one place where a faster random generator can be used without the world noticing.
+     * The scatter is cosmetic: nobody records which sequence produced it, no save file holds it, and no two
+     * runs of the same seed are expected to agree on where a puff of smoke appeared. A different generator
+     * from the same seed gives a different but equally valid puff, which is why this is allowed to use one
+     * while world generation, loot and mob AI are not.
+     *
+     * <p>Doing it here rather than at each call site keeps the choice in one place. A call site that reached
+     * for a legacy {@code RandomSource} would reintroduce the shared, contended seed that this exists to
+     * avoid, and it would look identical in the code.
+     *
+     * @param slot the particle's slot, which must be held
+     * @param x the nominal x
+     * @param y the nominal y
+     * @param z the nominal z
+     * @param extent how far it may move on each axis, in blocks; zero stores the nominal point unchanged
+     */
+    public void scatter(int slot, float x, float y, float z, float extent) {
+        if (slot < 0) {
+            throw new IllegalArgumentException("scattering into a slot that is not held");
+        }
+        if (extent < 0.0f || Float.isNaN(extent)) {
+            throw new IllegalArgumentException("scatter extent must be a distance, was " + extent);
+        }
+        if (extent == 0.0f) {
+            // Still write the point: the slot holds whatever the last occupant left there.
+            this.pool.set(slot, ParticlePool.POSITION_X, x);
+            this.pool.set(slot, ParticlePool.POSITION_Y, y);
+            this.pool.set(slot, ParticlePool.POSITION_Z, z);
+            return;
+        }
+        this.pool.set(slot, ParticlePool.POSITION_X,
+                x + FastRandom.nextSymmetricFloat(FastRandom.Usage.PARTICLES, extent));
+        this.pool.set(slot, ParticlePool.POSITION_Y,
+                y + FastRandom.nextSymmetricFloat(FastRandom.Usage.PARTICLES, extent));
+        this.pool.set(slot, ParticlePool.POSITION_Z,
+                z + FastRandom.nextSymmetricFloat(FastRandom.Usage.PARTICLES, extent));
+    }
+
+    /**
+     * Spawns a particle at a world position and decides whether it will be drawn.
+     *
+     * <p>The same decision as {@link #spawn}, plus the scatter that gives a burst of particles its shape
+     * rather than stacking every one of them on the same point. Split out because a caller that only has a
+     * screen-space box -- a debug overlay, a test -- should not have to invent a world position to pass.
+     *
+     * @param x the nominal spawn x
+     * @param y the nominal spawn y
+     * @param z the nominal spawn z
+     * @param scatter how far each particle may move from that point, in blocks
+     * @return the verdict, and the slot if it was drawn, with the scattered position stored in it
+     */
+    public Spawn spawnAt(String source, String texture, float size,
+            float x, float y, float z, float scatter,
+            float distanceSquared, float pixelsPerBlock,
+            double angleFromCentre, double halfFieldOfView,
+            int screenX0, int screenY0, int screenX1, int screenY1, float depth) {
+        Spawn spawn = spawn(source, texture, size, distanceSquared, pixelsPerBlock, angleFromCentre,
+                halfFieldOfView, screenX0, screenY0, screenX1, screenY1, depth);
+        if (spawn.drawn()) {
+            scatter(spawn.slot(), x, y, z, scatter);
+        }
+        return spawn;
     }
 
     /**
