@@ -4,6 +4,7 @@ import net.amdfaster.craft.RecipeSearchCache;
 import net.amdfaster.explosion.BlastPhasePlanner;
 import net.amdfaster.explosion.ChainReactionDeduplicator;
 import net.amdfaster.explosion.EntityExposureCache;
+import net.amdfaster.explosion.BlastAllocationModel;
 import net.amdfaster.explosion.BlastDamageBuffer;
 import net.amdfaster.explosion.ExplosionBlockCache;
 import net.amdfaster.fluid.FlowDirectionCache;
@@ -484,6 +485,35 @@ public final class MinecraftRuntime {
      */
     public BlastDamageBuffer blastDamage() {
         return this.blastDamage;
+    }
+
+    /**
+     * What packing the destroy list saves, measured against the game's allocation rate.
+     *
+     * <p>Worth asking rather than assuming, because the per-blast byte counts are easy to state and the
+     * significance is not. A blast's 13,168 bytes of block positions against a reused array is a real 2 to
+     * 1, but a hundred blasts a second is 0.16 per cent of the 800 MB a second Minecraft allocates when
+     * busy. So the reason this matters is not the share, it is where the allocation lands: a TNT chain
+     * puts dozens of blasts inside one 50 millisecond tick, and an amount that is negligible spread over a
+     * second is not negligible inside the tick it arrives in.
+     *
+     * <p>The other half of the answer is that the JIT cannot remove these on its own. The destroy list is
+     * a collection handed to the level, which makes every position in it globally escaping, and escape
+     * analysis only scalar-replaces what stays inside the method that made it.
+     */
+    public BlastAllocationModel.Blast blastAllocation() {
+        return BlastAllocationModel.perBlast();
+    }
+
+    /**
+     * What a blast rate adds to the game's allocation, as a percentage of it.
+     *
+     * @param blastsPerSecond explosions per second
+     * @return the share of the 800 MB/s baseline, which is the number that keeps the claim honest
+     */
+    public double blastAllocationShare(int blastsPerSecond) {
+        return BlastAllocationModel.percentOfGameRate(blastsPerSecond,
+                BlastDamageBuffer.BLOCKS_PER_BLAST * BlastAllocationModel.BLOCKPOS_BYTES);
     }
 
     /** The flow direction cache. */

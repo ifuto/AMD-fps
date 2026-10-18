@@ -391,6 +391,10 @@ tasks.register("verifyJar") {
                         // adding a task shader on top of the compute cull, which would cull every meshlet
                         // twice and pay a fixed VRAM ring for the second pass.
                         "net/amdfaster/render/MeshShaderBackendSelector.class",
+                        // The blast allocation model. Asserted because it is the check on the claim that
+                        // packing the destroy list matters: without it the saving is asserted rather than
+                        // sized against the game's actual allocation rate.
+                        "net/amdfaster/explosion/BlastAllocationModel.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
