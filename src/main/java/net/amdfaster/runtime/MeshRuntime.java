@@ -12,6 +12,7 @@ import net.amdfaster.mesh.LodStreamScheduler;
 import net.amdfaster.mesh.MeshSweepBounds;
 import net.amdfaster.mesh.MeshletQuantizer;
 import net.amdfaster.mesh.QuadTemplateLibrary;
+import net.amdfaster.cpu.FalseSharingPlanner;
 import net.amdfaster.mesh.SectionDeltaPlanner;
 import net.amdfaster.mesh.SectionMesh;
 import net.amdfaster.mesh.SparseVoxelOctree;
@@ -222,6 +223,35 @@ public final class MeshRuntime {
     /** The intra-section delta planner. */
     public SectionDeltaPlanner deltaRegions() {
         return this.deltaRegions;
+    }
+
+    /** How many worker threads write the shared build counters. */
+    public static final int COUNTER_WRITER_THREADS = DEFAULT_WORKERS;
+
+    /**
+     * Chooses the layout for the build timer's worst-case counter.
+     *
+     * <p>{@code MeshBuildTimer} already gets the hot counters right -- {@code LongAdder} for the total and
+     * the count, whose cells are internally padded and so already isolated. The worst case is different: a
+     * maximum cannot be accumulated, so it has to be contended for and cannot be striped, which leaves it
+     * a single {@code AtomicLong} that can share a cache line with its neighbours and ping-pong between
+     * the worker cores. Measured, that layout costs five times what the padded one does for the same work.
+     *
+     * <p>The padding has to be manual. {@code @Contended} is the clean fix but HotSpot restricts it to JDK
+     * internal classes unless the process starts with {@code -XX:-RestrictContended}, and a mod does not
+     * control the flags of the process it is loaded into.
+     *
+     * @param writesPerTick build completions per tick across all workers
+     * @return the layout and the reason, which is what says whether the padding is worth the memory
+     */
+    public FalseSharingPlanner.Decision worstCounterLayout(long writesPerTick) {
+        return FalseSharingPlanner.choose(new FalseSharingPlanner.Counter("worstNanos",
+                COUNTER_WRITER_THREADS, writesPerTick, false, false));
+    }
+
+    /** Bytes of padding that put a field of {@code fieldBytes} on its own line, prefetcher included. */
+    public int paddingForOwnLine(int fieldBytes) {
+        return FalseSharingPlanner.manualPaddingBytes(fieldBytes);
     }
 
     public MeshJobQueue queue() {

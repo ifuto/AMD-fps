@@ -407,6 +407,11 @@ tasks.register("verifyJar") {
                         // not worth making as to plan one, and a missing class would silently leave both
                         // answers unasked.
                         "net/amdfaster/cpu/HotColdSplitter.class",
+                        // The false sharing planner. Asserted because the failure it prevents is a
+                        // throughput loss that no profiler names: the code is correct and the counters
+                        // are right, the line just ping-pongs between cores five times more than it
+                        // needs to.
+                        "net/amdfaster/cpu/FalseSharingPlanner.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
