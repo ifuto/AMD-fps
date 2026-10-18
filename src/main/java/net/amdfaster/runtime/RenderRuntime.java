@@ -14,6 +14,7 @@ import net.amdfaster.render.ConnectedTextureSelector;
 import net.amdfaster.render.DepthPrepassSelector;
 import net.amdfaster.render.EndPortalCache;
 import net.amdfaster.render.GlintCuller;
+import net.amdfaster.render.MeshShaderBackendSelector;
 import net.amdfaster.render.LodChunkReducer;
 import net.amdfaster.render.MapTextureCache;
 import net.amdfaster.render.RetainedChunkCache;
@@ -427,5 +428,34 @@ public final class RenderRuntime {
     /** The render update gate. */
     public RenderUpdateGate updateGate() {
         return this.updateGate;
+    }
+
+    /**
+     * Chooses the geometry backend for a frame's draw set.
+     *
+     * <p>The compute cull writing dense draw commands and drawing them with an indirect count is the
+     * default here, and on this hardware it usually wins rather than merely being what was built first. A
+     * task shader on AMD compiles to a compute shader feeding a fixed VRAM ring through the command
+     * processor, that ring does not scale with the payload count, and a 32K item configuration was
+     * measured losing to manual compute culling on a 7900 GRE. Minecraft at twelve chunks has 13,824
+     * sections, which is where the cliff is.
+     *
+     * <p>What the mesh stage can do that the indirect path cannot is reject primitives inside a meshlet --
+     * the indirect path's floor is one meshlet, 62 quads. That is the case this looks for, rather than
+     * assuming the newer stage is the faster one.
+     *
+     * @param meshletCount       meshlets in the frame's draw set
+     * @param perTriangleCulling whether primitives inside a meshlet need rejecting
+     * @param computeCullAlready whether the compute cull pass is in place
+     * @param meshShaderAvailable whether {@code VK_EXT_mesh_shader} is exposed
+     * @param architecture       the identified generation
+     * @return the backend and the measurement or constraint that chose it
+     */
+    public MeshShaderBackendSelector.Decision meshBackend(int meshletCount, boolean perTriangleCulling,
+                                                          boolean computeCullAlready,
+                                                          boolean meshShaderAvailable,
+                                                          net.amdfaster.platform.AmdArchitecture architecture) {
+        return MeshShaderBackendSelector.decide(new MeshShaderBackendSelector.Inputs(meshletCount,
+                perTriangleCulling, computeCullAlready, meshShaderAvailable, architecture));
     }
 }

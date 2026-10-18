@@ -387,6 +387,10 @@ tasks.register("verifyJar") {
                         // is a validation error at the draw, and a device count that is not clamped would
                         // let a broken cull shader draw past the buffer that was allocated.
                         "net/amdfaster/gpu/IndirectCountDraw.class",
+                        // The mesh-shader backend selector. Asserted because it is the guard against
+                        // adding a task shader on top of the compute cull, which would cull every meshlet
+                        // twice and pay a fixed VRAM ring for the second pass.
+                        "net/amdfaster/render/MeshShaderBackendSelector.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
