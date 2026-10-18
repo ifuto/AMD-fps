@@ -200,6 +200,7 @@
 | Z21 | GPU バッファの再利用と fence 律速 | ✅ | `gpu/BufferPool` — 実測事例ではこの形状（数 KiB の小バッファを生成・破棄）が **vkAllocateMemory/vkFreeMemory 呼び出しの 85〜96 %** を占め、RADV では free が libdrm のプロセス全体 VA hole リストを走査。バグ 2 件: slack が生バイト基準、`refusedEarly` が加算されない死んだ API（削除） |
 | Z22 | 検出した拡張を実際の実行経路に変換 | ✅ | `platform/FeaturePaths` — 全経路に必ず動く fallback（**古い iGPU で起動しない Mod は、遅くても動く Mod より悪い**）。`GpuReport` の probe 結果を `PlatformRuntime.featurePaths()` が消費。理由文に欠落拡張名を含めるので、FPS が低いユーザーが 12 個の条件のどれかを推測せずに済む |
 | Z23 | indirect count draw の検証とサイズ決定 | ✅ | `gpu/IndirectCountDraw` — off-by-one を往復テスト（バッファから導いた count は収まり、+1 は収まらない）。clamp は安全性質なので呼び出し箇所の `Math.min` ではなく名前付きメソッド。**沈黙して壊れるのは multiDrawIndirect 欠落**（invalid であって低速ではない） |
+| Z24 | メッシュシェーダ経路が実際に勝つ条件の判定 | ✅ | `render/MeshShaderBackendSelector` — 新しいステージ＝速い、を仮定せず実測で判定。`meshletWithinGuidance()` は **248 vertices が 64〜128 指針を超えると正直に false**（ブロック面の各頂点は独自の AO/light を持つので共有できない＝勝っても demo より小さい） |
 
 > ## ⛔⛔ この「未」を見つけたら — 先にこれを読め ⛔⛔
 >
@@ -223,7 +224,7 @@
 > （描画 / 処理 / メモリ / ワールド生成 / ネットワーク / パーティクル）から
 > 次の 1 つを選んで**着手してから**締める。
 
-| 99 | Vulkan メッシュシェーダー用の別バックエンド | 未 | RDNA3 以降。task shader が無い点は NVIDIA が上（`docs/notes/19` §9） |
+| 99 | Vulkan メッシュシェーダー用の別バックエンド | ✅ | `render/MeshShaderBackendSelector`。**AMD では既定経路（compute cull + MDI）が勝つと判定**。① AMD の task shader は compute shader にコンパイルされ command processor 経由の固定 VRAM ring を使う（count に応じて伸びず、**32K items 構成が 7900 GRE で手動 compute cull に負けた実測**）→ 安全閾値 **1024**（12 chunk は 13,824 sections）② AMD 実測で **128 primitives 超は MDI が速い**（1 section=1,536 quads なので常に超過）③ ベンダー指針が **「TS+MS と compute culling を混ぜるな」**。mesh 経路を選ぶ唯一の条件は**メッシュレット内部の三角形単位 rejection**（indirect 経路の下限は 1 meshlet=62 quads）で、その場合も **task stage 無し** |
 | 100 | 自動ベンチマーク・ボトルネック診断 | **完了（基盤）** | `perf/FrameTimeRecorder`（平均・p50/p95/p99・**1% Low**・標準偏差・最悪フレーム）、`perf/StageTimer`（段階別内訳・スレッド間マージ）。**GPU タイムスタンプの取り込み口は `StageTimer.add` として用意済みだが `VK_QUERY_TYPE_TIMESTAMP` の発行は未実装** |
 
 ---
