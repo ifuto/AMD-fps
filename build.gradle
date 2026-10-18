@@ -338,6 +338,10 @@ tasks.register("verifyJar") {
                         // fail the build -- it would leave each blast allocating a boxed set the collector
                         // then walks, on the same thread the explosion runs on.
                         "net/amdfaster/explosion/BlastDamageBuffer.class",
+                        // The octree frustum walk. Asserted because a missing class would not fail the
+                        // build -- it would leave every section tested individually, every frame, and
+                        // nothing on the overlay would say so.
+                        "net/amdfaster/cull/HierarchicalFrustumCuller.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
