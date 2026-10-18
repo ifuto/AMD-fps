@@ -203,6 +203,7 @@
 | Z24 | メッシュシェーダ経路が実際に勝つ条件の判定 | ✅ | `render/MeshShaderBackendSelector` — 新しいステージ＝速い、を仮定せず実測で判定。`meshletWithinGuidance()` は **248 vertices が 64〜128 指針を超えると正直に false**（ブロック面の各頂点は独自の AO/light を持つので共有できない＝勝っても demo より小さい） |
 | Z25 | 爆発の割り当て削減を実際の確保率に対して定量化 | ✅ | `explosion/BlastAllocationModel` — 節約を主張するだけでなく 800 MB/s 基準に対してサイズを測る。young GC 頻度 = rate / eden（**G1 既定 5 % vs 調整値 30 % で 6 倍差**＝爆発が動かす量より大きい）。scalar replaced 1.919 ns/0 B vs 非 3.781 ns/16 B |
 | Z26 | フレームの submission 順序とバリア | ✅ | `vk/FrameDispatcher` — **semaphore は実行を順序付けるがキャッシュを flush しない**ので barrier も別途必要（代替ではなく独立要件）。`validate` は ①cull→draw barrier の存在 ②indirect command read ③uniform read ④acquire 待ち 1 個 ⑤present signal 1 個 ⑥fence 1 個（0 だと slot が再利用されず**2 フレーム目で停止**）を検査。`GpuRuntime.planFrame` は validate 失敗時に null を返す（呼び出し側が record すると失敗が例外でなく**地形**になるため） |
+| Z27 | ホット/コールド分割の要否判定 | ✅ | `cpu/HotColdSplitter` — **閾値はバイト数でなくキャッシュライン**。GPU インスタンスは 32 B→hot 20 B で **2→3 個/line（33.33 % 削減）**だが、`EntityInstance` は 32 B→hot 24 B でも**同じ 2 個/line なので分割は無価値**（第 2 配列を同期するコストだけ増える）。cold index は 4 B 加算なので 28 B でも同じ。**参考実装が「分割しろ」と言うケースでも否と言えるのが要点** |
 
 > ## ⛔⛔ この「未」を見つけたら — 先にこれを読め ⛔⛔
 >
