@@ -14,6 +14,7 @@ import net.amdfaster.gpu.SectionUpload;
 import net.amdfaster.gpu.SpecializationPlanner;
 import net.amdfaster.mesh.SectionMesh;
 import net.amdfaster.perf.GpuTimestampQuery;
+import net.amdfaster.vk.FrameDispatcher;
 import net.amdfaster.gpu.BindlessTextureTable;
 import net.amdfaster.gpu.BufferArena;
 import net.amdfaster.gpu.BufferPool;
@@ -446,6 +447,38 @@ public final class GpuRuntime {
      * @param maxDrawIndirectCount the device's own limit on indirect draws
      * @return the draws that will run, or 0 when the call is not legal as prepared
      */
+    /**
+     * Plans one frame's submissions and the barriers between them.
+     *
+     * <p>The parts already existed -- the context owns the queues, the culling pipeline records the
+     * dispatch, the indirect count draw sizes the call -- but nothing put them in order on a queue or said
+     * what had to be flushed between them, and that is the part where being wrong is incorrect rather than
+     * merely slow.
+     *
+     * <p>The rule that matters is that crossing from the cull to the indirect draw needs two independent
+     * things. Submission order gives execution ordering only within one queue, so a semaphore is needed
+     * across queues. And a semaphore orders execution but does not flush caches, so a pipeline barrier is
+     * also needed. The barrier has to name both reads the draw makes: the commands themselves, and the side
+     * data whose quad count becomes {@code indexCount}. Naming only the first leaves a stale index count
+     * and a draw of the wrong length.
+     *
+     * @param cullMillis       how long the cull dispatch takes
+     * @param computeQueueExists whether a separate compute queue was found
+     * @param uploadsThisFrame whether staging uploads precede the cull
+     * @param architecture     the identified generation, which sets the hand-off stall
+     * @return the frame plan, or null when it does not validate
+     */
+    public FrameDispatcher.Frame planFrame(double cullMillis, boolean computeQueueExists,
+                                           boolean uploadsThisFrame,
+                                           net.amdfaster.platform.AmdArchitecture architecture) {
+        double stall = FrameDispatcher.handoffStallMillis(architecture);
+        boolean async = FrameDispatcher.useAsyncCompute(cullMillis, stall, computeQueueExists);
+        FrameDispatcher.Frame frame = FrameDispatcher.plan(async, uploadsThisFrame);
+        // A plan that does not validate is not returned, because the caller would record it and the
+        // failure would be geometry rather than an exception.
+        return FrameDispatcher.validate(frame) == null ? frame : null;
+    }
+
     public int indirectDrawsExecuted(int countInBuffer, int maxDrawCount, boolean multiDrawIndirect,
                                      int maxDrawIndirectCount) {
         int executed = IndirectCountDraw.executed(countInBuffer, maxDrawCount);

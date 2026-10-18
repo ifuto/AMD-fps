@@ -395,6 +395,10 @@ tasks.register("verifyJar") {
                         // packing the destroy list matters: without it the saving is asserted rather than
                         // sized against the game's actual allocation rate.
                         "net/amdfaster/explosion/BlastAllocationModel.class",
+                        // The frame dispatcher. Asserted because an omitted barrier between the cull and
+                        // the indirect draw is not a crash: it is a draw reading commands that are not
+                        // visible yet, which shows up as flickering geometry.
+                        "net/amdfaster/vk/FrameDispatcher.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
