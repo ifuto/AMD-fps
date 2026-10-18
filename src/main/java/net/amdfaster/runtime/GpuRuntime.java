@@ -9,6 +9,7 @@ import net.amdfaster.gpu.IndirectDrawBatcher;
 import net.amdfaster.gpu.MeshUploadLayout;
 import net.amdfaster.gpu.MeshletGpuLayout;
 import net.amdfaster.gpu.SectionUpload;
+import net.amdfaster.gpu.SpecializationPlanner;
 import net.amdfaster.mesh.SectionMesh;
 import net.amdfaster.perf.GpuTimestampQuery;
 import net.amdfaster.gpu.BindlessTextureTable;
@@ -340,5 +341,23 @@ public final class GpuRuntime {
             }
         }
         return worst;
+    }
+
+    /**
+     * Plans which shader properties are folded into specialization constants.
+     *
+     * <p>Asked once per shader rather than per frame, because the answer depends on the property set and
+     * the pipeline budget and neither moves during a session. The plan is what keeps the folding from
+     * turning into a permutation explosion: three independent toggles want eight pipelines, and the third
+     * is dropped rather than compiled, since a fifth variant is more likely to be a rare combination than
+     * a common one and costs a hitch to build for one bind.
+     *
+     * @param shader     the shader being specialised
+     * @param properties its candidate properties, most valuable first
+     * @return which ones got IDs and how many pipelines that costs
+     */
+    public SpecializationPlanner.Plan planSpecialization(String shader,
+                                                        SpecializationPlanner.Property... properties) {
+        return SpecializationPlanner.plan(shader, properties);
     }
 }

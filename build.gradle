@@ -359,6 +359,10 @@ tasks.register("verifyJar") {
                         // fine, just fetching half the bytes it needs on the light and index streams, and
                         // nothing would report that.
                         "net/amdfaster/gpu/CoalescingVerifier.class",
+                        // The specialization planner. Asserted because nothing else would notice it
+                        // missing: every shader still compiles and every draw still works, just with the
+                        // branches left in the binary where folding would have deleted them.
+                        "net/amdfaster/gpu/SpecializationPlanner.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
