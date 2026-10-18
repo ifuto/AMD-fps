@@ -3,6 +3,7 @@ package net.amdfaster.runtime;
 import net.amdfaster.craft.RecipeSearchCache;
 import net.amdfaster.explosion.ChainReactionDeduplicator;
 import net.amdfaster.explosion.EntityExposureCache;
+import net.amdfaster.explosion.BlastDamageBuffer;
 import net.amdfaster.explosion.ExplosionBlockCache;
 import net.amdfaster.fluid.FlowDirectionCache;
 import net.amdfaster.fluid.FluidSurfaceMerger;
@@ -165,6 +166,14 @@ public final class MinecraftRuntime {
      * goes on, because the items the earlier blasts dropped are entities the later ones have to measure.
      */
     private final EntityExposureCache explosionExposure = new EntityExposureCache();
+    /**
+     * Holds the current blast's destroy list in a reused array of packed positions.
+     *
+     * <p>Owned here rather than per blast because the point is reuse: a chain's blasts are all about the
+     * same size, so the first sizes the buffer and the rest never allocate. Allocating one per explosion
+     * is what the boxed path does and is the cost this removes.
+     */
+    private final BlastDamageBuffer blastDamage = new BlastDamageBuffer();
     /** Caches fluid flow direction, which recomputing every tick is what makes water expensive. */
     private final FlowDirectionCache flow = new FlowDirectionCache();
     /** Merges fluid surfaces into one quad instead of one per block. */
@@ -442,6 +451,16 @@ public final class MinecraftRuntime {
      */
     public EntityExposureCache explosionExposure() {
         return this.explosionExposure;
+    }
+
+    /**
+     * The current blast's destroy list.
+     *
+     * <p>Call {@link BlastDamageBuffer#clear()} at the start of each blast. Not clearing would carry the
+     * previous blast's positions into the next one and destroy blocks this blast never touched.
+     */
+    public BlastDamageBuffer blastDamage() {
+        return this.blastDamage;
     }
 
     /** The flow direction cache. */

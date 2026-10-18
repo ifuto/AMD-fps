@@ -334,6 +334,10 @@ tasks.register("verifyJar") {
                         // would not fail the build -- it would leave sections streaming at a level nobody
                         // chose and the horizon would fill in an order nobody picked.
                         "net/amdfaster/mesh/LodStreamScheduler.class",
+                        // The destroy list, packed and reused. Asserted because a missing class would not
+                        // fail the build -- it would leave each blast allocating a boxed set the collector
+                        // then walks, on the same thread the explosion runs on.
+                        "net/amdfaster/explosion/BlastDamageBuffer.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
