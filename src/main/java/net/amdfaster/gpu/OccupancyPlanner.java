@@ -199,10 +199,10 @@ public final class OccupancyPlanner {
     public static int recommendWaveSize(Footprint footprint, AmdArchitecture architecture) {
         require(footprint != null, "a footprint is needed");
         require(architecture != null, "an architecture is needed");
-        if (!architecture.wave32()) {
+        if (!architecture.supportsWave32()) {
             return 64;
         }
-        if (!architecture.wave64()) {
+        if (!architecture.supportsWave64()) {
             return 32;
         }
         int registers = registersPerSimd(architecture);
