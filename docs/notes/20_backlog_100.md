@@ -161,7 +161,7 @@
 
 | # | 項目 | 状態 | 場所／何が足りないか |
 |---|---|---|---|
-| 91 | GPU 世代別の最適化プロファイル | 部分 | `platform/AmdArchitecture`, `vk/DeviceScorer`。経路選択が無い |
+| 91 | GPU 世代別の最適化プロファイル | ✅ | `platform/PathSelector`。**`DepthPrepassSelector.earlyZSuppressed` に誰も値を渡していなかった**のを世代から解決。RADV の GFX12 HiZ 緩和は既定 `full`＝**early-Z 抑制**、他世代は `DISABLED`。**観測値が世代を上回る**（`full_rez` は late re-Z で early-Z を回復、非 RADV には緩和自体が無い）。`PlatformRuntime.withHizWorkaround` で供給 |
 | 92 | AMD 向けシェーダバリアント | ✅ | `gpu/SpecializationPlanner`。SPIR-V spec ID を割当て pipeline 数を **4 個**で上限（3 トグルは 8 個を要求 → 3 番目を skip）。**divergent は予算に関係なく絶対に畳まない**（1 lane の答えを全 lane に焼く＝遅いのでなく誤描画）。payload は 1 entry **20 B**（値 8 + map entry 12） |
 | 93 | Wave／ワークグループサイズの計測最適化 | ✅ | `gpu/OccupancyPlanner`。**レジスタ割当粒度を入れる**（RDNA1/2=8, RDNA3/4=**24**, GCN5=4）。96 VGPR=16 waves、**97=120 割当→12**、168→9、128→10。wave64 は 64 VGPR で **640 lanes** vs wave32 512、**76 VGPR で同点**（cross-lane reduction と同点は wave32 優先）。LDS は別制限（RDNA3 64 KB/CU） |
 | 94 | レジスタ使用量と占有率の調整 | 完了（`platform/OccupancyModel` — 3 つの上限を合成し**どれが効いているかを名指し**。世代別の満占有率線と「次の段まで何レジスタ」を返す） | 設計ルール（VGPR ≤64）のみ |
@@ -196,6 +196,7 @@
 | Z17 | specialization constant の ID 割当と pipeline 予算 | ✅ | `gpu/SpecializationPlanner` — 価値の高い順に採用し、積が 4 を超えるものは skip（全体を失敗にしない）。単一値は積が動かないので無償で畳む。Vulkan samples 4.4 %、recompiler 実測 21〜28 % GPU 時間減 |
 | Z18 | Wave サイズをレジスタ圧から選択 | ✅ | `gpu/OccupancyPlanner` — occupancy は階段（slope ではない）。**粒度をモデル化しないと 97 VGPR を 15 waves と答え、実機の 12 より 25 % 楽観的になる**。whitepaper 4 点＋worked example 2 点を全て再現 |
 | Z19 | どの爆発がブロックキャッシュを共有できるかの判定 | ✅ | `explosion/BlastPhasePlanner` — **最大到達距離で判定する**（intensity はレイごとに 0.7〜1.3 で roll され判定時には未知。平均で計画すると推測に依存する）。保守側は invalidate 1 回増、誤ると「壁が消えているのにレイが止まる」＝**壊れるべき地形が残る**（弱い爆発に見えるので何も報告しない） |
+| Z20 | 世代別プロファイルの実経路選択 | ✅ | `platform/PathSelector` — 各決定子は既に世代を前提に書かれていたが**入力を供給するものが無かった**（＝一度推測で渡して、その推測が外れた全世代で誤ったまま）。early-Z 抑制 / wave size / dynamic VGPR / workgroup / meshlet quads / LDS を一括解決。UNKNOWN は全軸で保守側＋`tuned()` が false |
 
 > ## ⛔⛔ この「未」を見つけたら — 先にこれを読め ⛔⛔
 >
