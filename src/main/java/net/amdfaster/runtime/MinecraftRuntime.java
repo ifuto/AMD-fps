@@ -2,6 +2,7 @@ package net.amdfaster.runtime;
 
 import net.amdfaster.craft.RecipeSearchCache;
 import net.amdfaster.explosion.ChainReactionDeduplicator;
+import net.amdfaster.explosion.EntityExposureCache;
 import net.amdfaster.explosion.ExplosionBlockCache;
 import net.amdfaster.fluid.FlowDirectionCache;
 import net.amdfaster.fluid.FluidSurfaceMerger;
@@ -156,6 +157,14 @@ public final class MinecraftRuntime {
     private final ExplosionBlockCache explosionBlocks = new ExplosionBlockCache();
     /** Stops one blast re-resolving blocks another blast already destroyed. */
     private final ChainReactionDeduplicator chainReaction = new ChainReactionDeduplicator();
+    /**
+     * Caches the block lookups behind explosion <em>entity</em> damage.
+     *
+     * <p>The other two cover which blocks an explosion destroys. This covers how hard it hits the things
+     * standing near it, which is a separate raycast per entity and the half that gets dearer as a chain
+     * goes on, because the items the earlier blasts dropped are entities the later ones have to measure.
+     */
+    private final EntityExposureCache explosionExposure = new EntityExposureCache();
     /** Caches fluid flow direction, which recomputing every tick is what makes water expensive. */
     private final FlowDirectionCache flow = new FlowDirectionCache();
     /** Merges fluid surfaces into one quad instead of one per block. */
@@ -423,6 +432,16 @@ public final class MinecraftRuntime {
     /** The chain reaction deduplicator. */
     public ChainReactionDeduplicator chainReaction() {
         return this.chainReaction;
+    }
+
+    /**
+     * The explosion entity exposure cache.
+     *
+     * <p>Both this and {@link #chainReaction()} hold answers that go stale at the end of the tick, so both
+     * are cleared from the tick end rather than left to hold them.
+     */
+    public EntityExposureCache explosionExposure() {
+        return this.explosionExposure;
     }
 
     /** The flow direction cache. */

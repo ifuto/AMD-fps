@@ -497,6 +497,13 @@ public final class AmdFasterRuntime {
         // tiers exist to avoid; missing the second would test the same entities every tick and none of the
         // others, which is a staggered schedule that does not stagger.
         this.entities.endTick();
+        // Ends the tick's chain reaction and drops the exposure answers with it. Neither is a tidy-up:
+        // both hold block answers, and between ticks blocks are placed, water flows and pistons move. A
+        // resistance or obstruction answer carried across that boundary describes a world that is no longer
+        // there -- an explosion that pushes through a wall already removed, or an entity reported as
+        // shielded by a block that is now air and so takes no damage or knockback it should have taken.
+        this.minecraft.chainReaction().endTick();
+        this.minecraft.explosionExposure().endTick();
         onPlayerMoved();
         sampleHeap();
     }
