@@ -85,8 +85,7 @@ class DepthPrepassSelectorTest {
         assertEquals(Decision.PREPASS, selector.decide(in(Math.nextUp(threshold), 0.0)),
                 "one ulp above it, two");
         assertEquals(4L, selector.singlePasses());
-        assertEquals(1L, selector.prepasses());
-        assertEquals(0L, selector.prepasses());
+        assertEquals(1L, selector.prepasses(), "the one ulp above the threshold");
     }
 
     @Test
