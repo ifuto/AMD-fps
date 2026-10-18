@@ -35,7 +35,7 @@
 | # | 項目 | 状態 | 場所／何が足りないか |
 |---|---|---|---|
 | 1 | 独自レンダリングバックエンド | 部分 | `vk/VkContext`, `vk/Swapchain`, `gpu/CullingPipeline`。**ディスパッチ層が無い** |
-| 2 | GPU 機能の自動検出 | 部分 | `platform/GpuReport`, `GpuIdentity`, `vk/DeviceScorer`。実行経路の自動選択が無い |
+| 2 | GPU 機能の自動検出 | ✅ | `platform/FeaturePaths`。**検出は既にあったが経路選択が無かった**（＝各呼び出し箇所が独自の fallback を持つ）。6 経路を決定し**理由を結果として返す**（ログではない）。**拡張の露出≠その世代で速い**：`VK_EXT_mesh_shader` があっても RDNA2 以降でなければ mesh 経路にしない。**present にも missing にも無い拡張は不在扱い**（probe 中途失敗で両方不完全なことがある）。`reversedZ` 欠落は低速化でなく**精度損失**として報告 |
 | 3 | Multi-Draw Indirect | 部分 | シェーダは `draws[]` を書くが、`vkCmdDrawIndexedIndirectCount` の呼び出しが無い |
 | 4 | GPU 生成の描画コマンド | **完了** | `meshlet_cull.comp` が 1 ウェーブ 1 アトミックで圧縮リストを生成 |
 | 5 | 永続マップドバッファ | **完了（リング）** | `gpu/UploadRing` — スライス単位のリング。`GpuBuffer` の常時マップとの結線は未 |
@@ -198,6 +198,7 @@
 | Z19 | どの爆発がブロックキャッシュを共有できるかの判定 | ✅ | `explosion/BlastPhasePlanner` — **最大到達距離で判定する**（intensity はレイごとに 0.7〜1.3 で roll され判定時には未知。平均で計画すると推測に依存する）。保守側は invalidate 1 回増、誤ると「壁が消えているのにレイが止まる」＝**壊れるべき地形が残る**（弱い爆発に見えるので何も報告しない） |
 | Z20 | 世代別プロファイルの実経路選択 | ✅ | `platform/PathSelector` — 各決定子は既に世代を前提に書かれていたが**入力を供給するものが無かった**（＝一度推測で渡して、その推測が外れた全世代で誤ったまま）。early-Z 抑制 / wave size / dynamic VGPR / workgroup / meshlet quads / LDS を一括解決。UNKNOWN は全軸で保守側＋`tuned()` が false |
 | Z21 | GPU バッファの再利用と fence 律速 | ✅ | `gpu/BufferPool` — 実測事例ではこの形状（数 KiB の小バッファを生成・破棄）が **vkAllocateMemory/vkFreeMemory 呼び出しの 85〜96 %** を占め、RADV では free が libdrm のプロセス全体 VA hole リストを走査。バグ 2 件: slack が生バイト基準、`refusedEarly` が加算されない死んだ API（削除） |
+| Z22 | 検出した拡張を実際の実行経路に変換 | ✅ | `platform/FeaturePaths` — 全経路に必ず動く fallback（**古い iGPU で起動しない Mod は、遅くても動く Mod より悪い**）。`GpuReport` の probe 結果を `PlatformRuntime.featurePaths()` が消費。理由文に欠落拡張名を含めるので、FPS が低いユーザーが 12 個の条件のどれかを推測せずに済む |
 
 > ## ⛔⛔ この「未」を見つけたら — 先にこれを読め ⛔⛔
 >
