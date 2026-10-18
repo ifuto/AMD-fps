@@ -12,6 +12,7 @@ import net.amdfaster.mesh.LodStreamScheduler;
 import net.amdfaster.mesh.MeshSweepBounds;
 import net.amdfaster.mesh.MeshletQuantizer;
 import net.amdfaster.mesh.QuadTemplateLibrary;
+import net.amdfaster.mesh.SectionDeltaPlanner;
 import net.amdfaster.mesh.SectionMesh;
 import net.amdfaster.mesh.SparseVoxelOctree;
 import net.amdfaster.mesh.TriangleStripPacker;
@@ -134,6 +135,16 @@ public final class MeshRuntime {
      */
     private final LightOnlyRebuildPlanner rebuildKinds = new LightOnlyRebuildPlanner();
 
+    /**
+     * Works out which part of a section one block change invalidates.
+     *
+     * <p>A block change marks its whole section dirty and the section is re-meshed -- 4,096 cells swept,
+     * every face tested, ambient occlusion baked -- for a change that touched one block and its six
+     * facing faces. With greedy merging off that is 27 cells; with it on the affected run has to be
+     * re-derived whole, which the planner expands for rather than the caller guessing.
+     */
+    private final SectionDeltaPlanner deltaRegions = new SectionDeltaPlanner();
+
     private final LodStreamScheduler lodStream = new LodStreamScheduler();
 
     /** Accounting from the last build. */
@@ -206,6 +217,11 @@ public final class MeshRuntime {
     /** The layer-separated rebuild planner. */
     public LightOnlyRebuildPlanner rebuildKinds() {
         return this.rebuildKinds;
+    }
+
+    /** The intra-section delta planner. */
+    public SectionDeltaPlanner deltaRegions() {
+        return this.deltaRegions;
     }
 
     public MeshJobQueue queue() {

@@ -350,6 +350,10 @@ tasks.register("verifyJar") {
                         // fail the build -- it would leave every light change rebuilding the whole mesh,
                         // which is slower but still correct, so nothing would report it.
                         "net/amdfaster/mesh/LightOnlyRebuildPlanner.class",
+                        // The intra-section delta region. Asserted because a missing class would not fail
+                        // the build -- it would leave every block change re-meshing a whole 4,096 cell
+                        // section, which is slower but still correct, so nothing would report it.
+                        "net/amdfaster/mesh/SectionDeltaPlanner.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
