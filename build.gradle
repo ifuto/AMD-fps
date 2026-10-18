@@ -317,6 +317,11 @@ tasks.register("verifyJar") {
                         // a CPU-bound frame from a GPU-bound one, and the benchmark would still look
                         // complete with four numbers on screen.
                         "net/amdfaster/perf/GpuTimestampQuery.class",
+                        // The faster random source. Asserted because its absence would not break the build
+                        // and would not change a single picture: particle jitter would quietly go back to
+                        // the contended legacy path, and the named hot spot would simply stop being
+                        // addressed with nothing to show it.
+                        "net/amdfaster/rng/FastRandom.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
