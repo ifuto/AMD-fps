@@ -73,17 +73,20 @@ class FrameDispatcherTest {
         assertEquals(1, frame.submissions().stream().filter(Submission::signalsPresent).count());
         assertEquals(1, frame.submissions().stream().filter(Submission::fence).count());
 
-        // The draw is the one that does all three, and the present is a separate queue operation.
-        Submission draw = frame.submissions().get(2);
+        // With no upload the frame is cull, draw, present, so the draw is the middle one. It is the
+        // submission that does all three, and the present is a separate queue operation after it.
+        assertEquals(3, frame.submissionCount());
+        assertEquals(Stage.CULL, frame.submissions().get(0).stage());
+        Submission draw = frame.submissions().get(1);
         assertEquals(Stage.DRAW, draw.stage());
         assertTrue(draw.waitsImageAvailable());
         assertTrue(draw.signalsPresent());
         assertTrue(draw.fence());
-        assertEquals(Stage.PRESENT, frame.submissions().get(3).stage());
+        assertEquals(Stage.PRESENT, frame.submissions().get(2).stage());
     }
 
     @Test
-    void theGraphicsQueuePlanCollapsesToTwoSubmissions() {
+    void theGraphicsQueuePlanNeedsNoSemaphoreBetweenCullAndDraw() {
         // No hand-off, so no semaphore between the cull and the draw -- the barrier inside one command
         // buffer does the memory work and submission order does the rest.
         Frame frame = FrameDispatcher.plan(false, false);
