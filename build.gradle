@@ -363,6 +363,10 @@ tasks.register("verifyJar") {
                         // missing: every shader still compiles and every draw still works, just with the
                         // branches left in the binary where folding would have deleted them.
                         "net/amdfaster/gpu/SpecializationPlanner.class",
+                        // The occupancy planner. Asserted because a missing class would not fail anything:
+                        // every dispatch would still run, just at a wave size picked by nothing, and the
+                        // shader would sit on half the lanes it could have had.
+                        "net/amdfaster/gpu/OccupancyPlanner.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",

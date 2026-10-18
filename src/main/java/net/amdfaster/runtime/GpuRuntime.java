@@ -7,6 +7,7 @@ import net.amdfaster.gpu.EntityUploadLayout;
 import net.amdfaster.gpu.GpuBuffer;
 import net.amdfaster.gpu.IndirectDrawBatcher;
 import net.amdfaster.gpu.MeshUploadLayout;
+import net.amdfaster.gpu.OccupancyPlanner;
 import net.amdfaster.gpu.MeshletGpuLayout;
 import net.amdfaster.gpu.SectionUpload;
 import net.amdfaster.gpu.SpecializationPlanner;
@@ -359,5 +360,24 @@ public final class GpuRuntime {
     public SpecializationPlanner.Plan planSpecialization(String shader,
                                                         SpecializationPlanner.Property... properties) {
         return SpecializationPlanner.plan(shader, properties);
+    }
+
+    /**
+     * Picks the wave size and workgroup size a compute shader should dispatch with.
+     *
+     * <p>Asked when the pipeline is built rather than per dispatch, because the answer depends on the
+     * register count the driver reports for the compiled shader and that does not change between frames.
+     * The choice flips on that count: wave64 puts more lanes in flight while the shader is cheap and
+     * fewer once it is not, since a wave64 draws twice the lanes from the same register file and so takes
+     * twice the slots.
+     *
+     * @param footprint    the shader's register and LDS cost
+     * @param architecture the device it will run on
+     * @return the occupancy that follows, at the recommended wave size
+     */
+    public OccupancyPlanner.Occupancy planOccupancy(OccupancyPlanner.Footprint footprint,
+                                                    net.amdfaster.platform.AmdArchitecture architecture) {
+        int wave = OccupancyPlanner.recommendWaveSize(footprint, architecture);
+        return OccupancyPlanner.occupancy(footprint, wave, architecture);
     }
 }
