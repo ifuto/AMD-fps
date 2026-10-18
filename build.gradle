@@ -403,6 +403,10 @@ tasks.register("verifyJar") {
                         // distant sound mixed at full rate, which costs the same and sounds identical,
                         // so nothing would report the difference.
                         "net/amdfaster/sound/AudioLodSelector.class",
+                        // The hot/cold splitter. Asserted because its job is as often to say a split is
+                        // not worth making as to plan one, and a missing class would silently leave both
+                        // answers unasked.
+                        "net/amdfaster/cpu/HotColdSplitter.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
