@@ -76,8 +76,10 @@ class BufferPoolTest {
         assertEquals(0, pool.pooledCount(), "retired but not yet released");
 
         Slot again = pool.acquire(4096, 4L);
-        assertEquals(1, pool.allocatedFresh(), "nothing was available, so a fresh one was made");
-        assertEquals(0, pool.reused());
+        // Cumulative, and this is the second acquisition in the test -- the first one above also had an
+        // empty pool to draw from. What matters is that the retired buffer was not among them.
+        assertEquals(2, pool.allocatedFresh(), "nothing was available, so a fresh one was made");
+        assertEquals(0, pool.reused(), "the pending buffer was not handed out");
 
         assertEquals(1, pool.releaseThrough(5L), "frame 5's fence has now signalled");
         assertEquals(0, pool.pendingCount());
