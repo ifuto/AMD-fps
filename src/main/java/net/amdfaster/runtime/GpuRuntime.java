@@ -5,6 +5,7 @@ import net.amdfaster.gpu.CoalescingVerifier;
 import net.amdfaster.gpu.CullingPipeline;
 import net.amdfaster.gpu.EntityUploadLayout;
 import net.amdfaster.gpu.GpuBuffer;
+import net.amdfaster.gpu.IndirectCountDraw;
 import net.amdfaster.gpu.IndirectDrawBatcher;
 import net.amdfaster.gpu.MeshUploadLayout;
 import net.amdfaster.gpu.OccupancyPlanner;
@@ -414,5 +415,47 @@ public final class GpuRuntime {
             this.bufferPool.retire(size, retiredFrame);
         }
         return this.bufferPool.releaseThrough(releasedThroughFrame);
+    }
+
+    /**
+     * Prepares the draw call for the cull shader's output.
+     *
+     * <p>The cull shader already writes dense {@code VkDrawIndexedIndirectCommand} entries and a separate
+     * visible count, so the draw reads how much survived from the device instead of the host reading the
+     * cull results back -- which would stall every frame on a value only known after the compute pass.
+     *
+     * <p>What this adds is the arithmetic that has to be right before the call: the buffer has to hold the
+     * count it claims, and {@code n} commands occupy {@code stride x (n - 1) + 20} bytes rather than
+     * {@code stride x n}, because the last command ends at its own end. Overstating it is a validation
+     * error before anything draws.
+     *
+     * @param drawCount   how many draws the buffer may hold
+     * @param bufferBytes how large the command buffer is
+     * @return the validated call, or null when the buffer cannot hold that many
+     */
+    public IndirectCountDraw.Call prepareIndirectDraw(int drawCount, long bufferBytes) {
+        return IndirectCountDraw.prepare(drawCount, bufferBytes, IndirectCountDraw.COUNT_OFFSET_BYTES);
+    }
+
+    /**
+     * How many draws the device will actually execute.
+     *
+     * @param countInBuffer      what the cull shader wrote
+     * @param maxDrawCount       the cap the call was prepared with
+     * @param multiDrawIndirect  whether the device feature is enabled
+     * @param maxDrawIndirectCount the device's own limit on indirect draws
+     * @return the draws that will run, or 0 when the call is not legal as prepared
+     */
+    public int indirectDrawsExecuted(int countInBuffer, int maxDrawCount, boolean multiDrawIndirect,
+                                     int maxDrawIndirectCount) {
+        int executed = IndirectCountDraw.executed(countInBuffer, maxDrawCount);
+        if (!IndirectCountDraw.multiDrawAllowed(multiDrawIndirect, executed)
+                || !IndirectCountDraw.withinDeviceLimit(executed, maxDrawIndirectCount)) {
+            // Either the feature is missing or the device caps indirect draws below the batch, and in
+            // both cases the batch cannot be issued as one call. Zero rather than a guess, so the caller
+            // falls back to per-meshlet draws instead of issuing an invalid one.
+            return 0;
+        }
+        return executed;
     }
 }

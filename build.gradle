@@ -383,6 +383,10 @@ tasks.register("verifyJar") {
                         // every probed extension unused, and the renderer would still run -- just on the
                         // fallback path, which looks identical apart from the frame rate.
                         "net/amdfaster/platform/FeaturePaths.class",
+                        // The indirect count draw arithmetic. Asserted because an overstated maxDrawCount
+                        // is a validation error at the draw, and a device count that is not clamped would
+                        // let a broken cull shader draw past the buffer that was allocated.
+                        "net/amdfaster/gpu/IndirectCountDraw.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
