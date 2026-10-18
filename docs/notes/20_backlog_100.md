@@ -162,7 +162,7 @@
 | # | 項目 | 状態 | 場所／何が足りないか |
 |---|---|---|---|
 | 91 | GPU 世代別の最適化プロファイル | 部分 | `platform/AmdArchitecture`, `vk/DeviceScorer`。経路選択が無い |
-| 92 | AMD 向けシェーダーバリアント | 部分 | 固定 6 シェーダ。specialization constant は未使用 |
+| 92 | AMD 向けシェーダバリアント | ✅ | `gpu/SpecializationPlanner`。SPIR-V spec ID を割当て pipeline 数を **4 個**で上限（3 トグルは 8 個を要求 → 3 番目を skip）。**divergent は予算に関係なく絶対に畳まない**（1 lane の答えを全 lane に焼く＝遅いのでなく誤描画）。payload は 1 entry **20 B**（値 8 + map entry 12） |
 | 93 | Wave／ワークグループサイズの計測最適化 | 部分 | 64 固定（RDNA wave32×2 / GCN wave64×1）。計測していない |
 | 94 | レジスタ使用量と占有率の調整 | 完了（`platform/OccupancyModel` — 3 つの上限を合成し**どれが効いているかを名指し**。世代別の満占有率線と「次の段まで何レジスタ」を返す） | 設計ルール（VGPR ≤64）のみ |
 | 95 | メモリアクセスのコアレッシング | ✅ | `gpu/CoalescingVerifier`。position/attribute は 1,984 B=31 line で **完全にコアレース（100 %）**、light は 992 B=15.5 line で奇数メッシュレットが line 途中開始し **66.67 %**、index は 372 B=5.8125 line で **50 %**。stride 8 に 4 B 読みは **50 %** |
@@ -193,6 +193,7 @@
 | Z14 | ライトのみ再構築の判定 | ✅ | `mesh/LightOnlyRebuildPlanner` — ライトは独立頂点ストリームで、メッシュレット 5,332 B のうち 992 B（**18.60%**）がライト。だからブロックが変わらずライトだけ変わったセクションはそのストリームだけ書き換え、greedy meshing と AO を丸ごと飛ばす — **81.40%** のアップロードと、メッシュを生む CPU 作業の全部（こちらが大きい半分）。**分離レイアウトは最適化でなく形式そのもの**: 位置・属性・ライトを1頂点1ワードに interleave するレンダラはどれかを変えるために全部を書き直す必要があり、この判定は存在し得ない。だから項目14はメッシュ形式を選ぶ前には閉じられず、今閉じられる。**幾何はライトを包含する** — AO はライトからベイクされメッシュは両方から再構築されるので、幾何リビルドは既にライトを再計算している。両方 dirty なセクションは1回のリビルドで、両方を計画するとライトストリームを2回アップロードし2回目は同じバイトを運ぶ。`RebuildScheduler` は幾何が覆うときにライトエントリを既に落とす。これはその判定の消費者で、それでも組を渡された回数を数える（独自の簿記をする呼び出し側が見えるように）。**「ビルド前にドレイン」は load-bearing で反転しやすい**: ビルド中に届いたブロック変更はセクションを再マークし、その瞬間まだ pending に居ればマークはエントリごと捨てられる。残るのは GPU メッシュがブロックと食い違うセクションで、何か無関係な変更が dirty にするまで誰も気づかない — **勝手に治らない穴**。どちらでも dirty でないセクションは丁寧に答えず投げる（そこに到達するのはスケジュラが何もマークしていないものを渡したバグで、既定の答えはそれを隠す） |
 | Z15 | セクション内部の差分範囲 | ✅ | `mesh/SectionDeltaPlanner` — ブロック 1 個の更新は 3×3×3=**27 cells（99.34 % 削減）**、端は clamp で corner **8** / edge **18** / face **12**。greedy merge は連結 run 全体を再導出する必要があるため **section 全体に拡張し `cellsAvoidedPercent` は 0.0 %**。meshlet は `1536/62 → 25`、63 quads で 2 個目 |
 | Z16 | メッシュバッファの stride がコアレース可能かの検証 | ✅ | `gpu/CoalescingVerifier` — レーンごとの byte 範囲を列挙し line の和集合を数える（推定しない）。RDNA L0/Infinity Cache は 64 B line なので 64 を既定に。`verifySection` は 6 stream を返し `GpuRuntime.worstCoalescing` が最悪を報告 |
+| Z17 | specialization constant の ID 割当と pipeline 予算 | ✅ | `gpu/SpecializationPlanner` — 価値の高い順に採用し、積が 4 を超えるものは skip（全体を失敗にしない）。単一値は積が動かないので無償で畳む。Vulkan samples 4.4 %、recompiler 実測 21〜28 % GPU 時間減 |
 
 > ## ⛔⛔ この「未」を見つけたら — 先にこれを読め ⛔⛔
 >
