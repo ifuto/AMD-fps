@@ -166,8 +166,10 @@ public final class AudioLodSelector {
         }
         if (maxDistance <= 0.0) {
             // Nothing to measure a fraction of, and a non-attenuating sound is heard at full volume
-            // anywhere, so it is never a candidate for a lower tier.
-            return new Placement(Tier.FULL, attenuated, decibels(attenuated), true);
+            // anywhere, so it is never a candidate for a lower tier. Control rate follows the same rule as
+            // everywhere else -- it applies below FULL, and this is FULL -- which also happens to be the
+            // honest answer for a sound with no spatial parameters to update in the first place.
+            return new Placement(Tier.FULL, attenuated, decibels(attenuated), false);
         }
         double fraction = distance / maxDistance;
         Tier tier;
