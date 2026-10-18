@@ -19,7 +19,15 @@ import java.util.List;
  *   <tr><td>root constant</td><td>push constant, per 4 bytes</td><td>1</td></tr>
  *   <tr><td>descriptor table</td><td>one bound descriptor set</td><td>1</td></tr>
  *   <tr><td>root CBV/SRV/UAV</td><td>one push descriptor</td><td>2</td></tr>
+ *   <tr><td>&mdash;</td><td>dynamic buffer, robust buffer access off</td><td>2</td></tr>
+ *   <tr><td>&mdash;</td><td>dynamic buffer, robust buffer access on</td><td>4</td></tr>
  * </table>
+ *
+ * <p>The dynamic buffer rows are the Vulkan side of the guide's table with no D3D12 equivalent, and they
+ * are the expensive ones: four DWORDs is a third of the whole 13 DWORD budget for a single binding. A
+ * pipeline that binds its per-frame uniform buffer dynamically under robust access spends that before it
+ * has bound anything else, so the choice between the two is worth making deliberately rather than
+ * inheriting from whatever the device features happened to enable.
  */
 public final class RootSignatureBudget {
 
@@ -29,7 +37,23 @@ public final class RootSignatureBudget {
         /** One descriptor set bound at draw time. */
         DESCRIPTOR_SET(1),
         /** One descriptor pushed inline at draw time, without a set. */
-        PUSH_DESCRIPTOR(2);
+        PUSH_DESCRIPTOR(2),
+        /**
+         * One descriptor bound with a dynamic offset, with robust buffer access off.
+         *
+         * <p>Twice a plain descriptor set. The offset has to live somewhere the shader can reach it, and
+         * that is what the extra DWORD is.
+         */
+        DYNAMIC_BUFFER(2),
+        /**
+         * One descriptor bound with a dynamic offset, with robust buffer access on.
+         *
+         * <p>Twice again. Robust access adds the bounds the driver checks each access against, so a
+         * dynamic buffer under it costs four DWORDs against a plain set's one -- which is the whole
+         * argument for keeping the per-frame data in one set with a dynamic offset rather than spreading
+         * it across several, and for knowing which of the two a pipeline is actually using.
+         */
+        DYNAMIC_BUFFER_ROBUST(4);
 
         private final int dwords;
 
@@ -71,6 +95,33 @@ public final class RootSignatureBudget {
         boolean fits = total <= budget;
         return new Verdict(total, fits, fits ? 0 : total - budget,
                 String.join("+", parts) + " = " + total + " DWORDs (budget " + budget + ")");
+    }
+
+    /**
+     * Convenience: the shape most of this mod's pipelines have.
+     *
+     * @param pushConstantBytes bytes in the push constant range
+     * @param descriptorSets    sets bound without a dynamic offset
+     * @param dynamicBuffers    sets bound with one, which is where the per-frame data lives
+     * @param robustBufferAccess whether the device feature is enabled, which doubles a dynamic buffer's
+     *                           cost from two DWORDs to four
+     */
+    public static Verdict check(int pushConstantBytes, int descriptorSets, int dynamicBuffers,
+                                boolean robustBufferAccess) {
+        List<Parameter> parameters = new ArrayList<>(3);
+        if (pushConstantBytes > 0) {
+            parameters.add(new Parameter(Kind.PUSH_CONSTANT_DWORD,
+                    (pushConstantBytes + 3) / 4, "pushConstants"));
+        }
+        if (descriptorSets > 0) {
+            parameters.add(new Parameter(Kind.DESCRIPTOR_SET, descriptorSets, "descriptorSets"));
+        }
+        if (dynamicBuffers > 0) {
+            parameters.add(new Parameter(
+                    robustBufferAccess ? Kind.DYNAMIC_BUFFER_ROBUST : Kind.DYNAMIC_BUFFER,
+                    dynamicBuffers, robustBufferAccess ? "dynamicRobust" : "dynamic"));
+        }
+        return check(parameters);
     }
 
     /** Convenience: push constants in bytes plus bound descriptor sets, the common shape. */

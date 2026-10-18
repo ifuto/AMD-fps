@@ -109,6 +109,57 @@ class RootSignatureBudgetTest {
     }
 
     @Test
+    void aDynamicBufferCostsTwiceAPlainSetAndFourWithRobustAccess() {
+        // The Vulkan rows of AMD's table with no D3D12 equivalent. The offset has to live somewhere the
+        // shader can reach it, and robust access adds the bounds checked on every access.
+        assertEquals(1, new Parameter(Kind.DESCRIPTOR_SET, 1, "s").dwords());
+        assertEquals(2, new Parameter(Kind.DYNAMIC_BUFFER, 1, "d").dwords());
+        assertEquals(4, new Parameter(Kind.DYNAMIC_BUFFER_ROBUST, 1, "d").dwords());
+    }
+
+    @Test
+    void robustAccessCanBeWhatPushesALayoutOverTheBudget() {
+        // Same pipeline, same bindings, and the only difference is a device feature. 13 DWORDs fits
+        // exactly; turning robust buffer access on makes it 19 and it does not. That is worth knowing
+        // before the pipeline is built rather than finding it in a frame capture that shows nothing.
+        Verdict off = RootSignatureBudget.check(16, 3, 3, false);
+        Verdict on = RootSignatureBudget.check(16, 3, 3, true);
+
+        assertEquals(13, off.dwords());
+        assertTrue(off.fits());
+        assertEquals(19, on.dwords());
+        assertFalse(on.fits());
+        assertEquals(6, on.overBy());
+        assertTrue(on.detail().contains("dynamicRobust=12"), on.detail());
+        assertTrue(off.detail().contains("dynamic=6"), off.detail());
+    }
+
+    @Test
+    void oneRobustDynamicBindingIsAThirdOfTheWholeBudget() {
+        // Four of thirteen DWORDs, before anything else is bound. Which is the argument for one set with
+        // a dynamic offset over several, and for knowing which of the two a pipeline actually uses.
+        Verdict v = RootSignatureBudget.check(0, 0, 1, true);
+
+        assertEquals(4, v.dwords());
+        assertTrue(v.fits());
+        assertEquals(4.0 / AmdArchitecture.ROOT_SIGNATURE_DWORD_BUDGET, 4.0 / 13.0, 1e-12);
+    }
+
+    @Test
+    void theCullPipelinesOwnShapeFitsEitherWay() {
+        // CullBindings has 8 bytes of push constants and one descriptor set. Adding a dynamic buffer for
+        // the per-frame data stays inside the budget with robust access on or off, so this one is not a
+        // trade -- but the same shape with three dynamic buffers is, and that is the case worth catching.
+        assertEquals(3, RootSignatureBudget.check(8, 1, 0, true).dwords());
+        assertEquals(5, RootSignatureBudget.check(8, 1, 1, false).dwords());
+        assertEquals(7, RootSignatureBudget.check(8, 1, 1, true).dwords());
+        assertTrue(RootSignatureBudget.check(8, 1, 1, true).fits());
+
+        assertFalse(RootSignatureBudget.check(8, 1, 3, true).fits(), "15 DWORDs");
+        assertTrue(RootSignatureBudget.check(8, 1, 3, false).fits(), "9 DWORDs");
+    }
+
+    @Test
     void theDetailNamesWhatCostWhat() {
         String detail = RootSignatureBudget.check(32, 2).detail();
         assertTrue(detail.contains("pushConstants=8"), detail);
