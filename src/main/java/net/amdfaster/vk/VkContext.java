@@ -1,5 +1,6 @@
 package net.amdfaster.vk;
 
+import net.amdfaster.perf.GpuTimestampQuery;
 import net.amdfaster.platform.GpuIdentity;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -98,6 +99,7 @@ public final class VkContext implements AutoCloseable {
     private final QueueSelector.QueueSelection queues;
     private final List<MemoryTypeSelector.MemoryType> memoryTypes;
     private final Set<String> enabledExtensions;
+    private final TimestampSupport timestamps;
     private final String failure;
     private boolean closed;
 
@@ -105,7 +107,7 @@ public final class VkContext implements AutoCloseable {
                       VkQueue graphicsQueue, VkQueue computeQueue, VkQueue hostTransferQueue,
                       DeviceScorer.Ranked chosen, QueueSelector.QueueSelection queues,
                       List<MemoryTypeSelector.MemoryType> memoryTypes, Set<String> enabledExtensions,
-                      String failure) {
+                      TimestampSupport timestamps, String failure) {
         this.instance = instance;
         this.surface = surface;
         this.physicalDevice = physicalDevice;
@@ -117,12 +119,14 @@ public final class VkContext implements AutoCloseable {
         this.queues = queues;
         this.memoryTypes = memoryTypes;
         this.enabledExtensions = enabledExtensions;
+        this.timestamps = timestamps;
         this.failure = failure;
     }
 
     /** A context that represents a failure to initialise, carrying the reason. */
     public static VkContext failed(String reason) {
-        return new VkContext(null, 0L, null, null, null, null, null, null, null, List.of(), Set.of(), reason);
+        return new VkContext(null, 0L, null, null, null, null, null, null, null, List.of(), Set.of(),
+                TimestampSupport.NONE, reason);
     }
 
     /**
@@ -199,10 +203,11 @@ public final class VkContext implements AutoCloseable {
                 device = createDevice(best.gpu(), queues, enabled, stack);
                 List<MemoryTypeSelector.MemoryType> memoryTypes = readMemoryTypes(best.gpu(), stack);
 
+                TimestampSupport timestamps = readTimestamps(best.gpu(), queues.graphics(), stack);
                 return new VkContext(instance, surface, best.gpu(), device,
                         queue(device, queues.graphics()), queue(device, queues.compute()),
                         queue(device, queues.hostTransfer()), best.ranked(), queues, memoryTypes,
-                        Set.copyOf(enabled), null);
+                        Set.copyOf(enabled), timestamps, null);
             } catch (RuntimeException e) {
                 if (device != null) {
                     vkDeviceWaitIdle(device);
@@ -357,6 +362,36 @@ public final class VkContext implements AutoCloseable {
         }
     }
 
+    /**
+     * Reads the timestamp counter of the queue family the renderer submits to.
+     *
+     * <p>The period comes from the device limits and the width from the queue family, because Vulkan scopes
+     * them differently: every queue family on a device shares one tick length, but a family may support no
+     * timestamps at all and says so by reporting zero bits. Reading the width from the graphics family
+     * rather than from whichever family happens to be first is the difference between a measurement and a
+     * figure that is silently half width and wraps twice as often.
+     *
+     * <p>Never throws. A driver reporting something unusable means GPU time goes unmeasured, not that
+     * initialisation failed -- every other figure still works without it.
+     */
+    private static TimestampSupport readTimestamps(VkPhysicalDevice gpu, int graphicsFamily,
+                                                   MemoryStack stack) {
+        VkPhysicalDeviceProperties props = VkPhysicalDeviceProperties.malloc(stack);
+        vkGetPhysicalDeviceProperties(gpu, props);
+        float period = props.limits().timestampPeriod();
+
+        IntBuffer count = stack.mallocInt(1);
+        vkGetPhysicalDeviceQueueFamilyProperties(gpu, count, null);
+        int validBits = 0;
+        if (graphicsFamily >= 0 && graphicsFamily < count.get(0)) {
+            VkQueueFamilyProperties.Buffer families =
+                    VkQueueFamilyProperties.malloc(count.get(0), stack);
+            vkGetPhysicalDeviceQueueFamilyProperties(gpu, count, families);
+            validBits = families.get(graphicsFamily).timestampValidBits();
+        }
+        return TimestampSupport.of(period, validBits);
+    }
+
     private static Set<String> deviceExtensions(VkPhysicalDevice gpu, MemoryStack stack) {
         IntBuffer count = stack.mallocInt(1);
         if (vkEnumerateDeviceExtensionProperties(gpu, (ByteBuffer) null, count, null) != VK_SUCCESS
@@ -500,6 +535,36 @@ public final class VkContext implements AutoCloseable {
         return this.enabledExtensions;
     }
 
+    /**
+     * The timestamp counter of the graphics queue family, usable or not.
+     *
+     * <p>Check {@link TimestampSupport#usable()} before measuring. A family that reports zero bits has no
+     * timestamps, which Vulkan permits, and the only honest response is to report no GPU figure rather than
+     * a zero that reads as an idle GPU.
+     */
+    public TimestampSupport timestamps() {
+        return this.timestamps;
+    }
+
+    /**
+     * Builds a GPU time query against this context's device, or returns {@code null} if the device reports
+     * no usable timestamp counter.
+     *
+     * <p>This is the only place the query is built, because it is the only place that knows the period and
+     * the bit width. Inventing them at a call site would not round off: a wrong period scales every figure
+     * by the ratio, and a wrong width breaks the wraparound correction.
+     *
+     * @param slots how many frames in flight to keep readings for
+     * @return the query, or {@code null} if this device cannot be measured
+     */
+    public GpuTimestampQuery newGpuTime(int slots) {
+        if (!isAvailable() || !this.timestamps.usable()) {
+            return null;
+        }
+        return new GpuTimestampQuery(this.device, slots,
+                this.timestamps.periodNanos(), this.timestamps.validBits());
+    }
+
     /** Every memory type the chosen adapter exposes, for callers that need the driver's mask. */
     public List<MemoryTypeSelector.MemoryType> memoryTypes() {
         return this.memoryTypes;
@@ -525,6 +590,7 @@ public final class VkContext implements AutoCloseable {
             sb.append(usage).append(" -> type ").append(s.typeIndex())
                     .append(" (").append(s.reason()).append(")\n");
         }
+        sb.append("timestamps: ").append(this.timestamps).append("\n");
         sb.append("extensions: ").append(this.enabledExtensions);
         return sb.toString();
     }
