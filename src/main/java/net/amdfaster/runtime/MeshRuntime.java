@@ -7,6 +7,7 @@ import net.amdfaster.mesh.BlockVertexLadder;
 import net.amdfaster.mesh.CompressedSectionMesh;
 import net.amdfaster.mesh.GeometryCache;
 import net.amdfaster.mesh.LodMerger;
+import net.amdfaster.mesh.LodStreamScheduler;
 import net.amdfaster.mesh.MeshSweepBounds;
 import net.amdfaster.mesh.MeshletQuantizer;
 import net.amdfaster.mesh.QuadTemplateLibrary;
@@ -113,6 +114,17 @@ public final class MeshRuntime {
     /** Standard quad templates. */
     private final QuadTemplateLibrary templates = new QuadTemplateLibrary();
 
+    /**
+     * Picks the level a section is streamed at, and the order the queue drains in.
+     *
+     * <p>Separate from {@link LodMerger}, which decides how coarsely a section that is already loaded
+     * merges its face into quads. This one decides what to load and at what size, and it drains
+     * coarse-first because one coarse node retires eight to the level sections -- which is what puts
+     * something on the horizon instead of filling in fine detail at the player's feet while the
+     * distance stays empty.
+     */
+    private final LodStreamScheduler lodStream = new LodStreamScheduler();
+
     /** Accounting from the last build. */
     private int lastBuildAccounting;
 
@@ -173,6 +185,11 @@ public final class MeshRuntime {
 
     public MeshJobPrioritizer prioritizer() {
         return this.prioritizer;
+    }
+
+    /** The LOD streaming scheduler. */
+    public LodStreamScheduler lodStream() {
+        return this.lodStream;
     }
 
     public MeshJobQueue queue() {
