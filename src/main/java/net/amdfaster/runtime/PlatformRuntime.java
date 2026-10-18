@@ -15,6 +15,7 @@ import net.amdfaster.vk.TransferQueueSelector;
 import net.amdfaster.platform.AmdArchitecture;
 import net.amdfaster.platform.CoreAffinityPlanner;
 import net.amdfaster.platform.DynamicVgprPlanner;
+import net.amdfaster.platform.FeaturePaths;
 import net.amdfaster.platform.GpuIdentity;
 import net.amdfaster.platform.PathSelector;
 import net.amdfaster.platform.GpuInfo;
@@ -454,5 +455,27 @@ public final class PlatformRuntime {
     /** Whether the identified generation is one the paths were measured on. */
     public boolean tuned() {
         return PathSelector.tuned(this.amdArchitecture);
+    }
+
+    /**
+     * Chooses the rendering paths from what this device actually exposes.
+     *
+     * <p>{@link GpuReport} already probes the instance and records which extensions of interest are
+     * present, and {@link net.amdfaster.vk.DeviceScorer} already ranks the devices. This is the step
+     * between having that and acting on it: without it each call site decides its own fallback, and a
+     * user with low frame rates has no way to tell that the mesh path was skipped for a missing extension
+     * rather than for one of a dozen other reasons.
+     *
+     * <p>Every path has a fallback that runs, because a mod that refuses to start on an old iGPU is worse
+     * than one that runs slowly on it. The recorded reason is part of the result, not a log line.
+     *
+     * @return the path decisions, each with the reason it went that way
+     */
+    public FeaturePaths.Selection featurePaths() {
+        GpuInfo preferred = this.report != null ? this.report.preferred() : null;
+        if (preferred == null) {
+            preferred = this.device;
+        }
+        return preferred == null ? null : FeaturePaths.select(preferred);
     }
 }

@@ -379,6 +379,10 @@ tasks.register("verifyJar") {
                         // signalled is not a slowdown, it is geometry belonging to neither section, and
                         // the draw still completes so nothing reports it.
                         "net/amdfaster/gpu/BufferPool.class",
+                        // The capability-to-path mapping. Asserted because a missing class would leave
+                        // every probed extension unused, and the renderer would still run -- just on the
+                        // fallback path, which looks identical apart from the frame rate.
+                        "net/amdfaster/platform/FeaturePaths.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
