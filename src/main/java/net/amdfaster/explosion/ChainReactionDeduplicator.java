@@ -59,7 +59,7 @@ public final class ChainReactionDeduplicator {
     /** Ray samples a single blast takes: 1,352 rays at the average TNT ray's 18 steps. */
     public static final int LOOKUPS_PER_BLAST = 24_336;
 
-    private final java.util.Map<Integer, Float> resistance = new java.util.HashMap<>();
+    private final java.util.Map<Long, Float> resistance = new java.util.HashMap<>();
 
     private long blasts;
     private long lookups;
@@ -72,7 +72,7 @@ public final class ChainReactionDeduplicator {
      * @param packed the block position, as {@link ExplosionBlockCache#pack} produces
      * @param resolve looks it up in the world, called only the first time this chain asks
      */
-    public float resistanceAt(int packed, java.util.function.IntToDoubleFunction resolve) {
+    public float resistanceAt(long packed, java.util.function.LongToDoubleFunction resolve) {
         this.lookups++;
 
         Float cached = this.resistance.get(packed);
@@ -92,7 +92,7 @@ public final class ChainReactionDeduplicator {
      * given the resistance of a block that is no longer there. Keeping the stale value would let an explosion
      * push through a wall that is no longer there.
      */
-    public void destroy(int packed) {
+    public void destroy(long packed) {
         if (this.resistance.remove(packed) != null) {
             this.destroyed++;
         }

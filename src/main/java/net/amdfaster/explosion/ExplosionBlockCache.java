@@ -55,7 +55,11 @@ public final class ExplosionBlockCache {
 
     private static final int DEFAULT_CAPACITY = 4096;
 
-    private int[] keys;
+    /** Field masks for {@link #pack}: 26 + 12 + 26 = 64 bits. */
+    private static final long XZ_MASK = (1L << 26) - 1L;
+    private static final long Y_MASK = (1L << 12) - 1L;
+
+    private long[] keys;
     private float[] values;
     private boolean[] occupied;
     private int capacity;
@@ -78,7 +82,7 @@ public final class ExplosionBlockCache {
             rounded = 16;
         }
         this.capacity = rounded;
-        this.keys = new int[this.capacity];
+        this.keys = new long[this.capacity];
         this.values = new float[this.capacity];
         this.occupied = new boolean[this.capacity];
     }
@@ -99,7 +103,7 @@ public final class ExplosionBlockCache {
      */
     public float resistanceAt(BlockSource source, int x, int y, int z) {
         this.lookups++;
-        int key = pack(x, y, z);
+        long key = pack(x, y, z);
         int index = probe(key);
         if (this.occupied[index]) {
             this.hits++;
@@ -124,13 +128,13 @@ public final class ExplosionBlockCache {
      * 4,097th distinct block of a large chain reaction is worse than no cache.
      */
     private void grow() {
-        int[] oldKeys = this.keys;
+        long[] oldKeys = this.keys;
         float[] oldValues = this.values;
         boolean[] oldOccupied = this.occupied;
         int oldCapacity = this.capacity;
 
         this.capacity = oldCapacity * 2;
-        this.keys = new int[this.capacity];
+        this.keys = new long[this.capacity];
         this.values = new float[this.capacity];
         this.occupied = new boolean[this.capacity];
         this.size = 0;
@@ -155,7 +159,7 @@ public final class ExplosionBlockCache {
      * all of them, which is the opposite of what a cache is for.
      */
     public void invalidate(int x, int y, int z) {
-        int key = pack(x, y, z);
+        long key = pack(x, y, z);
         int index = probe(key);
         if (!this.occupied[index]) {
             return;
@@ -167,7 +171,7 @@ public final class ExplosionBlockCache {
     }
 
     /** Drops a run of positions, which is how destruction actually arrives. */
-    public void invalidateRange(int[] packedPositions, int count) {
+    public void invalidateRange(long[] packedPositions, int count) {
         for (int i = 0; i < count; i++) {
             int index = probe(packedPositions[i]);
             if (this.occupied[index]) {
@@ -191,7 +195,7 @@ public final class ExplosionBlockCache {
         this.size = 0;
     }
 
-    private int probe(int key) {
+    private int probe(long key) {
         int index = spread(key) & (this.capacity - 1);
         while (this.occupied[index]) {
             if (this.keys[index] == key) {
@@ -229,27 +233,49 @@ public final class ExplosionBlockCache {
     }
 
     /**
-     * Packs a block position into an int for the table.
+     * Packs a block position into the key used by the table.
      *
-     * <p>Twelve bits of X and Z around the explosion centre and eight of Y. A blast radius of 4
-     * touches a nine block cube; even a wither skull or a large modded explosion stays well inside
-     * this, and positions outside it are simply cached less often rather than cached wrongly, because
-     * the full coordinates are still passed to the source.
+     * <p>Twenty-six bits of X, twelve of Y, twenty-six of Z: exactly sixty-four, and the layout
+     * Minecraft itself packs a block position into. X and Z reach the world border at 29,999,984 and Y
+     * the build limits, so no two distinct positions in a world share a key.
      *
-     * <p><b>This is a cache key, not an identity.</b> Two different positions that pack alike share a
-     * cached resistance. The twelve bit range is what keeps that from happening inside a blast, and
-     * the class would need a wider key to be safe for arbitrary world positions.
+     * <p><b>This used to be an int, and that was a bug rather than a trade.</b> Twelve bits of X and Z
+     * and eight of Y fit a single blast comfortably, which is what the old comment argued, but the
+     * eight bit Y field only spans 256 blocks and the world is 384 tall -- so y=-64 and y=192, both
+     * ordinary build heights, packed to the same key and shared a resistance. Inside one blast that is
+     * unreachable; across a chain reaction it is not, and a wrong resistance is a wrong explosion
+     * rather than a slow one. Widening the key costs eight bytes a slot and removes the case.
+     *
+     * <p>Sign extension on the way back out is the part that is easy to get wrong: each field is
+     * recovered by shifting it into the top of the long and shifting back down arithmetically, which
+     * extends the field's own sign rather than the key's.
      */
-    public static int pack(int x, int y, int z) {
-        return ((x & 0xFFF) << 20) | ((y & 0xFF) << 12) | (z & 0xFFF);
+    public static long pack(int x, int y, int z) {
+        return (((long) x & XZ_MASK) << 38)
+                | (((long) y & Y_MASK) << 26)
+                | ((long) z & XZ_MASK);
+    }
+
+    /** Recovers the x coordinate from a packed key. */
+    public static int unpackX(long packed) {
+        return (int) (packed >> 38);
+    }
+
+    /** Recovers the y coordinate from a packed key. */
+    public static int unpackY(long packed) {
+        return (int) ((packed << 26) >> 52);
+    }
+
+    /** Recovers the z coordinate from a packed key. */
+    public static int unpackZ(long packed) {
+        return (int) ((packed << 38) >> 38);
     }
 
     /** Spreads a packed position so adjacent blocks do not collide. */
-    static int spread(int key) {
-        int h = key ^ (key >>> 16);
-        h *= 0x85EBCA6B;
-        h ^= h >>> 13;
-        return h & 0x7FFFFFFF;
+    static int spread(long key) {
+        long h = key * 0x9E3779B97F4A7C15L;
+        h ^= h >>> 31;
+        return (int) h & 0x7FFFFFFF;
     }
 
     /** Distinct blocks currently cached. */

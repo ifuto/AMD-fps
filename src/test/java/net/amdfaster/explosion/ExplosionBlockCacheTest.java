@@ -17,7 +17,7 @@ class ExplosionBlockCacheTest {
     /** Counts how often the world is actually asked, which is the whole point of the cache. */
     private static final class CountingSource implements ExplosionBlockCache.BlockSource {
         private int calls;
-        private final Map<Integer, Float> resistances = new HashMap<>();
+        private final Map<Long, Float> resistances = new HashMap<>();
 
         void set(int x, int y, int z, float resistance) {
             this.resistances.put(ExplosionBlockCache.pack(x, y, z), resistance);
@@ -85,7 +85,7 @@ class ExplosionBlockCacheTest {
         cache.resistanceAt(source, 2, 64, 0);
         assertEquals(3, source.calls);
 
-        int[] destroyed = {
+        long[] destroyed = {
             ExplosionBlockCache.pack(0, 64, 0),
             ExplosionBlockCache.pack(2, 64, 0),
             ExplosionBlockCache.pack(9, 64, 9),   // never cached, and must not break the call
@@ -108,7 +108,7 @@ class ExplosionBlockCacheTest {
         // blocks it touches by half. A TNT ray starts at 4 * (0.7 .. 1.3), survives 13 to 24 steps and
         // averages 18. Counted rather than quoted, so the figure in the class comment has something
         // behind it -- and counted from the block centre, which is where a primed TNT actually sits.
-        Set<Integer> distinct = new HashSet<>();
+        Set<Long> distinct = new HashSet<>();
         int lookups = 0;
         float cx = 8.5f;
         float cy = 8.5f;
@@ -253,7 +253,7 @@ class ExplosionBlockCacheTest {
         // The cache key is twelve bits of X and Z and eight of Y. If two positions a blast actually
         // touches shared a key they would share a resistance, which is a wrong explosion rather than
         // a slow one.
-        Set<Integer> keys = new HashSet<>();
+        Set<Long> keys = new HashSet<>();
         for (int x = -64; x <= 64; x++) {
             for (int z = -64; z <= 64; z++) {
                 for (int y = 60; y <= 68; y++) {
@@ -365,10 +365,10 @@ class ExplosionBlockCacheTest {
     void growthKeepsEveryCachedBlockFindable() {
         CountingSource source = new CountingSource();
         ExplosionBlockCache cache = new ExplosionBlockCache(16);
-        Map<Integer, Integer> seen = new HashMap<>();
+        Map<Long, Integer> seen = new HashMap<>();
 
         for (int i = 0; i < 20000; i++) {
-            int key = ExplosionBlockCache.pack(i % 200 - 100, 64 + i % 8, i / 200 - 50);
+            long key = ExplosionBlockCache.pack(i % 200 - 100, 64 + i % 8, i / 200 - 50);
             seen.put(key, i);
             cache.resistanceAt(source, i % 200 - 100, 64 + i % 8, i / 200 - 50);
         }
@@ -381,7 +381,7 @@ class ExplosionBlockCacheTest {
     void invalidatingWhileFullDoesNotStrandTheRest() {
         CountingSource source = new CountingSource();
         ExplosionBlockCache cache = new ExplosionBlockCache(16);
-        int[] keys = new int[4000];
+        long[] keys = new long[4000];
         for (int i = 0; i < keys.length; i++) {
             keys[i] = ExplosionBlockCache.pack(i % 100 - 50, 64, i / 100 - 20);
             cache.resistanceAt(source, i % 100 - 50, 64, i / 100 - 20);
@@ -389,7 +389,7 @@ class ExplosionBlockCacheTest {
         int before = source.calls;
 
         for (int i = 0; i < keys.length; i += 2) {
-            cache.invalidateRange(new int[] {keys[i]}, 1);
+            cache.invalidateRange(new long[] {keys[i]}, 1);
         }
         assertEquals(keys.length / 2, cache.invalidations());
         assertEquals(before, source.calls, "invalidating does not ask the world anything");
@@ -409,4 +409,58 @@ class ExplosionBlockCacheTest {
     void nonsenseArgumentsAreRejected() {
         assertThrows(IllegalArgumentException.class, () -> new ExplosionBlockCache(8));
     }
+
+    @Test
+    void aPackedPositionRoundTrips() {
+        // The unpacking is only used to recover what a key means, and getting the sign extension wrong
+        // would not throw -- it would report a negative coordinate as a large positive one and ask the
+        // world about a block that is not there.
+        int[][] cases = {
+            {0, 0, 0},
+            {-1, -1, -1},
+            {29_999_984, -64, 29_999_984},
+            {-29_999_984, 319, -29_999_984},
+            {10, 64, 20},
+            {-33_554_432, -2_048, -33_554_432},
+            {33_554_431, 2_047, 33_554_431},
+        };
+        for (int[] c : cases) {
+            long packed = ExplosionBlockCache.pack(c[0], c[1], c[2]);
+            String where = java.util.Arrays.toString(c);
+            assertEquals(c[0], ExplosionBlockCache.unpackX(packed), "x for " + where);
+            assertEquals(c[1], ExplosionBlockCache.unpackY(packed), "y for " + where);
+            assertEquals(c[2], ExplosionBlockCache.unpackZ(packed), "z for " + where);
+        }
+    }
+
+    @Test
+    void twoValidBuildHeightsDoNotShareAKey() {
+        // This is the collision the eight bit Y field produced, and it is not a corner case: the world is
+        // 384 blocks tall and eight bits only span 256, so y=-64 and y=192 are both ordinary build
+        // heights and they packed alike. Inside one blast that is unreachable; across a chain reaction
+        // it is not, and a shared resistance is a wrong explosion rather than a slow one.
+        long deep = ExplosionBlockCache.pack(10, -64, 10);
+        long high = ExplosionBlockCache.pack(10, 192, 10);
+
+        assertFalse(deep == high, "y=-64 and y=192 must not share a key");
+
+        // And the cache has to treat them as two blocks, which is the part that actually matters.
+        CountingSource source = new CountingSource();
+        ExplosionBlockCache cache = new ExplosionBlockCache();
+        cache.resistanceAt(source, 10, -64, 10);
+        cache.resistanceAt(source, 10, 192, 10);
+
+        assertEquals(2, source.calls, "two blocks, two lookups");
+        assertEquals(2, cache.size());
+    }
+
+    @Test
+    void positionsAFullChunkSpanApartHorizontallyDoNotShareAKey() {
+        // The twelve bit X and Z fields collided at 4,096 blocks apart, which is well inside the span a
+        // single tick's chain reaction can cover in a large pre-lit structure.
+        assertFalse(ExplosionBlockCache.pack(0, 64, 0) == ExplosionBlockCache.pack(4096, 64, 0));
+        assertFalse(ExplosionBlockCache.pack(0, 64, 0) == ExplosionBlockCache.pack(0, 64, 4096));
+        assertFalse(ExplosionBlockCache.pack(-2048, 64, 0) == ExplosionBlockCache.pack(2048, 64, 0));
+    }
+
 }

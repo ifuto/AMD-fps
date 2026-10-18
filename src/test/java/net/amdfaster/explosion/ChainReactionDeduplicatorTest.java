@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChainReactionDeduplicatorTest {
 
-    private static final int STONE = ExplosionBlockCache.pack(10, 64, 20);
+    private static final long STONE = ExplosionBlockCache.pack(10, 64, 20);
     private static final float STONE_RESISTANCE = 6.0f;
 
     @Test
