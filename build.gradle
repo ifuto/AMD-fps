@@ -399,6 +399,10 @@ tasks.register("verifyJar") {
                         // the indirect draw is not a crash: it is a draw reading commands that are not
                         // visible yet, which shows up as flickering geometry.
                         "net/amdfaster/vk/FrameDispatcher.class",
+                        // The audio LOD selector. Asserted because a missing class would leave every
+                        // distant sound mixed at full rate, which costs the same and sounds identical,
+                        // so nothing would report the difference.
+                        "net/amdfaster/sound/AudioLodSelector.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",

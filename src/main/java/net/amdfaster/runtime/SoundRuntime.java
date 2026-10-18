@@ -4,6 +4,7 @@ import net.amdfaster.sound.SoundPressureController;
 import net.amdfaster.sound.SoundWorkOffloader;
 import net.amdfaster.sound.StreamingSoundSplitter;
 import net.amdfaster.sound.AdaptiveSoundPressure;
+import net.amdfaster.sound.AudioLodSelector;
 import net.amdfaster.sound.CategoryBudgetAllocator;
 import net.amdfaster.sound.CriticalSoundWhitelist;
 import net.amdfaster.sound.DuplicateSoundLimiter;
@@ -318,5 +319,38 @@ public final class SoundRuntime {
     /** The streaming sound splitter. */
     public StreamingSoundSplitter streaming() {
         return this.streaming;
+    }
+
+    /**
+     * Places a sound in a quality tier.
+     *
+     * <p>Every sound in the mix costs the same whether the player can pick it out or not, so a voice past
+     * the point of audibility is paying for resampling, mixing and effects for nothing. A virtual voice
+     * keeps only the volume and elapsed-time calculation it needs to come back correctly, which at a 64
+     * voice budget with half of them virtual is roughly 45 per cent off the mixing cost -- and the saving
+     * is larger the more crowded the scene, which is when it is needed.
+     *
+     * <p>The tiers are chosen on distance fraction rather than on a decibel threshold, because Minecraft
+     * attenuates linearly and a middleware-style -40 dB rule would sit at 99 per cent of the range and
+     * virtualise almost nothing.
+     *
+     * @param distance    blocks to the listener
+     * @param maxDistance the sound's range, or 0 for one that does not attenuate
+     * @param volume      the source volume before attenuation
+     * @param critical    whether it is protected and so must never be virtualised
+     */
+    public AudioLodSelector.Placement place(double distance, double maxDistance, double volume,
+                                            boolean critical) {
+        return AudioLodSelector.place(distance, maxDistance, volume, critical);
+    }
+
+    /**
+     * What a tick's voices cost.
+     *
+     * @param physical voices being mixed
+     * @param virtual  voices only tracking their volume and elapsed time
+     */
+    public double voiceTickMillis(int physical, int virtual) {
+        return AudioLodSelector.tickMillis(physical, virtual);
     }
 }
