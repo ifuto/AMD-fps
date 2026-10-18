@@ -7,12 +7,20 @@ import java.util.Arrays;
  * crosses it.
  *
  * <p>Vanilla marches 1,352 rays outward from an explosion -- the surface of a 16 by 16 by 16 grid,
- * which is 16^3 minus the 14^3 interior -- sampling every 0.225 blocks. For a TNT blast of radius 4
- * that is 24,336 block lookups to resolve 408 distinct blocks. The same stone is asked its resistance
- * sixty times.
+ * which is 16^3 minus the 14^3 interior. Two numbers are easy to confuse and were confused here once:
+ * the ray advances <b>0.3 blocks</b> per step, and its intensity falls by <b>0.225</b> per step. The
+ * first is a distance and the second is a strength; taking the strength for the distance makes the blast
+ * reach 4 blocks instead of 5.4 and undercounts the blocks it touches by half.
  *
- * <p>Counted rather than estimated: the ray set and the sampling step were reproduced and the distinct
- * block set enumerated, giving 24,336 lookups against 408 distinct positions, a factor of 59.6.
+ * <p>A TNT ray starts at intensity {@code 4 * (0.7 .. 1.3)}, so it survives 13 to 24 steps and averages
+ * 18, reaching 5.4 blocks. At 18 steps the 1,352 rays make <b>24,336 block lookups against 823 distinct
+ * positions, a factor of 29.6</b>. The same stone is asked its resistance thirty times.
+ *
+ * <p>Re-measured rather than estimated, and the distinct count is not a single number: it depends on
+ * where inside its block the blast sits, and runs 768 to 823 across a block corner, a quarter point and
+ * a block centre. 823 is the block-centre case, which is where a primed TNT actually is. An earlier
+ * figure of 408 came from a model that walked inward from a 4 block radius in 0.225 block steps from the
+ * origin, which matched the lookup count by coincidence and the distinct count not at all.
  *
  * <p>For a chain reaction the redundancy multiplies rather than adds, because adjacent blasts overlap
  * heavily and each one re-resolves the shared volume. A hundred TNT detonating in one tick is 2.4

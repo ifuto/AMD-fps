@@ -47,10 +47,16 @@ public final class ChainReactionDeduplicator {
     /** Milliseconds one block resistance lookup costs. */
     public static final double MS_PER_LOOKUP = 0.00002;
 
-    /** Blocks a single TNT blast resolves, measured. */
-    public static final int BLOCKS_PER_BLAST = 408;
+    /**
+     * Blocks a single TNT blast resolves.
+     *
+     * <p>The block-centre case of a re-measured figure that runs 768 to 823 depending on where inside its
+     * block the blast sits. An earlier value of 408 came from a ray model that walked inward in 0.225
+     * block steps, mistaking the intensity decrement for the step length; see {@link ExplosionBlockCache}.
+     */
+    public static final int BLOCKS_PER_BLAST = 823;
 
-    /** Ray samples a single blast takes, measured. */
+    /** Ray samples a single blast takes: 1,352 rays at the average TNT ray's 18 steps. */
     public static final int LOOKUPS_PER_BLAST = 24_336;
 
     private final java.util.Map<Integer, Float> resistance = new java.util.HashMap<>();

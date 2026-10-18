@@ -102,12 +102,19 @@ class ExplosionBlockCacheTest {
 
     @Test
     void vanillaRayCountAndRedundancyAreReproduced() {
-        // 16^3 minus the 14^3 interior, sampling every 0.225 of a block out to radius 4. Counted
-        // rather than quoted, so the 59.6 figure in the class comment has something behind it.
+        // 16^3 minus the 14^3 interior. Two numbers are easy to confuse and were confused here once:
+        // the ray advances 0.3 BLOCKS per step, and its intensity falls by 0.225 per step. Taking the
+        // strength for the distance makes the blast reach 4 blocks instead of 5.4 and undercounts the
+        // blocks it touches by half. A TNT ray starts at 4 * (0.7 .. 1.3), survives 13 to 24 steps and
+        // averages 18. Counted rather than quoted, so the figure in the class comment has something
+        // behind it -- and counted from the block centre, which is where a primed TNT actually sits.
         Set<Integer> distinct = new HashSet<>();
         int lookups = 0;
-        float radius = 4.0f;
-        float step = 0.225f;
+        float cx = 8.5f;
+        float cy = 8.5f;
+        float cz = 8.5f;
+        float step = 0.3f;
+        int steps = 18;
 
         for (int k = 0; k < 16; k++) {
             for (int l = 0; l < 16; l++) {
@@ -125,19 +132,26 @@ class ExplosionBlockCacheTest {
                     dx /= length;
                     dy /= length;
                     dz /= length;
-                    for (float f = radius; f > 0f; f -= step) {
+                    // Outward from the centre, which is the direction vanilla walks. The earlier version
+                    // walked inward from the radius, which reached the same lookup count by coincidence.
+                    float px = cx;
+                    float py = cy;
+                    float pz = cz;
+                    for (int s = 0; s < steps; s++) {
                         distinct.add(ExplosionBlockCache.pack(
-                                (int) Math.floor(dx * f), (int) Math.floor(dy * f),
-                                (int) Math.floor(dz * f)));
+                                (int) Math.floor(px), (int) Math.floor(py), (int) Math.floor(pz)));
                         lookups++;
+                        px += dx * step;
+                        py += dy * step;
+                        pz += dz * step;
                     }
                 }
             }
         }
 
-        assertEquals(24336, lookups, "block lookups per TNT explosion");
-        assertEquals(408, distinct.size(), "distinct blocks actually touched");
-        assertEquals(59.6, (double) lookups / distinct.size(), 0.05,
+        assertEquals(24336, lookups, "1,352 rays at the average TNT ray's 18 steps");
+        assertEquals(823, distinct.size(), "distinct blocks actually touched from a block centre");
+        assertEquals(29.57, (double) lookups / distinct.size(), 0.01,
                 "the redundancy this cache removes");
     }
 
@@ -145,8 +159,11 @@ class ExplosionBlockCacheTest {
     void theCacheResolvesTheWholeRaySetWithOneLookupPerBlock() {
         CountingSource source = new CountingSource();
         ExplosionBlockCache cache = new ExplosionBlockCache();
-        float radius = 4.0f;
-        float step = 0.225f;
+        float cx = 8.5f;
+        float cy = 8.5f;
+        float cz = 8.5f;
+        float step = 0.3f;
+        int steps = 18;
         int lookups = 0;
 
         for (int k = 0; k < 16; k++) {
@@ -165,18 +182,24 @@ class ExplosionBlockCacheTest {
                     dx /= length;
                     dy /= length;
                     dz /= length;
-                    for (float f = radius; f > 0f; f -= step) {
-                        cache.resistanceAt(source, (int) Math.floor(dx * f),
-                                (int) Math.floor(dy * f), (int) Math.floor(dz * f));
+                    float px = cx;
+                    float py = cy;
+                    float pz = cz;
+                    for (int s = 0; s < steps; s++) {
+                        cache.resistanceAt(source, (int) Math.floor(px),
+                                (int) Math.floor(py), (int) Math.floor(pz));
                         lookups++;
+                        px += dx * step;
+                        py += dy * step;
+                        pz += dz * step;
                     }
                 }
             }
         }
 
         assertEquals(24336, lookups);
-        assertEquals(408, source.calls, "one lookup per distinct block instead of 24,336");
-        assertEquals(100.0 * (24336 - 408) / 24336, cache.hitRatePercent(), 0.01);
+        assertEquals(823, source.calls, "one lookup per distinct block instead of 24,336");
+        assertEquals(100.0 * (24336 - 823) / 24336, cache.hitRatePercent(), 0.01);
     }
 
     @Test
@@ -185,8 +208,8 @@ class ExplosionBlockCacheTest {
         // block apart resolve almost the same ground, and without sharing they each pay in full.
         CountingSource source = new CountingSource();
         ExplosionBlockCache cache = new ExplosionBlockCache();
-        float radius = 4.0f;
-        float step = 0.225f;
+        float step = 0.3f;
+        int steps = 18;
 
         for (int blast = 0; blast < 10; blast++) {
             for (int k = 0; k < 16; k++) {
@@ -205,9 +228,15 @@ class ExplosionBlockCacheTest {
                         dx /= length;
                         dy /= length;
                         dz /= length;
-                        for (float f = radius; f > 0f; f -= step) {
-                            cache.resistanceAt(source, blast + (int) Math.floor(dx * f),
-                                    (int) Math.floor(dy * f), (int) Math.floor(dz * f));
+                        float px = 8.5f;
+                        float py = 8.5f;
+                        float pz = 8.5f;
+                        for (int s = 0; s < steps; s++) {
+                            cache.resistanceAt(source, blast + (int) Math.floor(px),
+                                    (int) Math.floor(py), (int) Math.floor(pz));
+                            px += dx * step;
+                            py += dy * step;
+                            pz += dz * step;
                         }
                     }
                 }

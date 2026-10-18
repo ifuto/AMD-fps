@@ -86,9 +86,10 @@ class ChainReactionDeduplicatorTest {
         // A hundred TNT detonating in the same tick resolves the same volume over and over, and the number of
         // distinct blocks barely grows past the first blast's.
         ChainReactionDeduplicator chain = new ChainReactionDeduplicator();
-        // Sixty rays cross each block, so a blast's 24 336 samples cover 405 distinct positions.
-        int positionsPerBlast = ChainReactionDeduplicator.LOOKUPS_PER_BLAST / 60;
-        assertEquals(405, positionsPerBlast);
+        // Re-measured rather than derived from a rays-per-block guess: a blast's 24,336 samples cover 823
+        // distinct positions, so about thirty rays cross each block and not sixty.
+        int positionsPerBlast = ChainReactionDeduplicator.BLOCKS_PER_BLAST;
+        assertEquals(823, positionsPerBlast);
 
         for (int blast = 0; blast < 100; blast++) {
             chain.beginBlast();
@@ -98,9 +99,10 @@ class ChainReactionDeduplicatorTest {
         }
 
         assertEquals(100L, chain.blasts());
-        assertEquals(40_500L, chain.lookups());
+        assertEquals(82_300L, chain.lookups());
         assertEquals(positionsPerBlast, chain.size(), "the distinct set, not a hundred times it");
-        assertEquals(99.0, chain.hitPercent(), 1e-9, "405 resolved out of 40 500 asked");
+        // 82,300 is 823 x 100, so the hit rate is exactly 99% -- one resolved per hundred asked.
+        assertEquals(99.0, chain.hitPercent(), 1e-9, "823 resolved out of 82,300 asked");
         assertEquals(99.0, chain.savedPercent(), 1e-9);
     }
 
@@ -123,7 +125,7 @@ class ChainReactionDeduplicatorTest {
         assertEquals(0L, chain.blasts());
         assertEquals(0L, chain.lookups());
         assertEquals(0, chain.size());
-        assertEquals(408, ChainReactionDeduplicator.BLOCKS_PER_BLAST);
+        assertEquals(823, ChainReactionDeduplicator.BLOCKS_PER_BLAST);
         assertEquals(24_336, ChainReactionDeduplicator.LOOKUPS_PER_BLAST);
     }
 }

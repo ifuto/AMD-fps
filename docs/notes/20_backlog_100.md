@@ -82,9 +82,13 @@
 
 ## C. 光源・ライティング（41〜55）
 
-**この区分は丸ごと未実装。** 現在あるのは meshing 時に光を**読む**側だけ
-（`light/LightSampler`, `LightCache`, `SmoothLight`, `LightValue`, `FaceRef`, `VertexLight`）。
-光を**伝播させる**エンジンが存在しない。
+**訂正（2026-10-18）: 以前ここに「この区分は丸ごと未実装」と書いてあったが、それは間違いだった。**
+光を**読む**側（`LightSampler`, `LightCache`, `SmoothLight`, `LightValue`, `FaceRef`, `VertexLight`）だけでなく、
+**伝播させる**側も実在する — `LightEngine`, `LightQueue`, `OpacityField`, `SkyHeightmap`,
+`SectionLightStore`, `BlockLightProperties`, `ChunkParallelLightEngine`, `LightDirtyTracker`,
+`LightField`, `LightUpdateBatcher` を `ls` で確認した。下記 41〜55 の各行が「完了」と記している通りで、
+区分見出しだけが更新されていなかった。**教訓: 区分の見出しは行の状態より古くなりやすい。行を読んで
+見出しを信じるな。**
 
 | # | 項目 | 状態 |
 |---|---|---|
