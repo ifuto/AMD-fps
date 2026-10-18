@@ -371,6 +371,10 @@ tasks.register("verifyJar") {
                         // overlapping explosions produces terrain that survives a blast it should not
                         // have, and that reads as a weak explosion rather than a wrong one.
                         "net/amdfaster/explosion/BlastPhasePlanner.class",
+                        // The per-generation path selector. Asserted because it feeds the early-Z
+                        // suppression flag, and a missing class would leave RDNA4 taking forward-pass
+                        // decisions as though early-Z still worked.
+                        "net/amdfaster/platform/PathSelector.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",

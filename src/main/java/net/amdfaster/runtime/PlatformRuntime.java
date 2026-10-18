@@ -16,6 +16,7 @@ import net.amdfaster.platform.AmdArchitecture;
 import net.amdfaster.platform.CoreAffinityPlanner;
 import net.amdfaster.platform.DynamicVgprPlanner;
 import net.amdfaster.platform.GpuIdentity;
+import net.amdfaster.platform.PathSelector;
 import net.amdfaster.platform.GpuInfo;
 import net.amdfaster.platform.GpuReport;
 import net.amdfaster.platform.LdsBankConflictAvoider;
@@ -410,5 +411,48 @@ public final class PlatformRuntime {
     /** The SIMD resolution. */
     public SimdSupport.Resolution simd() {
         return this.simd;
+    }
+
+    /**
+     * The HiZ workaround setting observed on the driver, or null when it could not be read.
+     *
+     * <p>Set by whoever can see the driver's tunables. Until then {@link #paths()} falls back to the
+     * generation's default, which matters because RADV's GFX12 default suppresses early-Z and a user who
+     * has set {@code full_rez} or {@code disabled} is not in that case at all.
+     */
+    private PathSelector.HizWorkaround observedHiz;
+
+    /**
+     * Records the HiZ workaround the driver actually has set.
+     *
+     * @param workaround the observed setting, or null to go back to the generation default
+     */
+    public PlatformRuntime withHizWorkaround(PathSelector.HizWorkaround workaround) {
+        this.observedHiz = workaround;
+        return this;
+    }
+
+    /** The observed HiZ setting, or null when nothing has been reported. */
+    public PathSelector.HizWorkaround hizWorkaround() {
+        return this.observedHiz;
+    }
+
+    /**
+     * Resolves this device's execution paths from the generation that was identified.
+     *
+     * <p>This is what turns {@link #amdArchitecture()} into things the renderer can act on. The one that
+     * matters most is {@code earlyZSuppressed}, which {@link net.amdfaster.render.DepthPrepassSelector}
+     * takes as an input and which relaxes its threshold when early-Z is gone -- RADV's GFX12 HiZ
+     * workaround suppresses it by default, and Minecraft's cutout and depth overdraw are close to the
+     * worst case for losing it. Without this the flag has to be supplied by hand, which in practice means
+     * it is supplied once with a guess and stays wrong on every generation the guess was not about.
+     */
+    public PathSelector.Paths paths() {
+        return PathSelector.select(this.amdArchitecture, this.observedHiz);
+    }
+
+    /** Whether the identified generation is one the paths were measured on. */
+    public boolean tuned() {
+        return PathSelector.tuned(this.amdArchitecture);
     }
 }
