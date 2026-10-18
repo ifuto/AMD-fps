@@ -73,10 +73,19 @@ class DepthPrepassSelectorTest {
         assertEquals(Decision.SINGLE_PASS, selector.decide(in(1.0, 0.0)), "nothing is overdrawn");
         assertEquals(Decision.SINGLE_PASS, selector.decide(in(2.0, 0.0)));
         assertEquals(Decision.SINGLE_PASS, selector.decide(in(3.89, 0.0)));
+
         // Exactly at the threshold the two cost the same, and one pass is chosen: the pre-pass also
-        // submits every draw twice, which the arithmetic here does not price.
-        assertEquals(Decision.SINGLE_PASS, selector.decide(in(3.893519, 0.0)));
+        // submits every draw twice, which the arithmetic here does not price. Computed rather than
+        // written out, because the threshold is 3.8935185185... and a rounded literal lands on the
+        // wrong side of it -- rounding 3.8935185 up to 3.893519 puts it above the bar and the selector
+        // correctly answers PREPASS, which is not what this test is asking about.
+        double threshold = DepthPrepassSelector.breakEvenOverdraw(VERTEX, FRAGMENT, PIXELS, 0.0);
+        assertEquals(Decision.SINGLE_PASS, selector.decide(in(threshold, 0.0)),
+                "at the threshold itself, one pass");
+        assertEquals(Decision.PREPASS, selector.decide(in(Math.nextUp(threshold), 0.0)),
+                "one ulp above it, two");
         assertEquals(4L, selector.singlePasses());
+        assertEquals(1L, selector.prepasses());
         assertEquals(0L, selector.prepasses());
     }
 
