@@ -36,7 +36,7 @@
 |---|---|---|---|
 | 1 | 独自レンダリングバックエンド | 部分 | `vk/VkContext`, `vk/Swapchain`, `gpu/CullingPipeline`。**ディスパッチ層が無い** |
 | 2 | GPU 機能の自動検出 | ✅ | `platform/FeaturePaths`。**検出は既にあったが経路選択が無かった**（＝各呼び出し箇所が独自の fallback を持つ）。6 経路を決定し**理由を結果として返す**（ログではない）。**拡張の露出≠その世代で速い**：`VK_EXT_mesh_shader` があっても RDNA2 以降でなければ mesh 経路にしない。**present にも missing にも無い拡張は不在扱い**（probe 中途失敗で両方不完全なことがある）。`reversedZ` 欠落は低速化でなく**精度損失**として報告 |
-| 3 | Multi-Draw Indirect | 部分 | シェーダは `draws[]` を書くが、`vkCmdDrawIndexedIndirectCount` の呼び出しが無い |
+| 3 | Multi-Draw Indirect | ✅ | `gpu/IndirectCountDraw`。シェーダは既に密な `VkDrawIndexedIndirectCommand` と visible count を書く。**n 個のコマンドは `stride×(n-1)+20` B**（`stride×n` ではない＝最後のコマンドは自分の末尾で終わる）。過大申告は描画前の validation error。**count は信頼せず clamp**（`min(countInBuffer, maxDrawCount)`＝壊れた cull シェーダが確保済みバッファを超えて描けない）。`multiDrawIndirect` 欠落時 **drawCount>1 は invalid**（未サポートではない）、`maxDrawIndirectCount` 超過も同様 → `GpuRuntime` は 0 を返し per-meshlet に落とす。stride は **20**（24 に padding すると 13,824 draws で **55 KB** 無駄） |
 | 4 | GPU 生成の描画コマンド | **完了** | `meshlet_cull.comp` が 1 ウェーブ 1 アトミックで圧縮リストを生成 |
 | 5 | 永続マップドバッファ | **完了（リング）** | `gpu/UploadRing` — スライス単位のリング。`GpuBuffer` の常時マップとの結線は未 |
 | 6 | 非同期アップロード | **完了（追跡）** | `gpu/UploadRing` がタイムライン値で in-flight を追跡。**`vkQueueSubmit` への結線は未** |
@@ -199,6 +199,7 @@
 | Z20 | 世代別プロファイルの実経路選択 | ✅ | `platform/PathSelector` — 各決定子は既に世代を前提に書かれていたが**入力を供給するものが無かった**（＝一度推測で渡して、その推測が外れた全世代で誤ったまま）。early-Z 抑制 / wave size / dynamic VGPR / workgroup / meshlet quads / LDS を一括解決。UNKNOWN は全軸で保守側＋`tuned()` が false |
 | Z21 | GPU バッファの再利用と fence 律速 | ✅ | `gpu/BufferPool` — 実測事例ではこの形状（数 KiB の小バッファを生成・破棄）が **vkAllocateMemory/vkFreeMemory 呼び出しの 85〜96 %** を占め、RADV では free が libdrm のプロセス全体 VA hole リストを走査。バグ 2 件: slack が生バイト基準、`refusedEarly` が加算されない死んだ API（削除） |
 | Z22 | 検出した拡張を実際の実行経路に変換 | ✅ | `platform/FeaturePaths` — 全経路に必ず動く fallback（**古い iGPU で起動しない Mod は、遅くても動く Mod より悪い**）。`GpuReport` の probe 結果を `PlatformRuntime.featurePaths()` が消費。理由文に欠落拡張名を含めるので、FPS が低いユーザーが 12 個の条件のどれかを推測せずに済む |
+| Z23 | indirect count draw の検証とサイズ決定 | ✅ | `gpu/IndirectCountDraw` — off-by-one を往復テスト（バッファから導いた count は収まり、+1 は収まらない）。clamp は安全性質なので呼び出し箇所の `Math.min` ではなく名前付きメソッド。**沈黙して壊れるのは multiDrawIndirect 欠落**（invalid であって低速ではない） |
 
 > ## ⛔⛔ この「未」を見つけたら — 先にこれを読め ⛔⛔
 >
