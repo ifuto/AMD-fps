@@ -7,6 +7,7 @@ import net.amdfaster.platform.AmdArchitecture;
 import net.amdfaster.platform.GpuIdentity;
 import net.amdfaster.platform.GpuInfo;
 import net.amdfaster.platform.GpuReport;
+import net.amdfaster.perf.GpuTimestampQuery;
 import net.amdfaster.vk.VkContext;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
@@ -179,9 +180,45 @@ public final class AmdFasterCommand {
             for (String line : context.describe().split("\\n")) {
                 send(source, text(line, colour));
             }
+            probeGpuTime(source, context);
             return context.isAvailable() ? 1 : 0;
         } finally {
             context.close();
+        }
+    }
+
+    /**
+     * Builds the GPU time query against this context and tears it down again.
+     *
+     * <p>The pool is created rather than merely described, because "the device reports a 32 ns counter with
+     * 36 bits" and "a query pool can actually be made from that" are different claims and only the second
+     * one is the one the benchmark depends on. A driver that reports a counter it will not let us query is
+     * a real case, and finding out here rather than from a GPU column that never fills in is the point.
+     *
+     * <p>Three slots, matching the frames in flight the frame ring is built for. The pool is destroyed
+     * before the context closes, because it belongs to the device and a pool outliving its device is not
+     * something to leave to the driver's opinion.
+     */
+    private static void probeGpuTime(CommandSourceStack source, VkContext context) {
+        if (!context.isAvailable()) {
+            return;
+        }
+        GpuTimestampQuery query = null;
+        try {
+            query = context.newGpuTime(3);
+            if (query == null) {
+                send(source, text("gpu time: not measurable -- " + context.timestamps(), ChatFormatting.YELLOW));
+                return;
+            }
+            send(source, text("gpu time: query pool created, " + query.slots() + " slots ("
+                    + context.timestamps() + ")", ChatFormatting.GREEN));
+        } catch (RuntimeException e) {
+            // A driver that refuses the pool is worth reporting and not worth a crash over.
+            send(source, text("gpu time: query pool failed -- " + e.getMessage(), ChatFormatting.RED));
+        } finally {
+            if (query != null) {
+                query.close();
+            }
         }
     }
 
