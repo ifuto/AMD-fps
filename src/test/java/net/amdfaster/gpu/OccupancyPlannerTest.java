@@ -12,50 +12,77 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Every published data point the model is checked against is asserted here, so a change to the register
- * model that stops reproducing the whitepaper or the occupancy table fails rather than quietly guessing.
+ * model that stops reproducing the whitepaper or the worked examples fails rather than quietly guessing.
  */
 class OccupancyPlannerTest {
+
+    /** Registers per lane in an RDNA 1/2 SIMD, allocated in blocks of eight. */
+    private static final int RDNA1 = OccupancyPlanner.VGPRS_RDNA1;
+    private static final int G1 = OccupancyPlanner.VGPR_GRANULE_RDNA1;
+
+    /** Registers per lane in an RDNA 3/4 SIMD, allocated in blocks of twenty-four. */
+    private static final int RDNA3 = OccupancyPlanner.VGPRS_RDNA3;
+    private static final int G3 = OccupancyPlanner.VGPR_GRANULE_RDNA3;
 
     @Test
     void theWhitepaperDataPointsOnA1024RegisterFile() {
         // RDNA Architecture whitepaper: 4x wave32 at 256 VGPRs, 16x at 64, 2x wave64 at 256, 8x at 64.
-        assertEquals(4, OccupancyPlanner.wavesPerSimd(256, 32, 1024));
-        assertEquals(16, OccupancyPlanner.wavesPerSimd(64, 32, 1024));
-        assertEquals(2, OccupancyPlanner.wavesPerSimd(256, 64, 1024));
-        assertEquals(8, OccupancyPlanner.wavesPerSimd(64, 64, 1024));
+        assertEquals(4, OccupancyPlanner.wavesPerSimd(256, 32, RDNA1, G1));
+        assertEquals(16, OccupancyPlanner.wavesPerSimd(64, 32, RDNA1, G1));
+        assertEquals(2, OccupancyPlanner.wavesPerSimd(256, 64, RDNA1, G1));
+        assertEquals(8, OccupancyPlanner.wavesPerSimd(64, 64, RDNA1, G1));
     }
 
     @Test
-    void theRdna34OccupancyTableOnA1536RegisterFile() {
-        assertEquals(16, OccupancyPlanner.wavesPerSimd(96, 32, 1536));
-        assertEquals(12, OccupancyPlanner.wavesPerSimd(128, 32, 1536));
-        assertEquals(8, OccupancyPlanner.wavesPerSimd(192, 32, 1536));
-        assertEquals(6, OccupancyPlanner.wavesPerSimd(256, 32, 1536));
+    void theWorkedExamplesThatPinTheGranule() {
+        // The published arithmetic, not the summary table: 97 VGPRs allocates five 24-register blocks, so
+        // 120, and 1536 over 120 is twelve waves. 168 VGPRs is seven blocks exactly, so 168, and nine.
+        // A model that skipped the rounding would answer fifteen for the 97 register shader -- 25 per
+        // cent more waves than the hardware schedules, which is the whole error this guards against.
+        assertEquals(16, OccupancyPlanner.wavesPerSimd(96, 32, RDNA3, G3));
+        assertEquals(12, OccupancyPlanner.wavesPerSimd(97, 32, RDNA3, G3));
+        assertEquals(12, OccupancyPlanner.wavesPerSimd(120, 32, RDNA3, G3), "still five blocks");
+        assertEquals(10, OccupancyPlanner.wavesPerSimd(128, 32, RDNA3, G3), "six blocks: 144");
+        assertEquals(9, OccupancyPlanner.wavesPerSimd(168, 32, RDNA3, G3));
+        assertEquals(8, OccupancyPlanner.wavesPerSimd(192, 32, RDNA3, G3));
+        assertEquals(6, OccupancyPlanner.wavesPerSimd(240, 32, RDNA3, G3));
+        assertEquals(5, OccupancyPlanner.wavesPerSimd(256, 32, RDNA3, G3), "eleven blocks: 264");
     }
 
     @Test
     void occupancyIsAClampedStaircaseNotASlope() {
-        // Sixteen slots is the ceiling, so a cheap shader does not get more waves by using fewer
-        // registers -- it already filled them.
-        assertEquals(16, OccupancyPlanner.wavesPerSimd(1, 32, 1536));
-        assertEquals(16, OccupancyPlanner.wavesPerSimd(48, 32, 1536));
-        assertEquals(16, OccupancyPlanner.wavesPerSimd(96, 32, 1536));
-        // One register past the full-occupancy point and four slots go.
-        assertEquals(12, OccupancyPlanner.wavesPerSimd(97, 32, 1536));
+        // Sixteen slots is the ceiling, so a cheap shader gets no more waves for using fewer registers --
+        // it already filled them. The step down happens at a block boundary, not at every register.
+        assertEquals(16, OccupancyPlanner.wavesPerSimd(1, 32, RDNA3, G3));
+        assertEquals(16, OccupancyPlanner.wavesPerSimd(24, 32, RDNA3, G3));
+        assertEquals(16, OccupancyPlanner.wavesPerSimd(48, 32, RDNA3, G3));
+        assertEquals(16, OccupancyPlanner.wavesPerSimd(64, 32, RDNA3, G3), "three blocks: 72");
+        assertEquals(16, OccupancyPlanner.wavesPerSimd(96, 32, RDNA3, G3));
+        assertEquals(12, OccupancyPlanner.wavesPerSimd(97, 32, RDNA3, G3), "four slots gone at 97");
     }
 
     @Test
-    void wave64WinsWhileTheShaderIsCheapAndLosesOnceItIsNot() {
-        // The two sizes compete on lanes in flight, not on waves: a wave64 has twice the lanes but takes
-        // twice the register slots, so which one is ahead depends entirely on the register count.
-        assertEquals(512, OccupancyPlanner.lanesInFlight(64, 32, 1536));
-        assertEquals(768, OccupancyPlanner.lanesInFlight(64, 64, 1536), "wave64 ahead at 64 VGPRs");
+    void wave64WinsWhileTheShaderIsCheapAndStopsAtTheBlockBoundary() {
+        // The two sizes compete on lanes in flight, not on waves: a wave64 has twice the lanes but is
+        // charged twice the registers, so which one is ahead depends entirely on the allocation.
+        assertEquals(512, OccupancyPlanner.lanesInFlight(64, 32, RDNA3, G3));
+        assertEquals(640, OccupancyPlanner.lanesInFlight(64, 64, RDNA3, G3), "wave64 ahead at 64 VGPRs");
 
-        assertEquals(512, OccupancyPlanner.lanesInFlight(96, 32, 1536));
-        assertEquals(512, OccupancyPlanner.lanesInFlight(96, 64, 1536), "level at 96");
+        assertEquals(512, OccupancyPlanner.lanesInFlight(96, 32, RDNA3, G3));
+        assertEquals(512, OccupancyPlanner.lanesInFlight(96, 64, RDNA3, G3), "level at 96");
 
-        assertEquals(384, OccupancyPlanner.lanesInFlight(128, 32, 1536));
-        assertEquals(384, OccupancyPlanner.lanesInFlight(128, 64, 1536), "still level, half the waves");
+        assertEquals(320, OccupancyPlanner.lanesInFlight(128, 32, RDNA3, G3));
+        assertEquals(320, OccupancyPlanner.lanesInFlight(128, 64, RDNA3, G3), "still level, half the waves");
+    }
+
+    @Test
+    void theCrossoverIsAtSeventySixRegisters() {
+        // Seventy-six rounds up to four blocks of 24, which is 96, and from there the two sizes are level.
+        // Below it wave64 is ahead; at it and above, wave32 is the better of two equals.
+        assertEquals(1024, OccupancyPlanner.lanesInFlight(48, 64, RDNA3, G3));
+        assertEquals(512, OccupancyPlanner.lanesInFlight(48, 32, RDNA3, G3));
+        assertEquals(OccupancyPlanner.lanesInFlight(76, 32, RDNA3, G3),
+                OccupancyPlanner.lanesInFlight(76, 64, RDNA3, G3));
     }
 
     @Test
@@ -84,7 +111,7 @@ class OccupancyPlannerTest {
     }
 
     @Test
-    void theRegisterFileIsPerGeneration() {
+    void theRegisterFileAndGranuleArePerGeneration() {
         assertEquals(1024, OccupancyPlanner.registersPerSimd(AmdArchitecture.RDNA1));
         assertEquals(1024, OccupancyPlanner.registersPerSimd(AmdArchitecture.RDNA2));
         assertEquals(1536, OccupancyPlanner.registersPerSimd(AmdArchitecture.RDNA3));
@@ -92,6 +119,13 @@ class OccupancyPlannerTest {
         assertEquals(1536, OccupancyPlanner.registersPerSimd(AmdArchitecture.RDNA4));
         assertEquals(256, OccupancyPlanner.registersPerSimd(AmdArchitecture.GCN5_VEGA));
         assertEquals(0, OccupancyPlanner.registersPerSimd(AmdArchitecture.UNKNOWN), "nothing to plan against");
+
+        assertEquals(8, OccupancyPlanner.granuleFor(AmdArchitecture.RDNA1));
+        assertEquals(8, OccupancyPlanner.granuleFor(AmdArchitecture.RDNA2));
+        assertEquals(24, OccupancyPlanner.granuleFor(AmdArchitecture.RDNA3));
+        assertEquals(24, OccupancyPlanner.granuleFor(AmdArchitecture.RDNA4));
+        assertEquals(4, OccupancyPlanner.granuleFor(AmdArchitecture.GCN5_VEGA));
+        assertEquals(1, OccupancyPlanner.granuleFor(AmdArchitecture.UNKNOWN));
     }
 
     @Test
@@ -101,8 +135,8 @@ class OccupancyPlannerTest {
         assertEquals(64, OccupancyPlanner.recommendWaveSize(footprint, AmdArchitecture.RDNA3));
 
         Occupancy occupancy = OccupancyPlanner.occupancy(footprint, 64, AmdArchitecture.RDNA3);
-        assertEquals(12, occupancy.wavesPerSimd());
-        assertEquals(768, occupancy.lanesInFlight());
+        assertEquals(10, occupancy.wavesPerSimd(), "72 allocated, charged twice for 64 lanes");
+        assertEquals(640, occupancy.lanesInFlight());
         assertEquals(4, occupancy.workgroupsPerCu(), "64 KB per CU over a 16 KB tile");
         assertFalse(occupancy.fullOccupancy());
     }
@@ -155,9 +189,14 @@ class OccupancyPlannerTest {
 
     @Test
     void nonsenseInputsAreRejected() {
-        assertThrows(IllegalArgumentException.class, () -> OccupancyPlanner.wavesPerSimd(0, 32, 1536));
-        assertThrows(IllegalArgumentException.class, () -> OccupancyPlanner.wavesPerSimd(32, 16, 1536));
-        assertThrows(IllegalArgumentException.class, () -> OccupancyPlanner.wavesPerSimd(32, 32, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> OccupancyPlanner.wavesPerSimd(0, 32, RDNA3, G3));
+        assertThrows(IllegalArgumentException.class,
+                () -> OccupancyPlanner.wavesPerSimd(32, 16, RDNA3, G3));
+        assertThrows(IllegalArgumentException.class,
+                () -> OccupancyPlanner.wavesPerSimd(32, 32, 0, G3));
+        assertThrows(IllegalArgumentException.class,
+                () -> OccupancyPlanner.wavesPerSimd(32, 32, RDNA3, 0));
         assertThrows(IllegalArgumentException.class, () -> OccupancyPlanner.workgroupsPerCu(-1, 65536));
         assertThrows(IllegalArgumentException.class, () -> OccupancyPlanner.workgroupsPerCu(1024, 0));
         assertThrows(IllegalArgumentException.class, () -> OccupancyPlanner.ldsBankConflicts(32, 0));
@@ -171,10 +210,11 @@ class OccupancyPlannerTest {
                 () -> OccupancyPlanner.occupancy(new Footprint(64, 65537, 64, false, 1), 32,
                         AmdArchitecture.RDNA3), "more than 64 KB of LDS");
         assertThrows(IllegalArgumentException.class,
-                () -> OccupancyPlanner.recommendWaveSize(new Footprint(64, 0, 64, false, 1), null));
-        assertThrows(IllegalArgumentException.class,
                 () -> OccupancyPlanner.occupancy(new Footprint(64, 0, 64, false, 1), 32,
                         AmdArchitecture.UNKNOWN), "no register file to plan against");
+        assertThrows(IllegalArgumentException.class,
+                () -> OccupancyPlanner.recommendWaveSize(new Footprint(64, 0, 64, false, 1), null));
         assertThrows(IllegalArgumentException.class, () -> OccupancyPlanner.registersPerSimd(null));
+        assertThrows(IllegalArgumentException.class, () -> OccupancyPlanner.granuleFor(null));
     }
 }

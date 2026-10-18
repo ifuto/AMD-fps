@@ -54,6 +54,29 @@ public final class OccupancyPlanner {
     /** The register count at or below which all sixteen wave slots fill, on an RDNA 3/4 SIMD. */
     public static final int VGPRS_FULL_OCCUPANCY = 96;
 
+    /**
+     * Register allocation granule on RDNA 1 and 2, in registers per lane.
+     *
+     * <p>The LLVM AMDGPU backend describes GFX10 through GFX12 wave32 allocation as blocks of eight, so a
+     * shader is charged for a multiple of eight whether it uses all of them or not.
+     */
+    public static final int VGPR_GRANULE_RDNA1 = 8;
+
+    /**
+     * Register allocation granule on RDNA 3 and 4, in registers per lane.
+     *
+     * <p>Twenty-four on gfx1100 and gfx1201. This is the number that makes occupancy a staircase rather
+     * than a slope, and it is worth getting right because the steps are large: 96 registers allocates
+     * exactly 96 and fills all sixteen slots, while 97 allocates 120 and fits twelve. A model that divided
+     * the register file by the count the compiler reported, without rounding up to a block, would answer
+     * fifteen for that 97 register shader -- 25 per cent more waves than the hardware will schedule, and
+     * the whole point of the calculation is to avoid that kind of optimistic guess.
+     */
+    public static final int VGPR_GRANULE_RDNA3 = 24;
+
+    /** Register allocation granule on GCN 5, in registers per lane. */
+    public static final int VGPR_GRANULE_GCN5 = 4;
+
     /** LDS shared by the two CUs of one WGP on RDNA 1 and 2. */
     public static final int LDS_BYTES_PER_WGP = 128 * 1024;
 
@@ -104,17 +127,32 @@ public final class OccupancyPlanner {
      * wave32 waves, which is the whitepaper's "wave64 counts double" and the reason the two sizes trade
      * against each other rather than one simply being larger.
      */
-    public static int wavesPerSimd(int vgprsPerLane, int waveSize, int registersPerSimd) {
+    public static int wavesPerSimd(int vgprsPerLane, int waveSize, int registersPerSimd, int granule) {
         require(vgprsPerLane >= 1, "a shader uses at least one register");
         require(waveSize == 32 || waveSize == 64, "RDNA runs wave32 or wave64");
         require(registersPerSimd > 0, "a register file must have registers");
+        require(granule >= 1, "a granule is at least one register");
+        int allocated = ((vgprsPerLane + granule - 1) / granule) * granule;
         int multiplier = waveSize == 64 ? 2 : 1;
-        return Math.min(MAX_WAVES_PER_SIMD, registersPerSimd / (vgprsPerLane * multiplier));
+        return Math.min(MAX_WAVES_PER_SIMD, registersPerSimd / (allocated * multiplier));
     }
 
     /** Lanes resident on one SIMD, which is what the two wave sizes are really compared on. */
-    public static int lanesInFlight(int vgprsPerLane, int waveSize, int registersPerSimd) {
-        return wavesPerSimd(vgprsPerLane, waveSize, registersPerSimd) * waveSize;
+    public static int lanesInFlight(int vgprsPerLane, int waveSize, int registersPerSimd, int granule) {
+        return wavesPerSimd(vgprsPerLane, waveSize, registersPerSimd, granule) * waveSize;
+    }
+
+    /** The register allocation granule for an architecture, in registers per lane. */
+    public static int granuleFor(AmdArchitecture architecture) {
+        require(architecture != null, "an architecture is needed");
+        return switch (architecture) {
+            case RDNA1, RDNA2 -> VGPR_GRANULE_RDNA1;
+            case RDNA3, RDNA35, RDNA4 -> VGPR_GRANULE_RDNA3;
+            case GCN5_VEGA -> VGPR_GRANULE_GCN5;
+            // Nothing is known about an unrecognised device, so allocate one register at a time and let
+            // the caller's register file check reject the plan rather than inventing a granule.
+            case UNKNOWN -> 1;
+        };
     }
 
     /**
@@ -177,7 +215,8 @@ public final class OccupancyPlanner {
                 "a workgroup may not take more than 64 KB of LDS");
         int registers = registersPerSimd(architecture);
         require(registers > 0, "an unknown architecture has no register file to plan against");
-        int waves = wavesPerSimd(footprint.vgprsPerLane(), waveSize, registers);
+        int waves = wavesPerSimd(footprint.vgprsPerLane(), waveSize, registers,
+                granuleFor(architecture));
         return new Occupancy(waveSize, waves, waves * waveSize,
                 workgroupsPerCu(footprint.ldsBytesPerWorkgroup(), architecture.ldsBytesPerCu()),
                 ldsBankConflicts(waveSize, footprint.ldsStrideWords()),
@@ -210,8 +249,9 @@ public final class OccupancyPlanner {
         if (footprint.crossLaneReduction()) {
             return 32;
         }
-        int lanes32 = lanesInFlight(footprint.vgprsPerLane(), 32, registers);
-        int lanes64 = lanesInFlight(footprint.vgprsPerLane(), 64, registers);
+        int granule = granuleFor(architecture);
+        int lanes32 = lanesInFlight(footprint.vgprsPerLane(), 32, registers, granule);
+        int lanes64 = lanesInFlight(footprint.vgprsPerLane(), 64, registers, granule);
         return lanes64 > lanes32 ? 64 : 32;
     }
 
