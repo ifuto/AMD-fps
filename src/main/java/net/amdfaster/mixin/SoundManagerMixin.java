@@ -42,17 +42,21 @@ public abstract class SoundManagerMixin {
         double y = sound.getY();
         double z = sound.getZ();
         double angleFromFacing = 0.0;
+        double distance = 0.0;
+        boolean attached = sound.isRelative();
 
         // A relative sound has no position at all -- its coordinates are zero because they are unused,
         // not because it is at the origin. Treating it as a sound somewhere out in the world, possibly
         // behind the camera, would refuse the interface, the music and every narrated line: exactly the
         // category the direction filter exists to leave alone.
-        if (!sound.isRelative()) {
+        if (!attached) {
             angleFromFacing = angleFromFacing(x, y, z);
+            distance = distanceToCamera(x, y, z);
         }
 
         if (AmdFasterRuntime.refuseSound(id.toString(), id.getNamespace(),
-                categoryOf(sound.getSource()), x, y, z, angleFromFacing, fieldOfView())) {
+                categoryOf(sound.getSource()), x, y, z, angleFromFacing, fieldOfView(),
+                distance, attached)) {
             info.setReturnValue(SoundEngine.PlayResult.NOT_STARTED);
         }
     }
@@ -92,6 +96,24 @@ public abstract class SoundManagerMixin {
         // Clamped, because a float rounding can push the dot product a hair outside [-1, 1] and acos of
         // that is NaN -- which then compares false against every threshold and refuses the sound.
         return Math.toDegrees(Math.acos(Math.max(-1.0, Math.min(1.0, cosine))));
+    }
+
+    /**
+     * How far the source is from the camera, which is what the adaptive distance cutoff is measured in.
+     *
+     * <p>From the camera and not the player, because in third person the two differ and the question is
+     * what the person watching can hear.
+     */
+    private static double distanceToCamera(double x, double y, double z) {
+        Minecraft client = Minecraft.getInstance();
+        if (client == null || client.gameRenderer == null) {
+            return 0.0;
+        }
+        Camera camera = client.gameRenderer.getMainCamera();
+        if (camera == null || !camera.isInitialized()) {
+            return 0.0;
+        }
+        return camera.position().distanceTo(new Vec3(x, y, z));
     }
 
     /** The player's field of view setting, which is the angle the direction filter is measured against. */

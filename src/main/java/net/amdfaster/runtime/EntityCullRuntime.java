@@ -6,6 +6,8 @@ import net.amdfaster.cull.PyramidGeometry;
 import net.amdfaster.cull.ViewProjection;
 import java.util.Arrays;
 
+import net.amdfaster.entity.EntityBatchSet;
+import net.amdfaster.entity.EntityBatcher;
 import net.amdfaster.entity.EntityBuffer;
 
 /**
@@ -47,6 +49,14 @@ public final class EntityCullRuntime {
     private final CameraCutDetector cuts;
 
     private final EntityBuffer buffer = new EntityBuffer(2048);
+
+    /**
+     * Groups the survivors by model, which is what turns one draw call per entity into one per model.
+     *
+     * <p>Fed from the survivors rather than from the frame's entities: batching what was culled would
+     * build instances nothing draws, and the whole point of the pass above is that those are gone.
+     */
+    private final EntityBatcher batcher = new EntityBatcher();
     private final float[] viewProjection = new float[16];
     private final Frustum frustum = new Frustum(Frustum.identity());
 
@@ -207,6 +217,28 @@ public final class EntityCullRuntime {
         return this.gatheredFrameId != Long.MIN_VALUE && !this.gathering;
     }
 
+    /**
+     * The survivors of the last frame, grouped into instanced batches.
+     *
+     * <p>Rebuilt on each call rather than cached, because the survivors change every frame and a cache
+     * keyed on anything else would have to be invalidated anyway. Building it is a walk over the survivor
+     * list and an insertion per entity, which is small next to the drawing it replaces.
+     */
+    public EntityBatchSet batches() {
+        this.batcher.clear();
+        for (int i = 0; i < this.buffer.size(); i++) {
+            // Only the ones that survived. The buffer still holds the whole frame; the set is the filter.
+            if (survived(this.buffer.modelKey(i))) {
+                this.batcher.add(this.buffer.instance(i));
+            }
+        }
+        return this.batcher.build();
+    }
+
+    public EntityBatcher batcher() {
+        return this.batcher;
+    }
+
     /** Sets the pyramid's level geometry, to be paired with the depth the world runtime is given. */
     public void setPyramidGeometry(PyramidGeometry pyramid) {
         this.pyramid = pyramid;
@@ -235,6 +267,7 @@ public final class EntityCullRuntime {
     /** Drops the frame in progress, which a world change makes meaningless. */
     public void onWorldChange() {
         this.buffer.clear();
+        this.batcher.clear();
         Arrays.fill(this.survivors, EMPTY);
         this.survivorCount = 0;
         this.gathering = false;

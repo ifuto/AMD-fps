@@ -76,6 +76,9 @@ public final class WorldGenRuntime {
 
     private long worldChanges;
 
+    private final net.amdfaster.worldgen.StructurePieceCache structurePieces =
+            new net.amdfaster.worldgen.StructurePieceCache();
+
     public WorldGenRuntime() {
         this(DEFAULT_WORKERS);
     }
@@ -94,6 +97,27 @@ public final class WorldGenRuntime {
 
     public StructureLayoutCache structures() {
         return this.structures;
+    }
+
+    public net.amdfaster.worldgen.StructurePieceCache structurePieces() {
+        return this.structurePieces;
+    }
+
+    /**
+     * Places a structure piece, generating its blocks the first time a kind and variant are asked for and
+     * copying them every time after.
+     *
+     * <p>Structure pieces are the same handful of shapes over and over, rotated to face different ways.
+     * Generating each one from the template costs the full piece walk; copying costs a rotation lookup per
+     * block. The cache is keyed on kind and variant, so two villages sharing a house shape share the work.
+     *
+     * @return the block ids to place, in the piece's own order
+     */
+    public int[] placeStructurePiece(int kind, int variant, int turns, java.util.function.IntSupplier generate) {
+        if (!this.structurePieces.contains(kind, variant)) {
+            this.structurePieces.store(kind, variant, generate.get());
+        }
+        return this.structurePieces.place(kind, variant, turns);
     }
 
     public RunLengthCodec codec() {
@@ -116,6 +140,7 @@ public final class WorldGenRuntime {
      * then be answered from it.
      */
     public void onDisconnect() {
+        this.structurePieces.clear();
         this.worldChanges++;
         this.noise.clear();
         this.structures.clear();

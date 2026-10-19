@@ -166,4 +166,23 @@ class EntityCullRuntimeTest {
         assertEquals(1, cull.survivorCount());
         assertTrue(cull.survived(123));
     }
+
+    @Test
+    void onlyTheSurvivorsAreBatchedForDrawing() {
+        EntityCullRuntime cull = frame(new EntityWorldRuntime(), 1L);
+        cull.offer(1, 0f, 0f, 10f, 0f, 0, 0.3f, 1.8f);
+        cull.offer(2, 1f, 0f, 10f, 0f, 0, 0.3f, 1.8f);
+        cull.offer(3, -1f, 0f, 10f, 0f, 0, 0.3f, 1.8f);
+        cull.offer(4, 0f, 0f, -10f, 0f, 0, 0.3f, 1.8f);
+        cull.finishFrame();
+
+        // Batching what was culled would build instances nothing draws, and the point of the pass is that
+        // those are gone. The set is the filter, not the buffer.
+        var batches = cull.batches();
+        assertEquals(3, batches.instanceCount());
+        assertEquals(3, batches.drawCallCount(), "each model key is its own batch");
+
+        cull.onWorldChange();
+        assertEquals(0, cull.batches().instanceCount());
+    }
 }

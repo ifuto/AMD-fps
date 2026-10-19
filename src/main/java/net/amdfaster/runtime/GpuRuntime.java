@@ -130,6 +130,29 @@ public final class GpuRuntime {
 
     private long frames;
 
+    /**
+     * The surface format the backend would ask for, given what the driver offers.
+     *
+     * <p>A decision, not a query: the driver offers a list and this picks from it, preferring a format
+     * with an sRGB-nonlinear colour space so gamma is handled by the hardware rather than in the shader.
+     */
+    public static net.amdfaster.vk.SurfacePreferences.FormatChoice chooseSurfaceFormat(
+            java.util.List<net.amdfaster.vk.SurfacePreferences.SurfaceFormat> offered) {
+        return net.amdfaster.vk.SurfacePreferences.chooseFormat(offered);
+    }
+
+    /**
+     * Creates the swapchain a Vulkan context needs before anything can be drawn.
+     *
+     * <p>Not called yet, because nothing in the mod creates a Vulkan device -- Minecraft 1.21.11 renders
+     * through OpenGL and this backend is what the independent renderer would run on. It is here rather
+     * than in a note so that the day a context exists, the call is a call and not a rewrite.
+     */
+    public static net.amdfaster.vk.Swapchain createSwapchain(net.amdfaster.vk.VkContext context,
+            int width, int height) {
+        return net.amdfaster.vk.Swapchain.create(context, width, height);
+    }
+
     public BufferArena arena() {
         return this.arena;
     }

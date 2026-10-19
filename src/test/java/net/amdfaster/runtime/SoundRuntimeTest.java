@@ -264,4 +264,47 @@ class SoundRuntimeTest {
         assertFalse(runtime.poolContested(), "a fresh runtime is not contending for channels");
         assertEquals(0.0, runtime.pressure(), 1e-12);
     }
+
+    @Test
+    void aSoundIsWorthAChannelWhenTheSceneIsQuietAndNotWhenItIsBusy() {
+        SoundRuntime sound = new SoundRuntime();
+        // Twenty blocks is inside the 32-block maximum, so a quiet scene still starts it.
+        assertTrue(sound.allowByDistance(20.0, false));
+
+        // The cutoff tightens towards 8 blocks as the scene fills, so the same sound stops being worth a
+        // channel. Nothing about the sound changed; what changed is everything else competing for one.
+        for (int i = 0; i < net.amdfaster.sound.AdaptiveSoundCutoff.STRICTEST_AT; i++) {
+            sound.noteStarted();
+        }
+        assertFalse(sound.allowByDistance(20.0, false));
+        assertEquals(1L, sound.distanceRefused());
+        // And a sound well inside even the strictest cutoff still plays.
+        assertTrue(sound.allowByDistance(2.0, false));
+    }
+
+    @Test
+    void anAttachedSoundIsNeverCutForDistance() {
+        SoundRuntime sound = new SoundRuntime();
+        for (int i = 0; i < net.amdfaster.sound.AdaptiveSoundCutoff.STRICTEST_AT; i++) {
+            sound.noteStarted();
+        }
+        // The menu, the music and the player's own voice have no position in the world. Applying a
+        // distance cutoff to them would make the interface silent when the scene got busy, which is not a
+        // performance trade but a broken control.
+        assertTrue(sound.allowByDistance(500.0, true));
+        assertEquals(0L, sound.distanceRefused());
+    }
+
+    @Test
+    void theDistancePressureResetsEachTick() {
+        SoundRuntime sound = new SoundRuntime();
+        for (int i = 0; i < net.amdfaster.sound.AdaptiveSoundCutoff.STRICTEST_AT; i++) {
+            sound.noteStarted();
+        }
+        assertFalse(sound.allowByDistance(20.0, false));
+        sound.endTick();
+        // A tick's worth of sounds says nothing about the next one. Carrying the count over would leave the
+        // cutoff permanently strict after a single busy moment.
+        assertTrue(sound.allowByDistance(20.0, false));
+    }
 }

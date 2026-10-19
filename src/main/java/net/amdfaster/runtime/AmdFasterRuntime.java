@@ -424,18 +424,30 @@ public final class AmdFasterRuntime {
      * @param z                the source z
      * @param angleFromFacing  how far it is from where the camera is looking, in degrees
      * @param fieldOfView      the player's field of view setting, in degrees
+     * @param distance         how far the source is from the player
+     * @param attached         whether the sound is attached to the player rather than placed in the world
      * @return false if the sound should not be started
      */
     public static boolean refuseSound(String sound, String source,
             net.amdfaster.sound.CategoryBudgetAllocator.Category category,
-            double x, double y, double z, double angleFromFacing, double fieldOfView) {
+            double x, double y, double z, double angleFromFacing, double fieldOfView,
+            double distance, boolean attached) {
         AmdFasterRuntime runtime = instance;
         if (runtime == null || !runtime.installed) {
             return false;
         }
         SoundRuntime.Decision decision = runtime.sound.decide(sound, source, category, x, y, z,
                 angleFromFacing, fieldOfView, runtime.sound.poolContested());
-        return !decision.plays();
+        if (!decision.plays()) {
+            return true;
+        }
+        // Second, and only on a sound that already passed. The other way round would cut a protected sound
+        // in a busy scene, which is the one moment losing a sound is not a saving.
+        if (!runtime.sound.allowByDistance(distance, attached)) {
+            return true;
+        }
+        runtime.sound.noteStarted();
+        return false;
     }
 
     /** Whether the handlers were registered successfully. */

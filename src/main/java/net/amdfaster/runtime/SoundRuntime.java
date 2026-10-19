@@ -117,6 +117,19 @@ public final class SoundRuntime {
     /** Streams long sounds instead of decoding them whole. */
     private final StreamingSoundSplitter streaming = new StreamingSoundSplitter();
 
+    /**
+     * Tightens the distance a sound is still worth a channel for as the scene gets busier.
+     *
+     * <p>The pressure it tightens against is how many sounds this runtime started this tick, which is a
+     * measure it can actually take: the engine does not report a voice count, and inferring one from the
+     * sounds offered would count the ones already refused.
+     */
+    private final net.amdfaster.sound.AdaptiveSoundCutoff adaptive =
+            new net.amdfaster.sound.AdaptiveSoundCutoff();
+
+    private int startedThisTick;
+    private long distanceRefused;
+
     public SoundRuntime() {
         this.whitelist.protectDefaults();
     }
@@ -207,7 +220,41 @@ public final class SoundRuntime {
      * for no reason the player can see. The first draft of this class omitted the duplicate limiter, so a
      * sound that played five times in one tick could never play again.
      */
+    public net.amdfaster.sound.AdaptiveSoundCutoff adaptive() {
+        return this.adaptive;
+    }
+
+    /**
+     * Whether a sound is close enough to be worth a channel, given how busy the scene already is.
+     *
+     * <p>Run after {@link #decide} and only on a sound that passed it, because a protected sound has to
+     * survive a busy scene more than any other -- a creeper's hiss that gets cut when the scene is loud is
+     * the worst possible moment to lose it. Attached sounds are exempt for their own reason: the menu, the
+     * music and the player's own voice have no position in the world.
+     *
+     * @param distance how far the source is from the player
+     * @param attached whether the sound is attached to the player rather than placed in the world
+     */
+    public boolean allowByDistance(double distance, boolean attached) {
+        boolean allowed = this.adaptive.shouldPlay(distance, this.startedThisTick, attached);
+        if (!allowed) {
+            this.distanceRefused++;
+        }
+        return allowed;
+    }
+
+    /** Notes a sound that was started, which is the pressure the distance cutoff tightens against. */
+    public void noteStarted() {
+        this.startedThisTick++;
+    }
+
+    /** Sounds refused for being too far away, given how busy the scene was. */
+    public long distanceRefused() {
+        return this.distanceRefused;
+    }
+
     public void endTick() {
+        this.startedThisTick = 0;
         this.tick++;
         this.duplicates.endTick();
         this.regions.endTick();

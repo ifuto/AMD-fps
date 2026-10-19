@@ -121,6 +121,9 @@ public final class RenderRuntime {
     /** Tracks which sections changed so a frame only redraws those. */
     private final DeltaFramePlanner deltas = new DeltaFramePlanner();
 
+    /** Collapses adjacent draws that share a state, which the sort below is what makes adjacent. */
+    private final net.amdfaster.draw.DrawCallMerger drawMerger = new net.amdfaster.draw.DrawCallMerger();
+
     /** Sorts draws by pipeline, then texture, then depth. */
     private final SortKeyRadixSort drawSort = new SortKeyRadixSort();
 
@@ -164,6 +167,23 @@ public final class RenderRuntime {
     }
 
     /** The element toggles, so a player can turn clouds or weather off. */
+    public net.amdfaster.draw.DrawCallMerger drawMerger() {
+        return this.drawMerger;
+    }
+
+    /**
+     * Collapses runs of draws that differ only in what they draw, not in how.
+     *
+     * <p>Two draws with the same texture, shader, blend mode and depth test are one draw with a bigger
+     * instance range, and on a tile-based or an APU the saving is the state change rather than the
+     * vertices -- which is where most of the cost of a thousand small draws actually is.
+     *
+     * @return how many draws the frame needs after merging
+     */
+    public int mergeDraws(java.util.List<net.amdfaster.draw.DrawCallMerger.Draw> draws) {
+        return this.drawMerger.mergeFrame(draws).size();
+    }
+
     public RenderElementToggle toggles() {
         return this.toggles;
     }
