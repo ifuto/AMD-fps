@@ -54,8 +54,9 @@ public final class EntityCuller {
     /** Distance bands the budget buckets into. Enough that the cut is within a block or two. */
     static final int BANDS = 64;
 
-    private final float maxDistance;
-    private final float maxDistanceSquared;
+    // Not final, because the limit follows the game's render distance and so moves; see setMaxDistance.
+    private float maxDistance;
+    private float maxDistanceSquared;
     private final int budget;
 
     private int[] survivors = new int[256];
