@@ -4,6 +4,8 @@ import net.amdfaster.cull.CameraCutDetector;
 import net.amdfaster.cull.Frustum;
 import net.amdfaster.cull.PyramidGeometry;
 import net.amdfaster.cull.ViewProjection;
+import java.util.Arrays;
+
 import net.amdfaster.entity.EntityBuffer;
 
 /**
@@ -145,6 +147,10 @@ public final class EntityCullRuntime {
 
         int survived = this.world.cullEntities(this.buffer, this.frustum, this.camX, this.camY, this.camZ,
                 this.viewProjection, this.pyramid, this.cuts);
+        // The table has to be emptied, not just its count zeroed. An open-addressed set is its contents;
+        // resetting the count leaves last frame's ids sitting in the slots, where survived() finds them
+        // and reports an entity the frame never gathered as visible.
+        Arrays.fill(this.survivors, EMPTY);
         this.survivorCount = 0;
         for (int i = 0; i < survived; i++) {
             // survivorAt indexes into the buffer, and the buffer's model key is the entity id this pass
@@ -229,6 +235,7 @@ public final class EntityCullRuntime {
     /** Drops the frame in progress, which a world change makes meaningless. */
     public void onWorldChange() {
         this.buffer.clear();
+        Arrays.fill(this.survivors, EMPTY);
         this.survivorCount = 0;
         this.gathering = false;
         this.frameId = Long.MIN_VALUE;
