@@ -762,7 +762,7 @@ def mixinTargetTable = [
         ["net.minecraft.client.particle.ParticleEngine", "add",
          "(Lnet/minecraft/client/particle/Particle;)V"],
         ["net.minecraft.client.sounds.SoundEngine", "play",
-         "(Lnet/minecraft/client/resources/sounds/SoundInstance;)Lnet/minecraft/client/sounds/SoundEngine$PlayResult;"],
+         "(Lnet/minecraft/client/resources/sounds/SoundInstance;)Lnet/minecraft/client/sounds/SoundEngine\$PlayResult;"],
         // What the server tells the client about blocks and light.
         ["net.minecraft.client.multiplayer.ClientPacketListener", "handleBlockUpdate",
          "(Lnet/minecraft/network/protocol/game/ClientboundBlockUpdatePacket;)V"],
