@@ -854,6 +854,14 @@ def mixinTargetTable = [
 // Classes whose whole method list is dumped when anything above fails. Kept to the classes actually in
 // question: the failure annotation is delivered through the workflow's error line, and a survey of
 // Minecraft alone is long enough to be truncated before it reaches the answer.
+// Enum constants a switch in the mixins covers. An exhaustive switch with no default is what makes a
+// renamed constant a build failure instead of a sound that quietly draws on the wrong budget, but only
+// if the constants are the ones this version has -- so they are checked like everything else.
+def mixinEnumConstants = [
+        "net.minecraft.sounds.SoundSource": ["MASTER", "MUSIC", "RECORDS", "WEATHER", "BLOCKS",
+                                             "HOSTILE", "NEUTRAL", "PLAYERS", "AMBIENT", "VOICE"]
+]
+
 def mixinSurveyClasses = []
 
 // Simple names to look for anywhere in the jar, for when the question is not what a method is called but
@@ -968,6 +976,20 @@ tasks.register("verifyMixinTargets") {
                             : " -- " + methodName + " is " + overloads.collect { methodName + it }
                     problems << className + "." + methodName + descriptor + " does not exist" + detail
                     touched << className
+                }
+            }
+            mixinEnumConstants.each { String className, List<String> constants ->
+                def info = declared(className)
+                if (info == null) {
+                    problems << className + " is not in the Minecraft jar"
+                    touched << className
+                    return
+                }
+                for (String constant : constants) {
+                    if (!info.fields.containsKey(constant)) {
+                        problems << className + "." + constant + " is not a constant of that enum"
+                        touched << className
+                    }
                 }
             }
             if (!mixinSurveyClasses.isEmpty() && !problems.isEmpty()) {
