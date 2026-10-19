@@ -858,18 +858,20 @@ tasks.register("verifyMixinTargets") {
             def touched = new LinkedHashSet<String>()
             for (List<String> row : mixinTargetTable) {
                 def className = row[0]
-                def target = row[1] + row[2]
+                def methodName = row[1]
+                def descriptor = row[2]
                 def methods = lookup(className)
                 if (methods == null) {
                     problems << className + " is not in the Minecraft jar"
                     touched << className
                     continue
                 }
-                if (!(methods[row[1]] ?: []).contains(row[2])) {
-                    def overloads = methods[row[1]]
-                    problems << className + "." + target + " does not exist"
-                            + (overloads == null ? " (no method called " + row[1] + " at all)"
-                            : " -- " + row[1] + " is " + overloads.collect { row[1] + it })
+                if (!(methods[methodName] ?: []).contains(descriptor)) {
+                    def overloads = methods[methodName]
+                    def detail = overloads == null
+                            ? " (no method called " + methodName + " at all)"
+                            : " -- " + methodName + " is " + overloads.collect { methodName + it }
+                    problems << className + "." + methodName + descriptor + " does not exist" + detail
                     touched << className
                 }
             }
@@ -878,12 +880,17 @@ tasks.register("verifyMixinTargets") {
             }
 
             if (!problems.isEmpty()) {
-                def survey = touched.collect { String className ->
+                // Names only, and capped per class: the point is to find what a method is called, and an
+                // annotation that is too long to be delivered is worse than one that stops early.
+                def survey = []
+                for (String className : touched) {
                     def methods = lookup(className)
-                    className + " has: " + (methods == null ? "<absent>" : methods.keySet().join(", "))
-                }.join(" || ")
-                throw new GradleException("mixin target verification failed -> "
-                        + problems.join(" | ") + " || SURVEY || " + survey)
+                    def names = methods == null ? ["<absent>"] : methods.keySet().take(500).toList()
+                    survey << className + " has: " + names.join(", ")
+                }
+                def message = "mixin target verification failed -> " + problems.join(" | ")
+                message = message + " || SURVEY || " + survey.join(" || ")
+                throw new GradleException(message)
             }
             println("verifyMixinTargets: all " + mixinTargetTable.size() + " mixin targets exist")
         } finally {
