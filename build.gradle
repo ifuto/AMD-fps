@@ -837,7 +837,9 @@ def mixinTargetTable = [
         // The two paths that were reported as wired while nothing called them.
         ["net.minecraft.client.renderer.entity.EntityRenderDispatcher", "shouldRender",
          "(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/client/renderer/culling/Frustum;DDD)Z"],
-        ["net.minecraft.world.level.Level", "entitiesForRendering", "()Ljava/lang/Iterable;"],
+        // Not on Level in 1.21.11. ClientLevel is the client-side subclass and is where the render
+        // list lives, which is also the only one a client mod can be holding.
+        ["net.minecraft.client.multiplayer.ClientLevel", "entitiesForRendering", "()Ljava/lang/Iterable;"],
         ["net.minecraft.resources.Identifier", "toString", "()Ljava/lang/String;"],
         // A relative sound has no position, and treating its zeroed coordinates as a place in the world
         // would refuse the interface and the music. isRelative is the same test as comparing the
@@ -866,15 +868,11 @@ def mixinEnumConstants = [
                                              "HOSTILE", "NEUTRAL", "PLAYERS", "AMBIENT", "VOICE"]
 ]
 
-def mixinSurveyClasses = [
-        "net.minecraft.client.renderer.culling.Frustum",
-        "net.minecraft.client.renderer.entity.EntityRenderDispatcher"
-]
+def mixinSurveyClasses = []
 
 // Simple names to look for anywhere in the jar, for when the question is not what a method is called but
 // which package the class ended up in.
 def mixinClassSearch = [
-        "EntityRenderDispatcher",
         "SectionRenderDispatcher",
         "ChunkRenderDispatcher",
         "SectionCompiler",
