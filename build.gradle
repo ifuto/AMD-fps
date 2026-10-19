@@ -843,7 +843,7 @@ def mixinTargetTable = [
         // The engine dropping everything, where the grants have to be given back in bulk.
         ["net.minecraft.client.particle.ParticleEngine", "clearParticles", "()V"],
         // Guarding on this is what stops a frame before the camera is placed culling from (0, 0, 0).
-        ["net.minecraft.client.Camera", "isInitialized", "()Z"]
+        ["net.minecraft.client.Camera", "isInitialized", "()Z"],
         ["com.mojang.blaze3d.platform.Window", "getWidth", "()I"],
         ["com.mojang.blaze3d.platform.Window", "getHeight", "()I"],
         ["net.minecraft.client.Options", "fov", "()Lnet/minecraft/client/OptionInstance;"]
