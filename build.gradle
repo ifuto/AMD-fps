@@ -433,6 +433,7 @@ tasks.register("verifyJar") {
                         "net/amdfaster/mixin/LevelRendererMixin.class",
                         "net/amdfaster/mixin/ParticleEngineMixin.class",
                         "net/amdfaster/mixin/ParticleMixin.class",
+                        "net/amdfaster/mixin/SoundManagerMixin.class",
                         // The config that names them. Unlisted in fabric.mod.json it is never read, and
                         // nothing else fails.
                         "amdfaster.mixins.json",
@@ -779,12 +780,11 @@ def mixinTargetTable = [
         // The two per-event paths Fabric API has no hook for.
         ["net.minecraft.client.particle.ParticleEngine", "add",
          "(Lnet/minecraft/client/particle/Particle;)V"],
-        // SoundManager.play, not SoundEngine.play. The engine's returns a PlayResult, which a cancellable
-        // injection has to supply a value for, and inventing one is a guess about an enum this cannot see.
-        // The manager's is void, it is the single entry point every caller goes through, and cancelling it
-        // needs no return value at all.
+        // Both play methods return a PlayResult, so a cancellable injection has to supply one. NOT_STARTED
+        // is the value the method already returns when a sound is not started, which is what makes
+        // cancelling it safe: callers handle that answer because they have to.
         ["net.minecraft.client.sounds.SoundManager", "play",
-         "(Lnet/minecraft/client/resources/sounds/SoundInstance;)V"],
+         "(Lnet/minecraft/client/resources/sounds/SoundInstance;)Lnet/minecraft/client/sounds/SoundEngine\$PlayResult;"],
         // What the server tells the client about blocks and light.
         ["net.minecraft.client.multiplayer.ClientPacketListener", "handleBlockUpdate",
          "(Lnet/minecraft/network/protocol/game/ClientboundBlockUpdatePacket;)V"],
@@ -833,10 +833,12 @@ def mixinTargetTable = [
         // ResourceLocation is Identifier in 1.21.11 -- renamed, not moved, and the old name is simply gone.
         ["net.minecraft.client.resources.sounds.SoundInstance", "getIdentifier",
          "()Lnet/minecraft/resources/Identifier;"],
-        // A sound that is not attenuated has no position, and treating its zeroed coordinates as a place
-        // in the world would refuse the interface and the music.
-        ["net.minecraft.client.resources.sounds.SoundInstance", "getAttenuation",
-         "()Lnet/minecraft/client/resources/sounds/SoundInstance\$Attenuation;"],
+        ["net.minecraft.resources.Identifier", "getNamespace", "()Ljava/lang/String;"],
+        ["net.minecraft.resources.Identifier", "toString", "()Ljava/lang/String;"],
+        // A relative sound has no position, and treating its zeroed coordinates as a place in the world
+        // would refuse the interface and the music. isRelative is the same test as comparing the
+        // attenuation to NONE, without naming an enum that is not worth depending on.
+        ["net.minecraft.client.resources.sounds.SoundInstance", "isRelative", "()Z"],
         // The engine dropping everything, where the grants have to be given back in bulk.
         ["net.minecraft.client.particle.ParticleEngine", "clearParticles", "()V"],
         // Guarding on this is what stops a frame before the camera is placed culling from (0, 0, 0).
@@ -852,16 +854,11 @@ def mixinTargetTable = [
 // Classes whose whole method list is dumped when anything above fails. Kept to the classes actually in
 // question: the failure annotation is delivered through the workflow's error line, and a survey of
 // Minecraft alone is long enough to be truncated before it reaches the answer.
-def mixinSurveyClasses = [
-        "net.minecraft.client.sounds.SoundEngine\$PlayResult",
-        "net.minecraft.resources.Identifier"
-]
+def mixinSurveyClasses = []
 
 // Simple names to look for anywhere in the jar, for when the question is not what a method is called but
 // which package the class ended up in.
-def mixinClassSearch = [
-        "PlayResult"
-]
+def mixinClassSearch = []
 
 tasks.register("verifyMixinTargets") {
     notCompatibleWithConfigurationCache("resolves the compile classpath")
