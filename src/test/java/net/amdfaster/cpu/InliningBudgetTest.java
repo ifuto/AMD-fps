@@ -83,8 +83,12 @@ class InliningBudgetTest {
         // them is exactly the mistake the cold/hot distinction above is guarding against.
         Check atCompileLimit = InliningBudget.check("big", 8000, 0, true);
         assertEquals(Verdict.NEVER, atCompileLimit.verdict());
-        assertTrue(atCompileLimit.headroom() > 0, "it compiles, unlike the 8,001 byte method");
         assertFalse(atCompileLimit.escapeAnalysisPossible());
+        // The two verdicts measure headroom against different limits, which is the only way to tell them
+        // apart once both are negative. NOT_COMPILED is measured against the compile limit, so 8,001
+        // bytes is one byte over; NEVER is measured against the cold inlining limit, so 8,000 bytes is
+        // 7,965 over. Same sign, different meaning.
+        assertEquals(35.0 - 8000, atCompileLimit.headroom(), 1e-12);
     }
 
     @Test

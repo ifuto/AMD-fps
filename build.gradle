@@ -15,6 +15,10 @@ buildscript {
         classpath "org.lwjgl:lwjgl-shaderc:3.3.3:natives-windows"
         classpath "org.lwjgl:lwjgl:3.3.3:natives-macos"
         classpath "org.lwjgl:lwjgl-shaderc:3.3.3:natives-macos"
+        // ASM reads Minecraft's class files without loading them, so verifyMixinTargets can check that
+        // every mixin target really exists in the version being built against. Loading the classes instead
+        // would need LWJGL's natives on the build machine and would run their static initialisers.
+        classpath "org.ow2.asm:asm:9.7.1"
     }
 }
 
@@ -727,6 +731,168 @@ tasks.register("verifyJar") {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Mixin target verification.
+//
+// A mixin target is a string, so javac cannot check it. A name that is wrong does not fail this
+// build: it fails at game startup, in front of a player, as an InvalidInjectionException -- or, with
+// the config's "required" turned off, it does nothing and the mod quietly stops doing the thing the
+// mixin was there for. Both are worse than a build failure, and neither is visible from here.
+//
+// The names also move. runTick gained a DeltaTracker when the tick delta stopped being a float, and
+// getFrameTime went away with it. So every target is checked against the jar actually being compiled
+// against, by reading the class file with ASM. Reading rather than loading, because loading
+// Minecraft's classes needs LWJGL's natives on the build machine and runs their static initialisers.
+//
+// When a target is missing, the failure message carries every method of every class in the table.
+// The useful answer is never "this name is wrong", it is "here is what it is called now", and this
+// is the only place in the toolchain that can say so. It is one line because the workflow's error
+// grep reaches it through "Caused by:".
+// ---------------------------------------------------------------------------------------------
+
+// class, method, descriptor -- one row per mixin injection point.
+def mixinTargetTable = [
+        // The frame loop.
+        ["net.minecraft.client.Minecraft", "runTick", "(Lnet/minecraft/client/DeltaTracker;)V"],
+        ["net.minecraft.client.Minecraft", "tick", "()V"],
+        // A placed or broken block becoming visible on the client.
+        ["net.minecraft.world.level.Level", "setBlock",
+         "(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z"],
+        // The two per-event paths Fabric API has no hook for.
+        ["net.minecraft.client.particle.ParticleEngine", "add",
+         "(Lnet/minecraft/client/particle/Particle;)V"],
+        ["net.minecraft.client.sounds.SoundEngine", "play",
+         "(Lnet/minecraft/client/resources/sounds/SoundInstance;)V"],
+        // What the culling frame reads: camera and window.
+        ["net.minecraft.client.Camera", "getPos", "()Lnet/minecraft/world/phys/Vec3;"],
+        ["net.minecraft.client.Camera", "getXRot", "()F"],
+        ["net.minecraft.client.Camera", "getYRot", "()F"],
+        ["com.mojang.blaze3d.platform.Window", "getWidth", "()I"],
+        ["com.mojang.blaze3d.platform.Window", "getHeight", "()I"],
+        ["net.minecraft.client.Options", "fov", "()Lnet/minecraft/client/OptionInstance;"],
+        // Terrain invalidation and the level render entry point.
+        ["net.minecraft.client.renderer.LevelRenderer", "allChanged", "()V"],
+        ["net.minecraft.client.renderer.LevelRenderer", "renderLevel",
+         "(Lnet/minecraft/client/DeltaTracker;)V"],
+        // What the server tells the client about blocks and light.
+        ["net.minecraft.client.multiplayer.ClientPacketListener", "handleBlockUpdate",
+         "(Lnet/minecraft/network/protocol/game/ClientboundBlockUpdatePacket;)V"],
+        ["net.minecraft.client.multiplayer.ClientPacketListener", "handleChunkBlocksUpdate",
+         "(Lnet/minecraft/network/protocol/game/ClientboundSectionBlocksUpdatePacket;)V"],
+        ["net.minecraft.client.multiplayer.ClientPacketListener", "handleLightUpdatePacket",
+         "(Lnet/minecraft/network/protocol/game/ClientboundLightUpdatePacket;)V"]
+]
+
+// Classes whose whole method list is dumped when anything above fails. Names only, because the
+// point is to find what a method is called; the descriptor of the one that matches is reported
+// separately against the target that asked for it.
+def mixinSurveyClasses = [
+        "net.minecraft.client.Minecraft",
+        "net.minecraft.client.multiplayer.ClientPacketListener",
+        "net.minecraft.client.multiplayer.ClientLevel",
+        "net.minecraft.client.renderer.LevelRenderer",
+        "net.minecraft.client.particle.ParticleEngine",
+        "net.minecraft.client.sounds.SoundEngine",
+        "net.minecraft.client.Camera",
+        "net.minecraft.client.Options",
+        "com.mojang.blaze3d.platform.Window",
+        "net.minecraft.world.level.Level"
+]
+
+tasks.register("verifyMixinTargets") {
+    notCompatibleWithConfigurationCache("resolves the compile classpath")
+    doLast {
+        def classpath = sourceSets.main.compileClasspath.files
+
+        // Every method of a class, read out of the jar rather than loaded, as "name" -> [descriptors].
+        def methodsOf = { java.util.zip.ZipFile zip, String className ->
+            def entry = zip.getEntry(className.replace('.', '/') + ".class")
+            if (entry == null) {
+                return null
+            }
+            def bytes
+            zip.getInputStream(entry).withCloseable { input -> bytes = input.bytes }
+            def byName = new TreeMap<String, List<String>>()
+            new org.objectweb.asm.ClassReader(bytes).accept(
+                    new org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                        @Override
+                        org.objectweb.asm.MethodVisitor visitMethod(int access, String name,
+                                String descriptor, String signature, String[] exceptions) {
+                            byName.computeIfAbsent(name, { k -> [] }).add(descriptor)
+                            return null
+                        }
+                    },
+                    org.objectweb.asm.ClassReader.SKIP_CODE | org.objectweb.asm.ClassReader.SKIP_DEBUG)
+            return byName
+        }
+
+        // The jar that actually holds Minecraft. Found by content rather than by name, because loom's
+        // file name carries the mapping set and the version and neither is worth depending on here.
+        java.util.zip.ZipFile minecraft = null
+        for (File candidate : classpath) {
+            if (!candidate.isFile() || !candidate.name.endsWith(".jar")) {
+                continue
+            }
+            def zip = new java.util.zip.ZipFile(candidate)
+            if (zip.getEntry("net/minecraft/client/Minecraft.class") != null) {
+                minecraft = zip
+                break
+            }
+            zip.close()
+        }
+        if (minecraft == null) {
+            throw new GradleException("mixin target verification could not find the Minecraft jar on "
+                    + "the compile classpath (" + classpath.size() + " entries)")
+        }
+
+        try {
+            def cache = [:]
+            def lookup = { String className ->
+                if (!cache.containsKey(className)) {
+                    cache[className] = methodsOf(minecraft, className)
+                }
+                return cache[className]
+            }
+
+            def problems = []
+            def touched = new LinkedHashSet<String>()
+            for (List<String> row : mixinTargetTable) {
+                def className = row[0]
+                def target = row[1] + row[2]
+                def methods = lookup(className)
+                if (methods == null) {
+                    problems << className + " is not in the Minecraft jar"
+                    touched << className
+                    continue
+                }
+                if (!(methods[row[1]] ?: []).contains(row[2])) {
+                    def overloads = methods[row[1]]
+                    problems << className + "." + target + " does not exist"
+                            + (overloads == null ? " (no method called " + row[1] + " at all)"
+                            : " -- " + row[1] + " is " + overloads.collect { row[1] + it })
+                    touched << className
+                }
+            }
+            if (!mixinSurveyClasses.isEmpty() && !problems.isEmpty()) {
+                touched.addAll(mixinSurveyClasses)
+            }
+
+            if (!problems.isEmpty()) {
+                def survey = touched.collect { String className ->
+                    def methods = lookup(className)
+                    className + " has: " + (methods == null ? "<absent>" : methods.keySet().join(", "))
+                }.join(" || ")
+                throw new GradleException("mixin target verification failed -> "
+                        + problems.join(" | ") + " || SURVEY || " + survey)
+            }
+            println("verifyMixinTargets: all " + mixinTargetTable.size() + " mixin targets exist")
+        } finally {
+            minecraft.close()
+        }
+    }
+}
+
 tasks.named("check") {
     dependsOn(tasks.named("verifyJar"))
+    dependsOn(tasks.named("verifyMixinTargets"))
 }
