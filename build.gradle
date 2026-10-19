@@ -991,6 +991,17 @@ tasks.register("verifyMixinTargets") {
                         touched << className
                     }
                 }
+                // And the other direction, which is the one that matters. An exhaustive switch needs the
+                // whole set, so a constant this list does not mention is the failure -- checking only that
+                // the listed ones exist passes on exactly the case that breaks the build.
+                def descriptor = "L" + className.replace('.', '/') + ";"
+                def extra = info.fields.findAll { String name, String fieldDescriptor ->
+                    fieldDescriptor == descriptor && !constants.contains(name)
+                }.keySet()
+                if (!extra.isEmpty()) {
+                    problems << className + " has constants the switch does not cover: " + extra.toList()
+                    touched << className
+                }
             }
             if (!mixinSurveyClasses.isEmpty() && !problems.isEmpty()) {
                 touched.addAll(mixinSurveyClasses)
