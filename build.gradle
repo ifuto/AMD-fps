@@ -752,8 +752,8 @@ tasks.register("verifyJar") {
 
 // class, method, descriptor -- one row per mixin injection point.
 def mixinTargetTable = [
-        // The frame loop.
-        ["net.minecraft.client.Minecraft", "runTick", "(Lnet/minecraft/client/DeltaTracker;)V"],
+        // The frame loop and the game tick.
+        ["net.minecraft.client.Minecraft", "runTick", "(Z)V"],
         ["net.minecraft.client.Minecraft", "tick", "()V"],
         // A placed or broken block becoming visible on the client.
         ["net.minecraft.world.level.Level", "setBlock",
@@ -762,41 +762,30 @@ def mixinTargetTable = [
         ["net.minecraft.client.particle.ParticleEngine", "add",
          "(Lnet/minecraft/client/particle/Particle;)V"],
         ["net.minecraft.client.sounds.SoundEngine", "play",
-         "(Lnet/minecraft/client/resources/sounds/SoundInstance;)V"],
-        // What the culling frame reads: camera and window.
-        ["net.minecraft.client.Camera", "getPos", "()Lnet/minecraft/world/phys/Vec3;"],
-        ["net.minecraft.client.Camera", "getXRot", "()F"],
-        ["net.minecraft.client.Camera", "getYRot", "()F"],
-        ["com.mojang.blaze3d.platform.Window", "getWidth", "()I"],
-        ["com.mojang.blaze3d.platform.Window", "getHeight", "()I"],
-        ["net.minecraft.client.Options", "fov", "()Lnet/minecraft/client/OptionInstance;"],
-        // Terrain invalidation and the level render entry point.
-        ["net.minecraft.client.renderer.LevelRenderer", "allChanged", "()V"],
-        ["net.minecraft.client.renderer.LevelRenderer", "renderLevel",
-         "(Lnet/minecraft/client/DeltaTracker;)V"],
+         "(Lnet/minecraft/client/resources/sounds/SoundInstance;)Lnet/minecraft/client/sounds/SoundEngine$PlayResult;"],
         // What the server tells the client about blocks and light.
         ["net.minecraft.client.multiplayer.ClientPacketListener", "handleBlockUpdate",
          "(Lnet/minecraft/network/protocol/game/ClientboundBlockUpdatePacket;)V"],
         ["net.minecraft.client.multiplayer.ClientPacketListener", "handleChunkBlocksUpdate",
          "(Lnet/minecraft/network/protocol/game/ClientboundSectionBlocksUpdatePacket;)V"],
         ["net.minecraft.client.multiplayer.ClientPacketListener", "handleLightUpdatePacket",
-         "(Lnet/minecraft/network/protocol/game/ClientboundLightUpdatePacket;)V"]
+         "(Lnet/minecraft/network/protocol/game/ClientboundLightUpdatePacket;)V"],
+        // Terrain invalidation.
+        ["net.minecraft.client.renderer.LevelRenderer", "allChanged", "()V"],
+        // What the culling frame reads: camera and window.
+        ["net.minecraft.client.Camera", "getPos", "()Lnet/minecraft/world/phys/Vec3;"],
+        ["net.minecraft.client.Camera", "getXRot", "()F"],
+        ["net.minecraft.client.Camera", "getYRot", "()F"],
+        ["com.mojang.blaze3d.platform.Window", "getWidth", "()I"],
+        ["com.mojang.blaze3d.platform.Window", "getHeight", "()I"],
+        ["net.minecraft.client.Options", "fov", "()Lnet/minecraft/client/OptionInstance;"]
 ]
 
-// Classes whose whole method list is dumped when anything above fails. Names only, because the
-// point is to find what a method is called; the descriptor of the one that matches is reported
-// separately against the target that asked for it.
+// Classes whose whole method list is dumped when anything above fails. Kept to the class actually in
+// question: the failure annotation is delivered through the workflow's error line, and a survey of
+// Minecraft alone is long enough to be truncated before it reaches the answer.
 def mixinSurveyClasses = [
-        "net.minecraft.client.Minecraft",
-        "net.minecraft.client.multiplayer.ClientPacketListener",
-        "net.minecraft.client.multiplayer.ClientLevel",
-        "net.minecraft.client.renderer.LevelRenderer",
-        "net.minecraft.client.particle.ParticleEngine",
-        "net.minecraft.client.sounds.SoundEngine",
-        "net.minecraft.client.Camera",
-        "net.minecraft.client.Options",
-        "com.mojang.blaze3d.platform.Window",
-        "net.minecraft.world.level.Level"
+        "net.minecraft.client.Camera"
 ]
 
 tasks.register("verifyMixinTargets") {
