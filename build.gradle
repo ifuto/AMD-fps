@@ -844,6 +844,12 @@ def mixinTargetTable = [
         // sections, which is what makes a CPU depth pyramid possible from here at all.
         ["net.minecraft.world.level.Level", "getHeight",
          "(Lnet/minecraft/world/level/levelgen/Heightmap\$Types;II)I"],
+        ["net.minecraft.client.renderer.chunk.SectionRenderDispatcher", "setCameraPosition",
+         "(Lnet/minecraft/world/phys/Vec3;)V"],
+        ["net.minecraft.client.renderer.chunk.SectionRenderDispatcher\$RenderSection",
+         "rebuildSectionAsync", "()V"],
+        ["net.minecraft.client.renderer.chunk.SectionRenderDispatcher\$RenderSection",
+         "getRenderOrigin", "()Lnet/minecraft/core/BlockPos;"],
         ["net.minecraft.resources.Identifier", "toString", "()Ljava/lang/String;"],
         // A relative sound has no position, and treating its zeroed coordinates as a place in the world
         // would refuse the interface and the music. isRelative is the same test as comparing the
@@ -873,9 +879,7 @@ def mixinEnumConstants = [
 ]
 
 def mixinSurveyClasses = [
-        "net.minecraft.client.renderer.chunk.SectionRenderDispatcher",
-        "net.minecraft.client.renderer.chunk.SectionRenderDispatcher\$RenderSection",
-        "net.minecraft.client.renderer.chunk.SectionCompiler"
+        "net.minecraft.client.Camera\$NearPlane"
 ]
 
 // Simple names to look for anywhere in the jar, for when the question is not what a method is called but
