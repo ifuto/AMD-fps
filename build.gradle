@@ -840,6 +840,10 @@ def mixinTargetTable = [
         // Not on Level in 1.21.11. ClientLevel is the client-side subclass and is where the render
         // list lives, which is also the only one a client mod can be holding.
         ["net.minecraft.client.multiplayer.ClientLevel", "entitiesForRendering", "()Ljava/lang/Iterable;"],
+        // The terrain heightmap is the one occluder source the client always has without walking chunk
+        // sections, which is what makes a CPU depth pyramid possible from here at all.
+        ["net.minecraft.world.level.Level", "getHeight",
+         "(Lnet/minecraft/world/level/levelgen/Heightmap\$Types;II)I"],
         ["net.minecraft.resources.Identifier", "toString", "()Ljava/lang/String;"],
         // A relative sound has no position, and treating its zeroed coordinates as a place in the world
         // would refuse the interface and the music. isRelative is the same test as comparing the
@@ -868,7 +872,11 @@ def mixinEnumConstants = [
                                              "HOSTILE", "NEUTRAL", "PLAYERS", "AMBIENT", "VOICE"]
 ]
 
-def mixinSurveyClasses = []
+def mixinSurveyClasses = [
+        "net.minecraft.client.renderer.chunk.SectionRenderDispatcher",
+        "net.minecraft.client.renderer.chunk.SectionRenderDispatcher\$RenderSection",
+        "net.minecraft.client.renderer.chunk.SectionCompiler"
+]
 
 // Simple names to look for anywhere in the jar, for when the question is not what a method is called but
 // which package the class ended up in.
@@ -1033,7 +1041,7 @@ tasks.register("verifyMixinTargets") {
                     // Fields as well as methods. An enum's constants are static fields, so a survey of
                     // methods alone reports an enum as having no values -- which for a cancellable
                     // injection into a method returning one is precisely the thing being asked.
-                    def names = info.methods.keySet().take(500).toList()
+                    def names = info.methods.keySet().take(80).toList()
                     def fieldNames = info.fields.collect { String name, String descriptor ->
                         name + ":" + descriptor
                     }.take(200)
