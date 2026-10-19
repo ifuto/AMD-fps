@@ -830,7 +830,9 @@ def mixinTargetTable = [
         ["net.minecraft.client.resources.sounds.SoundInstance", "getZ", "()D"],
         ["net.minecraft.client.resources.sounds.SoundInstance", "getSource",
          "()Lnet/minecraft/sounds/SoundSource;"],
-        ["net.minecraft.client.resources.sounds.SoundInstance", "getIdentifier", "()Ljava/lang/Object;"],
+        // ResourceLocation is Identifier in 1.21.11 -- renamed, not moved, and the old name is simply gone.
+        ["net.minecraft.client.resources.sounds.SoundInstance", "getIdentifier",
+         "()Lnet/minecraft/resources/Identifier;"],
         // A sound that is not attenuated has no position, and treating its zeroed coordinates as a place
         // in the world would refuse the interface and the music.
         ["net.minecraft.client.resources.sounds.SoundInstance", "getAttenuation",
@@ -851,14 +853,14 @@ def mixinTargetTable = [
 // question: the failure annotation is delivered through the workflow's error line, and a survey of
 // Minecraft alone is long enough to be truncated before it reaches the answer.
 def mixinSurveyClasses = [
-        "net.minecraft.client.sounds.SoundEngine\$PlayResult"
+        "net.minecraft.client.sounds.SoundEngine\$PlayResult",
+        "net.minecraft.resources.Identifier"
 ]
 
 // Simple names to look for anywhere in the jar, for when the question is not what a method is called but
 // which package the class ended up in.
 def mixinClassSearch = [
-        "ResourceLocation",
-        "Identifier"
+        "PlayResult"
 ]
 
 tasks.register("verifyMixinTargets") {
@@ -875,6 +877,7 @@ tasks.register("verifyMixinTargets") {
             def bytes
             zip.getInputStream(entry).withCloseable { input -> bytes = input.bytes }
             def byName = new TreeMap<String, List<String>>()
+            def fields = new TreeMap<String, String>()
             def superName = new String[1]
             new org.objectweb.asm.ClassReader(bytes).accept(
                     new org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
@@ -885,6 +888,13 @@ tasks.register("verifyMixinTargets") {
                         }
 
                         @Override
+                        org.objectweb.asm.FieldVisitor visitField(int access, String name,
+                                String descriptor, String signature, Object value) {
+                            fields[name] = descriptor
+                            return null
+                        }
+
+                        @Override
                         org.objectweb.asm.MethodVisitor visitMethod(int access, String name,
                                 String descriptor, String signature, String[] exceptions) {
                             byName.computeIfAbsent(name, { k -> [] }).add(descriptor)
@@ -892,7 +902,7 @@ tasks.register("verifyMixinTargets") {
                         }
                     },
                     org.objectweb.asm.ClassReader.SKIP_CODE | org.objectweb.asm.ClassReader.SKIP_DEBUG)
-            return [methods: byName, superClass: superName[0]]
+            return [methods: byName, fields: fields, superClass: superName[0]]
         }
 
         // The jar that actually holds Minecraft. Found by content rather than by name, because loom's
@@ -973,8 +983,19 @@ tasks.register("verifyMixinTargets") {
                 def survey = []
                 for (String className : touched) {
                     def info = declared(className)
-                    def names = info == null ? ["<absent>"] : info.methods.keySet().take(500).toList()
+                    if (info == null) {
+                        survey << className + " declares: <absent>"
+                        continue
+                    }
+                    // Fields as well as methods. An enum's constants are static fields, so a survey of
+                    // methods alone reports an enum as having no values -- which for a cancellable
+                    // injection into a method returning one is precisely the thing being asked.
+                    def names = info.methods.keySet().take(500).toList()
+                    def fieldNames = info.fields.collect { String name, String descriptor ->
+                        name + ":" + descriptor
+                    }.take(200)
                     survey << className + " declares: " + names.join(", ")
+                    survey << className + " fields: " + (fieldNames ?: ["<none>"]).join(", ")
                 }
                 def message = "mixin target verification failed -> " + problems.join(" | ")
                 message = message + " || SURVEY || " + survey.join(" || ")
