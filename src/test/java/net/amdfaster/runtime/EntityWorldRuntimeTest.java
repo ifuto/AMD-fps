@@ -1,5 +1,9 @@
 package net.amdfaster.runtime;
 
+import net.amdfaster.cull.CameraCutDetector;
+import net.amdfaster.cull.PyramidGeometry;
+import net.amdfaster.entity.EntityBuffer;
+import net.amdfaster.entity.EntityOcclusionCuller;
 import net.amdfaster.entity.ExperienceOrbMerger;
 import org.junit.jupiter.api.Test;
 
@@ -154,5 +158,113 @@ class EntityWorldRuntimeTest {
         assertEquals(0L, runtime.entitiesRemoved());
         assertEquals(0.0, runtime.expiry().checked(), 1e-12);
         assertTrue(runtime.conservedExperience(), "nothing merged, so nothing lost");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The depth-pyramid pass. What is under test is the wiring: that the pass is off until something
+    // supplies a pyramid, that it runs over every candidate once one is supplied, that a camera cut
+    // holds it open instead of culling against stale depth, and that a world change drops the pyramid.
+    // The projection arithmetic itself is EntityOcclusionCullerTest's job.
+    // ---------------------------------------------------------------------------------------------
+
+    /** Three entities a few blocks from the origin, all inside the 48 block distance filter. */
+    private static EntityBuffer threeNearbyEntities() {
+        EntityBuffer entities = new EntityBuffer();
+        entities.add(1, 2f, 64f, 2f, 0f, 15, 0.3f, 0.9f);
+        entities.add(2, -3f, 64f, 1f, 0f, 15, 0.3f, 0.9f);
+        entities.add(3, 0f, 64f, -4f, 0f, 15, 0.3f, 0.9f);
+        return entities;
+    }
+
+    private static final float[] NO_PROJECTION = new float[16];
+
+    @Test
+    void theOcclusionPassStaysOffUntilAPyramidIsSupplied() {
+        EntityWorldRuntime runtime = new EntityWorldRuntime();
+        EntityBuffer entities = threeNearbyEntities();
+
+        assertFalse(runtime.hasDepthPyramid(), "nothing has rendered terrain depth yet");
+
+        int survivors = runtime.cullEntities(entities, null, 0f, 64f, 0f, NO_PROJECTION,
+                new PyramidGeometry(64, 64), new CameraCutDetector());
+
+        assertEquals(3, entities.size());
+        assertEquals(entities.size(), runtime.frustumPass().survivorCount(),
+                "all three are inside the distance filter, and frustum is null so it is not consulted");
+        assertEquals(entities.size(), survivors, "the frustum pass alone is what the caller gets back");
+        assertEquals(0, runtime.occlusion().keptUnreliableProjection(),
+                "the pyramid pass never looked at an entity");
+    }
+
+    @Test
+    void supplyingAPyramidRunsTheOcclusionPassOverEveryCandidate() {
+        EntityWorldRuntime runtime = new EntityWorldRuntime();
+        EntityBuffer entities = threeNearbyEntities();
+        runtime.withDepthPyramid(EntityOcclusionCuller.flatWall(0.5f));
+        assertTrue(runtime.hasDepthPyramid());
+
+        // Not updated, so framesSinceCut is still MAX_VALUE and no prepass is wanted -- which is the
+        // difference between this test and the camera cut below.
+        CameraCutDetector cuts = new CameraCutDetector();
+        assertFalse(cuts.needsDepthPrepass());
+
+        int survivors = runtime.cullEntities(entities, null, 0f, 64f, 0f, NO_PROJECTION,
+                new PyramidGeometry(64, 64), cuts);
+        EntityOcclusionCuller occlusion = runtime.occlusion();
+        int candidates = runtime.frustumPass().survivorCount();
+
+        assertFalse(occlusion.wasSkipped(), "the pass ran rather than being held open");
+        // A zero view-projection puts every corner at w = 0, which the projection reports as unreliable,
+        // so all three land in that one bucket. The assertion is the accounting, not the bucket: every
+        // candidate is classified exactly once, which is what would break if the wiring passed the wrong
+        // survivor list or a stale count.
+        assertEquals(candidates,
+                occlusion.tested() + occlusion.keptOffScreen() + occlusion.keptUnreliableProjection(),
+                "every candidate falls into exactly one bucket");
+        assertEquals(candidates, occlusion.keptUnreliableProjection());
+        assertEquals(0, occlusion.culled(), "nothing is culled on a projection that is not trustworthy");
+        assertEquals(candidates, survivors);
+        assertEquals(candidates - occlusion.culled(), survivors);
+    }
+
+    @Test
+    void aCameraCutKeepsEveryEntityRatherThanCullingAgainstStaleDepth() {
+        EntityWorldRuntime runtime = new EntityWorldRuntime();
+        EntityBuffer entities = threeNearbyEntities();
+        // A pyramid with nothing in it. The far plane in reversed-Z is zero, so every entity's nearest
+        // depth is in front of it and nothing would be culled anyway -- which is the point: this test is
+        // about the skip, and a skip has to be visible separately from a pass that culled nothing.
+        runtime.withDepthPyramid(EntityOcclusionCuller.empty());
+
+        CameraCutDetector cuts = new CameraCutDetector();
+        assertTrue(cuts.update(0f, 64f, 0f, 0f, 0f), "the first frame is always a cut");
+        assertTrue(cuts.needsDepthPrepass(), "and a cut keeps the pass open for two frames");
+
+        int survivors = runtime.cullEntities(entities, null, 0f, 64f, 0f, NO_PROJECTION,
+                new PyramidGeometry(64, 64), cuts);
+
+        assertTrue(runtime.occlusion().wasSkipped(), "the camera history reached the pass");
+        assertEquals(0, runtime.occlusion().culled());
+        assertEquals(runtime.frustumPass().survivorCount(), survivors,
+                "everything the frustum pass kept survives the cut");
+    }
+
+    @Test
+    void aWorldChangeDropsThePyramid() {
+        EntityWorldRuntime runtime = new EntityWorldRuntime();
+        runtime.withDepthPyramid(EntityOcclusionCuller.flatWall(0.5f));
+        assertTrue(runtime.hasDepthPyramid());
+
+        runtime.onWorldChange();
+
+        assertFalse(runtime.hasDepthPyramid(),
+                "the old world's terrain depth must not cull the new world's entities");
+
+        EntityBuffer entities = threeNearbyEntities();
+        int survivors = runtime.cullEntities(entities, null, 0f, 64f, 0f, NO_PROJECTION,
+                new PyramidGeometry(64, 64), new CameraCutDetector());
+        assertEquals(runtime.frustumPass().survivorCount(), survivors,
+                "and the next frame falls back to the frustum pass alone");
+        assertEquals(0, runtime.occlusion().keptUnreliableProjection());
     }
 }

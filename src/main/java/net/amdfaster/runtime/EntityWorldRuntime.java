@@ -1,6 +1,9 @@
 package net.amdfaster.runtime;
 
 import net.amdfaster.collision.EntityPairDeduplicator;
+import net.amdfaster.cull.CameraCutDetector;
+import net.amdfaster.cull.Frustum;
+import net.amdfaster.cull.PyramidGeometry;
 import net.amdfaster.collision.MovementRegion;
 import net.amdfaster.entity.ActivationRangeScheduler;
 import net.amdfaster.entity.AttributeCache;
@@ -9,7 +12,10 @@ import net.amdfaster.entity.BonePalette;
 import net.amdfaster.entity.DroppedItemExpiry;
 import net.amdfaster.entity.EntityAnimation;
 import net.amdfaster.entity.EntityCell;
+import net.amdfaster.entity.EntityBuffer;
+import net.amdfaster.entity.EntityCuller;
 import net.amdfaster.entity.EntityCollisionGrid;
+import net.amdfaster.entity.EntityOcclusionCuller;
 import net.amdfaster.entity.ExperienceOrbMerger;
 import net.amdfaster.entity.ItemMergeIndex;
 import net.amdfaster.entity.TrackerVisibilityCache;
@@ -59,6 +65,31 @@ public final class EntityWorldRuntime {
     private final ActivationRangeScheduler activation = new ActivationRangeScheduler();
     private final AttributeCache attributes = new AttributeCache();
     private final BlockEntityCuller blockEntities = new BlockEntityCuller();
+
+    /**
+     * The distance and frustum pass, which the occlusion pass takes its candidates from.
+     *
+     * <p>Owned here rather than passed in per frame so that its budget and band counters describe one
+     * continuous stream of frames. Two instances would each keep their own budget and each drop a
+     * different set of entities.
+     */
+    private final EntityCuller frustumPass = new EntityCuller();
+
+    /**
+     * The depth-pyramid pass, which removes the entities the frustum pass kept but the terrain hides.
+     *
+     * <p>Owned for the same reason, and because its survivor list is what the draw path reads.
+     */
+    private final EntityOcclusionCuller occlusion = new EntityOcclusionCuller();
+
+    /**
+     * The terrain's hierarchical depth, supplied rather than built here.
+     *
+     * <p>Nothing in this mod produces it yet -- it comes from the terrain pass on the GPU -- so it is
+     * {@code null} until something supplies it, and the culling pass degrades to the frustum result
+     * rather than testing against a buffer that does not exist.
+     */
+    private EntityOcclusionCuller.DepthPyramid depthPyramid;
 
     private long entitiesAdded;
     private long entitiesRemoved;
@@ -227,6 +258,11 @@ public final class EntityWorldRuntime {
         // from the last one.
         this.collision.clear();
         this.collision.resetCounters();
+        // The pyramid holds the depth of the previous world's terrain. A stale one is worse than none:
+        // it culls entities that are in plain view in the new world, and the symptom is mobs that are
+        // simply not there rather than a visible artefact. Dropping it makes the next frame fall back to
+        // the frustum pass until the terrain pass supplies a fresh one.
+        this.depthPyramid = null;
     }
 
     /** The entity pair deduplicator. */
@@ -237,5 +273,72 @@ public final class EntityWorldRuntime {
     /** The movement region. */
     public MovementRegion movement() {
         return this.movement;
+    }
+
+    /** The distance and frustum pass. */
+    public EntityCuller frustumPass() {
+        return this.frustumPass;
+    }
+
+    /** The depth-pyramid pass. */
+    public EntityOcclusionCuller occlusion() {
+        return this.occlusion;
+    }
+
+    /**
+     * Supplies the hierarchical depth the occlusion pass tests against.
+     *
+     * <p>Supplied rather than built, because the pyramid is a GPU resource from the terrain pass and this
+     * runtime is not the thing that renders terrain. A {@code null} pyramid turns the occlusion pass off,
+     * which is the correct behaviour for a frame that has no depth to test against -- the alternative is
+     * culling against whatever the buffer happened to hold.
+     *
+     * <p>The pyramid has to be built from terrain only. If entities write depth into it, an entity that
+     * was visible last frame leaves its own depth behind and this frame's test compares its new position
+     * against where it used to be -- mobs that walk away from the camera vanish and stay vanished.
+     *
+     * @param pyramid the terrain's hierarchical depth, or {@code null} to run the frustum pass alone
+     * @return this runtime
+     */
+    public EntityWorldRuntime withDepthPyramid(EntityOcclusionCuller.DepthPyramid pyramid) {
+        this.depthPyramid = pyramid;
+        return this;
+    }
+
+    /** Whether a depth pyramid has been supplied, so the occlusion pass will actually run. */
+    public boolean hasDepthPyramid() {
+        return this.depthPyramid != null;
+    }
+
+    /**
+     * Runs the entity visibility passes in order and returns how many entities survive.
+     *
+     * <p>Distance and frustum first, because those are cheap and they cut the candidate list the
+     * expensive pass has to walk; then the depth pyramid, one fetch per surviving entity. The order is
+     * not interchangeable: testing the pyramid before the frustum spends a depth fetch on every entity in
+     * the world including the ones behind the camera.
+     *
+     * <p>With no pyramid supplied this is the frustum pass alone, and the count returned is that pass's --
+     * so the caller reads one number either way and the draw path does not have to know which ran.
+     *
+     * @param entities       the frame's entities
+     * @param frustum        the view frustum, or {@code null} for the distance filter alone
+     * @param camX           camera position
+     * @param camY           camera position
+     * @param camZ           camera position
+     * @param viewProjection the 16-float view-projection matrix the pyramid fetch is projected with
+     * @param pyramid        the pyramid's level geometry, matching the supplied depth
+     * @param cuts           camera history, which holds the pass open while it wants a depth prepass
+     * @return how many entities survived, indexing into {@code entities} through the pass that ran
+     */
+    public int cullEntities(EntityBuffer entities, Frustum frustum, float camX, float camY, float camZ,
+            float[] viewProjection, PyramidGeometry pyramid, CameraCutDetector cuts) {
+        if (this.depthPyramid == null) {
+            this.frustumPass.cull(entities, frustum, camX, camY, camZ);
+            return this.frustumPass.survivorCount();
+        }
+        EntityOcclusionCuller.cullAll(entities, this.frustumPass, frustum, camX, camY, camZ,
+                viewProjection, pyramid, this.depthPyramid, cuts, this.occlusion);
+        return this.occlusion.survivorCount();
     }
 }

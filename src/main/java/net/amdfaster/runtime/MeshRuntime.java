@@ -12,7 +12,9 @@ import net.amdfaster.mesh.LodStreamScheduler;
 import net.amdfaster.mesh.MeshSweepBounds;
 import net.amdfaster.mesh.MeshletQuantizer;
 import net.amdfaster.mesh.QuadTemplateLibrary;
+import net.amdfaster.cpu.BytecodeSizes;
 import net.amdfaster.cpu.FalseSharingPlanner;
+import net.amdfaster.cpu.InliningBudget;
 import net.amdfaster.mesh.SectionDeltaPlanner;
 import net.amdfaster.mesh.SectionMesh;
 import net.amdfaster.mesh.SparseVoxelOctree;
@@ -252,6 +254,61 @@ public final class MeshRuntime {
     /** Bytes of padding that put a field of {@code fieldBytes} on its own line, prefetcher included. */
     public int paddingForOwnLine(int fieldBytes) {
         return FalseSharingPlanner.manualPaddingBytes(fieldBytes);
+    }
+
+    /**
+     * How deep the mesher sits in the mesh worker's call chain.
+     *
+     * <p>Counted from the worker's own loop, which is the top of the chain on that thread, because the
+     * inlining limit is applied per nesting level rather than per method: {@code MeshWorkerPool.run} is
+     * level 0, the timing lambda {@link #withBuilder} wraps the builder in is level 1,
+     * {@code MeshBuildTimer.time} is level 2, and the builder itself is level 3 -- so the call to the
+     * mesher is made from level 3. C1 has already shrunk the cold limit to 25.5 bytes by there, which is
+     * why this number is an input to the check and not an afterthought.
+     */
+    public static final int MESH_WORKER_BUILD_DEPTH = 3;
+
+    /**
+     * Whether the mesher's biggest method will inline where the worker calls it from.
+     *
+     * <p>Measured, not estimated. {@link BytecodeSizes} reads the {@code Code} attribute out of the
+     * mesher's own class file, which is the same byte count C2 compares against the inlining limits, so
+     * the answer does not depend on anyone judging from the source whether a method "looks small" -- at
+     * 35 bytes for a cold call, judgement is wrong often enough to be useless.
+     *
+     * <p>The call site is treated as hot, because a worker loop that builds sections continuously is hot
+     * by any definition the compiler uses, and hotness is what raises the limit from 35 bytes to 325.
+     *
+     * @return the verdict and the measured size behind it, or {@code null} when the class file could not
+     *         be read -- which means the question could not be answered, not that the answer was
+     *         favourable
+     */
+    public InliningBudget.Check mesherInliningCheck() {
+        int bytes = BytecodeSizes.largestMethodBytes(SectionMesher.class);
+        if (bytes == BytecodeSizes.UNMEASURED) {
+            return null;
+        }
+        return InliningBudget.check(SectionMesher.class.getSimpleName() + " (largest method)",
+                bytes, MESH_WORKER_BUILD_DEPTH, true);
+    }
+
+    /**
+     * Whether the mesh path may allocate per-quad temporaries and expect the JIT to remove them.
+     *
+     * <p>Escape analysis runs <em>after</em> inlining, so a method that does not inline is a method whose
+     * allocations the compiler can no longer prove do not escape -- and what it cannot prove stays on the
+     * heap. A mesh worker emitting a few thousand quads a second allocates a few thousand small objects a
+     * second when that happens, which is young-generation work the whole pipeline otherwise avoids.
+     *
+     * <p>Conservative when the size could not be measured. The safe answer is "reuse buffers", which costs
+     * a little code clarity; the unsafe one is "allocate freely", which costs a collection nobody can see
+     * the cause of.
+     *
+     * @return whether temporary allocations in the mesh path can be expected to be scalar replaced
+     */
+    public boolean meshPathCanScalarReplace() {
+        InliningBudget.Check check = mesherInliningCheck();
+        return check != null && check.escapeAnalysisPossible();
     }
 
     public MeshJobQueue queue() {

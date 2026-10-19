@@ -412,6 +412,15 @@ tasks.register("verifyJar") {
                         // are right, the line just ping-pongs between cores five times more than it
                         // needs to.
                         "net/amdfaster/cpu/FalseSharingPlanner.class",
+                        // The inlining thresholds. Asserted because the correction it carries is the
+                        // opposite of the usual shorthand: 35 bytes is the limit for a method that is
+                        // *not* hot, and a hot one gets 325. A missing class would leave the splitting
+                        // effort aimed at the wrong methods.
+                        "net/amdfaster/cpu/InliningBudget.class",
+                        // What measures the bytecode size the thresholds above are compared against.
+                        // Asserted because a missing reader does not fail loudly: the mesh path falls back
+                        // to "cannot scalar replace" and quietly keeps buffers it did not need.
+                        "net/amdfaster/cpu/BytecodeSizes.class",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
