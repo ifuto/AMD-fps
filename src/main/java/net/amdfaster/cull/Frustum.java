@@ -38,7 +38,23 @@ public final class Frustum {
             throw new IllegalArgumentException("view-projection must be 16 floats, got "
                     + viewProjection.length);
         }
-        // Rows of a column-major matrix.
+        update(viewProjection);
+    }
+
+    /**
+     * Re-extracts the six planes from a new view-projection, in place.
+     *
+     * <p>Separate from the constructor because a culler that runs every frame would otherwise allocate a
+     * frustum every frame, and the frame rate this exists to improve is measured in the allocations it
+     * does not make. The four row arrays are still allocated per call, which is sixteen floats' worth;
+     * lifting them into fields is the obvious next step if this ever shows up in a profile.
+     */
+    public void update(float[] viewProjection) {
+        if (viewProjection.length != 16) {
+            throw new IllegalArgumentException("view-projection must be 16 floats, got "
+                    + viewProjection.length);
+        }
+        // Rows of a column-major matrix: element (row, column) is at column * 4 + row.
         float[] r0 = {viewProjection[0], viewProjection[4], viewProjection[8], viewProjection[12]};
         float[] r1 = {viewProjection[1], viewProjection[5], viewProjection[9], viewProjection[13]};
         float[] r2 = {viewProjection[2], viewProjection[6], viewProjection[10], viewProjection[14]};

@@ -434,6 +434,11 @@ tasks.register("verifyJar") {
                         "net/amdfaster/mixin/ParticleEngineMixin.class",
                         "net/amdfaster/mixin/ParticleMixin.class",
                         "net/amdfaster/mixin/SoundManagerMixin.class",
+                        "net/amdfaster/mixin/EntityRenderDispatcherMixin.class",
+                        "net/amdfaster/mixin/SectionRenderDispatcherMixin.class",
+                        "net/amdfaster/mixin/RenderSectionMixin.class",
+                        "net/amdfaster/cull/ViewProjection.class",
+                        "net/amdfaster/runtime/EntityCullRuntime.class",
                         // The config that names them. Unlisted in fabric.mod.json it is never read, and
                         // nothing else fails.
                         "amdfaster.mixins.json",
@@ -847,9 +852,31 @@ def mixinTargetTable = [
         ["net.minecraft.client.renderer.chunk.SectionRenderDispatcher", "setCameraPosition",
          "(Lnet/minecraft/world/phys/Vec3;)V"],
         ["net.minecraft.client.renderer.chunk.SectionRenderDispatcher\$RenderSection",
-         "rebuildSectionAsync", "()V"],
+         "rebuildSectionAsync", "(Lnet/minecraft/client/renderer/chunk/RenderRegionCache;)V"],
+        ["net.minecraft.client.renderer.chunk.SectionRenderDispatcher\$RenderSection",
+         "getBoundingBox", "()Lnet/minecraft/world/phys/AABB;"],
         ["net.minecraft.client.renderer.chunk.SectionRenderDispatcher\$RenderSection",
          "getRenderOrigin", "()Lnet/minecraft/core/BlockPos;"],
+        // Everything the new mixins touch, pinned so a rename is a build failure rather than a hook
+        // that silently stops applying.
+        ["net.minecraft.client.Camera", "getNearPlane", "()Lnet/minecraft/client/Camera\$NearPlane;"],
+        ["net.minecraft.client.Camera", "forwardVector", "()Lorg/joml/Vector3f;"],
+        ["net.minecraft.client.Camera", "position", "()Lnet/minecraft/world/phys/Vec3;"],
+        ["net.minecraft.client.Camera\$NearPlane", "getTopLeft", "()Lnet/minecraft/world/phys/Vec3;"],
+        ["net.minecraft.client.Camera\$NearPlane", "getTopRight", "()Lnet/minecraft/world/phys/Vec3;"],
+        ["net.minecraft.client.Camera\$NearPlane", "getBottomLeft", "()Lnet/minecraft/world/phys/Vec3;"],
+        ["net.minecraft.client.Camera\$NearPlane", "getPointOnPlane",
+         "(FF)Lnet/minecraft/world/phys/Vec3;"],
+        ["net.minecraft.client.Options", "getEffectiveRenderDistance", "()I"],
+        ["net.minecraft.world.entity.Entity", "getId", "()I"],
+        ["net.minecraft.world.entity.Entity", "getBbWidth", "()F"],
+        ["net.minecraft.world.entity.Entity", "getBbHeight", "()F"],
+        ["net.minecraft.world.entity.Entity", "getYRot", "()F"],
+        ["net.minecraft.world.phys.Vec3", "subtract",
+         "(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;"],
+        ["net.minecraft.world.phys.Vec3", "normalize", "()Lnet/minecraft/world/phys/Vec3;"],
+        ["net.minecraft.world.phys.Vec3", "length", "()D"],
+        ["net.minecraft.world.phys.Vec3", "distanceTo", "(Lnet/minecraft/world/phys/Vec3;)D"],
         ["net.minecraft.resources.Identifier", "toString", "()Ljava/lang/String;"],
         // A relative sound has no position, and treating its zeroed coordinates as a place in the world
         // would refuse the interface and the music. isRelative is the same test as comparing the
@@ -878,9 +905,7 @@ def mixinEnumConstants = [
                                              "HOSTILE", "NEUTRAL", "PLAYERS", "AMBIENT", "VOICE"]
 ]
 
-def mixinSurveyClasses = [
-        "net.minecraft.client.Camera\$NearPlane"
-]
+def mixinSurveyClasses = []
 
 // Simple names to look for anywhere in the jar, for when the question is not what a method is called but
 // which package the class ended up in.

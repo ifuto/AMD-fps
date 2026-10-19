@@ -341,4 +341,43 @@ public final class EntityWorldRuntime {
                 viewProjection, pyramid, this.depthPyramid, cuts, this.occlusion);
         return this.occlusion.survivorCount();
     }
+
+    /**
+     * The i-th survivor of the pass that just ran, as an index into the buffer it was given.
+     *
+     * <p>Which pass that is depends on whether a pyramid was supplied, and the draw path should not have
+     * to know -- it asks for the survivors of "the cull" either way.
+     */
+    public int survivorAt(int i) {
+        return this.depthPyramid == null ? this.frustumPass.survivor(i) : this.occlusion.survivor(i);
+    }
+
+    /** The distance limit currently in force, which the draw path sets from the game's own. */
+    public float cullDistance() {
+        return this.frustumPass.getMaxDistance();
+    }
+
+    /** How many entities the pass that just ran tested, for the overlay. */
+    public int cullTested() {
+        return this.depthPyramid == null ? this.frustumPass.tested() : this.occlusion.tested();
+    }
+
+    /** How many the pass that just ran removed. */
+    public int cullCulled() {
+        if (this.depthPyramid == null) {
+            return this.frustumPass.culledByDistance() + this.frustumPass.culledByFrustum()
+                    + this.frustumPass.droppedByBudget();
+        }
+        return this.occlusion.tested() - this.occlusion.survivorCount();
+    }
+
+    /**
+     * Moves the distance limit, which the draw path sets from the game's own render distance every frame.
+     *
+     * <p>See {@link net.amdfaster.entity.EntityCuller#setMaxDistance(float)}: a fixed limit would remove
+     * entities the player can see, and this pass is supposed to be invisible.
+     */
+    public void setMaxCullDistance(float blocks) {
+        this.frustumPass.setMaxDistance(blocks);
+    }
 }

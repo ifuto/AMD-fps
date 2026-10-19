@@ -176,6 +176,19 @@ public final class AmdFasterRuntime {
     private final EntityWorldRuntime entityWorld = new EntityWorldRuntime();
 
     /**
+     * The per-frame entity visibility decision, which the draw path asks about one entity at a time.
+     *
+     * <p>Declared after {@code entityWorld} and {@code cull} because a field initialiser can only read
+     * what has already been initialised, and it takes one of each.
+     */
+    private final EntityCullRuntime entityCull = new EntityCullRuntime(this.entityWorld, this.cull.cuts());
+
+    /** Scratch for the camera's basis, so reading the near plane costs nothing per frame. */
+    private final float[] axisRight = new float[3];
+    private final float[] axisUp = new float[3];
+    private final float[] axisForward = new float[3];
+
+    /**
      * The indirect-draw and GPU-culling decisions.
      *
      * <p>Owned here because a frame's draw list has to be cleared between worlds: the slots, groups and
@@ -578,6 +591,10 @@ public final class AmdFasterRuntime {
      */
     public EntityWorldRuntime entityWorld() {
         return this.entityWorld;
+    }
+
+    public EntityCullRuntime entityCull() {
+        return this.entityCull;
     }
 
     /**
@@ -1065,6 +1082,8 @@ public final class AmdFasterRuntime {
         // tries to draw.
         this.particles.onWorldChange();
         this.entityWorld.onWorldChange();
+        this.entityCull.onWorldChange();
+        this.mesh.onRebuildWorldChange();
         this.gpu.onWorldChange();
         this.lastFrameAtMs = -1L;
         this.hasLastPlayer = false;
@@ -1083,6 +1102,135 @@ public final class AmdFasterRuntime {
     }
 
     /** Shuts the runtime down. Called from the client entry point on stop. */
+    /**
+     * Asks whether an entity should be drawn this frame.
+     *
+     * <p>Answers true whenever the decision cannot be made properly -- no runtime, no level, no camera, or
+     * a frame that could not be gathered. A culler that guesses is worse than no culler: refusing an
+     * entity the player should see is a hole in the world, and it is the one failure this whole path has
+     * to avoid.
+     */
+    public static boolean shouldRenderEntity(Minecraft client, net.minecraft.world.entity.Entity entity) {
+        AmdFasterRuntime runtime = get();
+        if (runtime == null || client == null || entity == null) {
+            return true;
+        }
+        return runtime.decideEntity(client, entity);
+    }
+
+    /**
+     * Notes the camera for a render frame, which is where both the rebuild path and the entity path take
+     * theirs.
+     *
+     * <p>The game reports this once per rendered frame before it draws anything, so it is the natural
+     * place to read the near plane -- one read serves both passes rather than each doing its own.
+     */
+    public static void onRenderFrameStarted(Minecraft client) {
+        AmdFasterRuntime runtime = get();
+        if (runtime != null) {
+            runtime.gatherRenderFrame(client);
+        }
+    }
+
+    private boolean decideEntity(Minecraft client, net.minecraft.world.entity.Entity entity) {
+        if (client.level == null) {
+            return true;
+        }
+        // The entity the camera is riding is never culled. Removing it is a first-person view with no
+        // player in it, which is not a performance result.
+        if (entity == client.getCameraEntity()) {
+            return true;
+        }
+        if (this.entityCull.shouldBegin(this.framesClosed)) {
+            gatherRenderFrame(client);
+        }
+        if (!this.entityCull.hasResult()) {
+            return true;
+        }
+        return this.entityCull.survived(entity.getId());
+    }
+
+    /**
+     * Reads the frame's camera and gathers the entities in it.
+     *
+     * <p>The basis comes from {@code Camera.NearPlane}, whose corners are the screen's corners in world
+     * space. Everything else follows from them: the difference across the top is screen right, the
+     * difference down the left edge is screen up, and half the length of each is the near plane's half
+     * extent -- which is the projection's scale, so a non-square pixel aspect needs no separate term.
+     *
+     * @return false if the camera could not be read, in which case nothing was gathered and no culling
+     *         decision may be made
+     */
+    private boolean gatherRenderFrame(Minecraft client) {
+        if (client == null || client.level == null || client.gameRenderer == null) {
+            return false;
+        }
+        net.minecraft.client.Camera camera = client.gameRenderer.getMainCamera();
+        if (camera == null || !camera.isInitialized()) {
+            return false;
+        }
+        net.minecraft.client.Camera.NearPlane plane = camera.getNearPlane();
+        net.minecraft.world.phys.Vec3 position = camera.position();
+        net.minecraft.world.phys.Vec3 right = plane.getTopRight().subtract(plane.getTopLeft());
+        net.minecraft.world.phys.Vec3 up = plane.getTopLeft().subtract(plane.getBottomLeft());
+        double halfWidth = right.length() * 0.5;
+        double halfHeight = up.length() * 0.5;
+        double near = plane.getPointOnPlane(0.0f, 0.0f).distanceTo(position);
+        if (!(halfWidth > 0.0) || !(halfHeight > 0.0) || !(near > 0.0)) {
+            // A degenerate near plane would make the projection divide by zero and turn every coordinate
+            // into NaN, which compares false against every threshold and culls everything.
+            return false;
+        }
+        right = right.normalize();
+        up = up.normalize();
+        org.joml.Vector3f forward = camera.forwardVector();
+        this.axisRight[0] = (float) right.x;
+        this.axisRight[1] = (float) right.y;
+        this.axisRight[2] = (float) right.z;
+        this.axisUp[0] = (float) up.x;
+        this.axisUp[1] = (float) up.y;
+        this.axisUp[2] = (float) up.z;
+        this.axisForward[0] = forward.x();
+        this.axisForward[1] = forward.y();
+        this.axisForward[2] = forward.z();
+
+        // The distance limit follows the game's own render distance. Cutting at a fixed distance instead
+        // would remove entities the player can see, and this pass is supposed to be invisible.
+        float maxDistance = Math.max(32.0f, client.options.getEffectiveRenderDistance() * 16.0f);
+        float camX = (float) position.x;
+        float camY = (float) position.y;
+        float camZ = (float) position.z;
+
+        this.mesh.onRenderFrame(camX, camY, camZ, this.axisRight, this.axisUp, this.axisForward,
+                (float) halfWidth, (float) halfHeight, (float) near,
+                maxDistance * EntityCullRuntime.FAR_MARGIN);
+
+        this.entityCull.beginFrame(this.framesClosed, camX, camY, camZ,
+                this.axisRight, this.axisUp, this.axisForward,
+                (float) halfWidth, (float) halfHeight, (float) near, maxDistance);
+        for (net.minecraft.world.entity.Entity candidate : client.level.entitiesForRendering()) {
+            // Light is not used by any of these passes and reading it would cost a level query per entity,
+            // so it is zero here rather than fetched for a field nothing reads.
+            this.entityCull.offer(candidate.getId(), (float) candidate.getX(), (float) candidate.getY(),
+                    (float) candidate.getZ(), candidate.getYRot(), 0,
+                    (float) (candidate.getBbWidth() * 0.5), (float) candidate.getBbHeight());
+        }
+        this.entityCull.finishFrame();
+        return true;
+    }
+
+    /**
+     * Asks whether a section's rebuild should be submitted this frame.
+     *
+     * <p>Returning false leaves the section dirty, so the renderer asks again next frame and the work is
+     * deferred rather than lost.
+     */
+    public static boolean offerSectionRebuild(double minX, double minY, double minZ,
+            double maxX, double maxY, double maxZ) {
+        AmdFasterRuntime runtime = get();
+        return runtime == null || runtime.mesh.offerRebuild(minX, minY, minZ, maxX, maxY, maxZ);
+    }
+
     public static synchronized void shutdown() {
         if (instance != null) {
             instance.restoreFramerateLimit();

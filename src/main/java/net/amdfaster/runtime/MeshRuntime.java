@@ -31,6 +31,8 @@ import net.amdfaster.mesh.SectionMeshDeduplicator;
 import net.amdfaster.mesh.job.MeshJobPrioritizer;
 import net.amdfaster.mesh.job.MeshJobQueue;
 import net.amdfaster.mesh.job.MeshWorkerPool;
+import net.amdfaster.cull.Frustum;
+import net.amdfaster.cull.ViewProjection;
 import net.amdfaster.perf.MeshBuildTimer;
 
 /**
@@ -87,6 +89,25 @@ public final class MeshRuntime {
     private final AmbientOcclusionBaker ao = new AmbientOcclusionBaker();
     private final SectionMeshDeduplicator deduplicator = new SectionMeshDeduplicator();
     private final MeshJobPrioritizer prioritizer = new MeshJobPrioritizer();
+
+    /**
+     * How many rebuilds of sections that are not on screen may be submitted in one frame.
+     *
+     * <p>A section the player cannot see does not need a mesh this frame, and building one anyway takes a
+     * worker away from the sections that do. Allowing none would leave a section unbuilt until the player
+     * turns to face it and then wait for it, which is a visible hole; allowing two keeps that wait to a
+     * frame or two while never competing with something on screen. The number is a trade, not a
+     * measurement, and it is the first thing to tune once a profile exists.
+     */
+    public static final int MAX_SPECULATIVE_REBUILDS_PER_FRAME = 2;
+
+    private final float[] viewProjection = new float[16];
+    private final Frustum rebuildFrustum = new Frustum(Frustum.identity());
+    private boolean hasRebuildFrustum;
+    private int speculativeRebuildsThisFrame;
+    private long rebuildsOffered;
+    private long rebuildsVisible;
+    private long rebuildsDeferred;
     private final MeshJobQueue queue;
 
     /** Texture-atlas packing for the mesh stage. */
@@ -206,6 +227,77 @@ public final class MeshRuntime {
 
     public SectionMeshDeduplicator deduplicator() {
         return this.deduplicator;
+    }
+
+    /**
+     * Starts a render frame for the rebuild path.
+     *
+     * <p>The axes come from the camera's near plane rather than being rebuilt from yaw and pitch; see
+     * {@link ViewProjection} for why reconstructing the game's angle convention is the wrong place to
+     * introduce a sign error.
+     */
+    public void onRenderFrame(float camX, float camY, float camZ,
+            float[] right, float[] up, float[] forward,
+            float nearHalfWidth, float nearHalfHeight, float nearDistance, float farDistance) {
+        ViewProjection.build(camX, camY, camZ,
+                right[0], right[1], right[2], up[0], up[1], up[2], forward[0], forward[1], forward[2],
+                nearHalfWidth, nearHalfHeight, nearDistance, farDistance, this.viewProjection);
+        this.rebuildFrustum.update(this.viewProjection);
+        this.hasRebuildFrustum = true;
+        this.speculativeRebuildsThisFrame = 0;
+    }
+
+    /**
+     * Asks whether a section's rebuild should be submitted now.
+     *
+     * <p>Saying no leaves the section dirty, which is what makes this a deferral rather than a loss: the
+     * renderer asks again next frame, and nothing has to remember that the work was skipped. A section
+     * that stays off screen stays unbuilt, which is correct -- it is not being drawn -- and the moment it
+     * comes on screen the visible branch lets it through immediately.
+     *
+     * @return true to submit the rebuild, false to leave the section dirty and try again next frame
+     */
+    public boolean offerRebuild(double minX, double minY, double minZ,
+            double maxX, double maxY, double maxZ) {
+        this.rebuildsOffered++;
+        if (!this.hasRebuildFrustum) {
+            // No camera has been reported yet, so nothing is known about what is on screen. Submitting is
+            // the answer that cannot be wrong: the alternative would be refusing work on a guess.
+            return true;
+        }
+        boolean visible = this.rebuildFrustum.intersectsAabb((float) minX, (float) minY, (float) minZ,
+                (float) maxX, (float) maxY, (float) maxZ);
+        if (visible) {
+            this.rebuildsVisible++;
+            return true;
+        }
+        if (this.speculativeRebuildsThisFrame >= MAX_SPECULATIVE_REBUILDS_PER_FRAME) {
+            this.rebuildsDeferred++;
+            return false;
+        }
+        this.speculativeRebuildsThisFrame++;
+        return true;
+    }
+
+    /** Rebuild submissions asked about since startup. */
+    public long rebuildsOffered() {
+        return this.rebuildsOffered;
+    }
+
+    /** Rebuild submissions let through because the section was on screen. */
+    public long rebuildsVisible() {
+        return this.rebuildsVisible;
+    }
+
+    /** Rebuild submissions left for a later frame because the section was off screen. */
+    public long rebuildsDeferred() {
+        return this.rebuildsDeferred;
+    }
+
+    /** Drops the frame's frustum, which a world change makes meaningless. */
+    public void onRebuildWorldChange() {
+        this.hasRebuildFrustum = false;
+        this.speculativeRebuildsThisFrame = 0;
     }
 
     public MeshJobPrioritizer prioritizer() {

@@ -90,6 +90,23 @@ public final class EntityCuller {
         return this.maxDistance;
     }
 
+    /**
+     * Moves the distance limit, which has to follow the game's render distance rather than be a
+     * constant of this class.
+     *
+     * <p>A culler that cut at a fixed 48 blocks would remove entities the player can plainly see at 64,
+     * and "thorough culling that does not change what you see" stops being true the moment it does. The
+     * limit is therefore whatever the client is actually prepared to draw, and the saving comes from the
+     * frustum, the occlusion pass and the budget -- not from drawing less than vanilla would.
+     */
+    public void setMaxDistance(float maxDistance) {
+        if (!(maxDistance > 0f)) {
+            throw new IllegalArgumentException("maxDistance must be positive: " + maxDistance);
+        }
+        this.maxDistance = maxDistance;
+        this.maxDistanceSquared = maxDistance * maxDistance;
+    }
+
     public int getBudget() {
         return this.budget;
     }

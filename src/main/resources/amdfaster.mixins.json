@@ -8,7 +8,10 @@
     "LevelRendererMixin",
     "ParticleEngineMixin",
     "ParticleMixin",
-    "SoundManagerMixin"
+    "SoundManagerMixin",
+    "EntityRenderDispatcherMixin",
+    "SectionRenderDispatcherMixin",
+    "RenderSectionMixin"
   ],
   "injectors": {
     "defaultRequire": 0
