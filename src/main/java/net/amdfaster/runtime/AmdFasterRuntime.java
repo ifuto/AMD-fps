@@ -1183,7 +1183,9 @@ public final class AmdFasterRuntime {
         }
         right = right.normalize();
         up = up.normalize();
-        org.joml.Vector3f forward = camera.forwardVector();
+        // Vector3fc, the read-only view. The accessor hands out the interface rather than the mutable
+        // class, and taking the concrete type would not compile.
+        org.joml.Vector3fc forward = camera.forwardVector();
         this.axisRight[0] = (float) right.x;
         this.axisRight[1] = (float) right.y;
         this.axisRight[2] = (float) right.z;

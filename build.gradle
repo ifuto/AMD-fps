@@ -860,7 +860,7 @@ def mixinTargetTable = [
         // Everything the new mixins touch, pinned so a rename is a build failure rather than a hook
         // that silently stops applying.
         ["net.minecraft.client.Camera", "getNearPlane", "()Lnet/minecraft/client/Camera\$NearPlane;"],
-        ["net.minecraft.client.Camera", "forwardVector", "()Lorg/joml/Vector3f;"],
+        ["net.minecraft.client.Camera", "forwardVector", "()Lorg/joml/Vector3fc;"],
         ["net.minecraft.client.Camera", "position", "()Lnet/minecraft/world/phys/Vec3;"],
         ["net.minecraft.client.Camera\$NearPlane", "getTopLeft", "()Lnet/minecraft/world/phys/Vec3;"],
         ["net.minecraft.client.Camera\$NearPlane", "getTopRight", "()Lnet/minecraft/world/phys/Vec3;"],
