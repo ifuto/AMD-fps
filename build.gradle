@@ -1028,7 +1028,10 @@ tasks.register("verifyMixinTargets") {
             // against it, which is the only time the answer is actually needed.
             touched.addAll(mixinSurveyClasses)
 
-            if (!problems.isEmpty()) {
+            // A survey request fails the build on purpose. The report travels in the failure annotation,
+            // which is the only channel out of CI, so a survey that leaves the build green delivers
+            // nothing and costs a round. Requesting one is an explicit act of asking.
+            if (!problems.isEmpty() || !mixinSurveyClasses.isEmpty()) {
                 // Names only, and capped per class: the point is to find what a method is called, and an
                 // annotation that is too long to be delivered is worse than one that stops early.
                 def survey = []
@@ -1048,7 +1051,8 @@ tasks.register("verifyMixinTargets") {
                     survey << className + " declares: " + names.join(", ")
                     survey << className + " fields: " + (fieldNames ?: ["<none>"]).join(", ")
                 }
-                def message = "mixin target verification failed -> " + problems.join(" | ")
+                def message = problems.isEmpty() ? "mixin survey requested -> ok"
+                        : "mixin target verification failed -> " + problems.join(" | ")
                 message = message + " || SURVEY || " + survey.join(" || ")
                 if (!mixinClassSearch.isEmpty()) {
                     def wanted = new LinkedHashSet<String>(mixinClassSearch)
