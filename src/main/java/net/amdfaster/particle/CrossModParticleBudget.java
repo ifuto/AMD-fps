@@ -108,6 +108,21 @@ public final class CrossModParticleBudget {
         return true;
     }
 
+    /**
+     * Empties the budget.
+     *
+     * <p>Needed because the count of live particles is not something this class can observe -- it is
+     * told about grants and releases, and a release that never arrives leaves the grant in place forever.
+     * Leaving a world is the case where that happens in bulk: the particle engine drops everything it
+     * holds without removing the particles one at a time, so every grant made in the last world would
+     * still be counted in the next one, and a budget that starts full refuses every particle the new
+     * world tries to draw.
+     */
+    public void clear() {
+        this.bySource.clear();
+        this.total = 0;
+    }
+
     /** Releases a particle when it expires. */
     public void release(String source) {
         Integer held = this.bySource.get(source);

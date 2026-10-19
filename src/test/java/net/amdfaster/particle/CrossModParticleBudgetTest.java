@@ -152,4 +152,26 @@ class CrossModParticleBudgetTest {
         assertEquals(0, budget.sources());
         assertEquals(500, CrossModParticleBudget.TOTAL_BUDGET);
     }
+
+    @Test
+    void clearingEmptiesTheBudgetWithoutRewritingWhatHappened() {
+        // Leaving a world drops every particle without removing them one at a time, so the grants they
+        // hold would otherwise still be counted in the next one -- and a budget that starts full refuses
+        // every particle the new world tries to draw.
+        CrossModParticleBudget budget = new CrossModParticleBudget();
+        for (int i = 0; i < 50; i++) {
+            assertTrue(budget.allow(MOD_A));
+        }
+        assertEquals(50, budget.total());
+        assertEquals(1, budget.sources());
+
+        budget.clear();
+
+        assertEquals(0, budget.total());
+        assertEquals(0, budget.sources(), "no source is holding anything any more");
+        assertEquals(50L, budget.spawned(), "what was granted still happened; only the live count resets");
+        assertEquals(50L, budget.requested());
+        assertTrue(budget.allow(MOD_A), "and the next world can draw again");
+        assertEquals(1, budget.total());
+    }
 }

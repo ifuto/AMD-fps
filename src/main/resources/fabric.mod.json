@@ -20,6 +20,9 @@
       "net.amdfaster.AmdFasterClient"
     ]
   },
+  "mixins": [
+    "amdfaster.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=0.18.0",
     "fabric-api": "*",

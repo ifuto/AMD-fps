@@ -252,4 +252,16 @@ class SoundRuntimeTest {
         assertEquals(0L, runtime.tick());
         assertEquals(1.0, runtime.loopingVolume(), 1e-12);
     }
+
+    @Test
+    void theAudioPoolIsNotContestedUntilTheEventRateSaysSo() {
+        // poolContested enables the direction filter, which drops sounds from behind the camera -- the one
+        // filter in the pipeline whose absence a player can hear. It has to start off, and it is measured
+        // from the rate of sound events rather than asserted, so that it only comes on when channels are
+        // genuinely being asked for faster than they free up.
+        SoundRuntime runtime = new SoundRuntime();
+
+        assertFalse(runtime.poolContested(), "a fresh runtime is not contending for channels");
+        assertEquals(0.0, runtime.pressure(), 1e-12);
+    }
 }

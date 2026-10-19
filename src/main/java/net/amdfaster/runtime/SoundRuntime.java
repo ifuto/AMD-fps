@@ -232,6 +232,22 @@ public final class SoundRuntime {
     }
 
     /** The current audio pressure, from 0 to 1. */
+    /**
+     * Whether the audio pool is contested enough to start refusing sounds by direction.
+     *
+     * <p>The channel pool itself is not observable from here, so this is measured from the thing that
+     * causes contention rather than from the contention: the rate of sound events the adaptive
+     * controller has been seeing. When that rate saturates the controller, channels are being asked for
+     * faster than they free up, which is what "contested" means for the decision it feeds.
+     *
+     * <p>It matters that this is false most of the time. The direction filter it enables drops sounds
+     * behind the camera, which the player can hear the absence of, so it has to be reserved for the case
+     * where something has to give.
+     */
+    public boolean poolContested() {
+        return this.pressure.isSaturated();
+    }
+
     public double pressure() {
         return this.pressure.pressure();
     }

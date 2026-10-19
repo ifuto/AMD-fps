@@ -277,4 +277,49 @@ class ParticleRuntimeTest {
         assertEquals(3L, FastRandom.draws(), "a dropped particle spent nothing");
     }
 
+
+    @Test
+    void aGrantIsCountedAndGivenBack() {
+        ParticleRuntime runtime = new ParticleRuntime();
+
+        assertTrue(runtime.allowSpawn(MOD));
+        assertEquals(1L, runtime.spawned());
+        assertEquals(1, runtime.budget().heldBy(MOD));
+        assertEquals(0L, runtime.budgetFull(), "a first particle from a quiet source is never refused");
+
+        runtime.releaseBudget(MOD);
+
+        assertEquals(0, runtime.budget().heldBy(MOD));
+        assertEquals(0, runtime.budget().total());
+    }
+
+    @Test
+    void aReleaseThatMatchesNoGrantIsSurvivedRatherThanThrown() {
+        // The engine removes particles that were alive when the budget was emptied by a world change or a
+        // resource reload, so an unmatched release is ordinary rather than a bug. The budget itself still
+        // throws on one, which is what catches a double release inside a single subsystem -- the tolerance
+        // belongs here, where the caller cannot know what the engine is about to drop.
+        ParticleRuntime runtime = new ParticleRuntime();
+
+        runtime.releaseBudget(MOD);
+        runtime.releaseBudget(null);
+        runtime.releaseBudget("");
+
+        assertTrue(runtime.allowSpawn(MOD), "and the budget is still usable afterwards");
+    }
+
+    @Test
+    void aWorldChangeEmptiesTheBudget() {
+        ParticleRuntime runtime = new ParticleRuntime();
+        for (int i = 0; i < 10; i++) {
+            assertTrue(runtime.allowSpawn(MOD));
+        }
+        assertEquals(10, runtime.budget().total());
+
+        runtime.onWorldChange();
+
+        assertEquals(0, runtime.budget().total(),
+                "ten grants were never returned, because the particles are gone with the world");
+        assertTrue(runtime.allowSpawn(MOD));
+    }
 }

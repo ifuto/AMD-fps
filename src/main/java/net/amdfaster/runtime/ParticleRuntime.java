@@ -267,6 +267,58 @@ public final class ParticleRuntime {
      * <p>Per frame rather than per tick, because particles are drawn every frame even when they do not move.
      * Flushing on the tick would draw the last particles of a frame with the first particles of the next.
      */
+    /**
+     * Asks the cross-mod budget whether one more particle from this source may exist.
+     *
+     * <p>The half of the spawn decision that can be answered when the particle is created. The other half
+     * -- is it big enough to see, is it on screen, is it behind terrain -- needs the particle's projected
+     * box, which only exists when it is drawn, and that is what {@link #spawn} answers.
+     *
+     * <p>Every grant has to be given back through {@link #releaseBudget}. A grant that is not returned is
+     * not a small leak: the budget is a count of what is alive, so it fills up and then refuses every
+     * particle after it, and the world quietly stops having effects.
+     *
+     * @param source what is spawning the particle, such as a particle type or a mod's namespace
+     * @return whether the particle may exist
+     */
+    public boolean allowSpawn(String source) {
+        this.spawned++;
+        if (!this.budget.allow(source)) {
+            this.budgetFull++;
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Gives back a grant made by {@link #allowSpawn}, when the particle is removed.
+     *
+     * <p>Tolerant of a release that matches no grant, which is not the sloppiness it looks like. The
+     * budget deliberately throws on an unmatched release, because a double release inside one subsystem is
+     * a bug worth hearing about -- but this is called for every particle the engine removes, including
+     * ones that were alive when the budget was emptied by a world change or a resource reload. Throwing
+     * there would take the game down over bookkeeping, so the check is made here instead and the throw is
+     * left where it still catches the case it was written for.
+     *
+     * @param source what spawned the particle being removed
+     */
+    public void releaseBudget(String source) {
+        if (source == null || source.isEmpty() || this.budget.heldBy(source) <= 0) {
+            return;
+        }
+        this.budget.release(source);
+    }
+
+    /**
+     * Drops the particle state that belongs to a world.
+     *
+     * <p>The budget only. The pool is left alone because it is filled by {@link #spawn}, which the draw
+     * path calls, and nothing in it survives a frame boundary that a world change would outlast.
+     */
+    public void onWorldChange() {
+        this.budget.clear();
+    }
+
     public void endFrame() {
         this.frames++;
         this.batcher.endFrame();

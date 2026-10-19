@@ -1,0 +1,16 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "net.amdfaster.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ClientPacketListenerMixin",
+    "LevelRendererMixin",
+    "ParticleEngineMixin",
+    "ParticleMixin",
+    "SoundManagerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

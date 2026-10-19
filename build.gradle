@@ -425,6 +425,18 @@ tasks.register("verifyJar") {
                         // Asserted because a missing reader does not fail loudly: the mesh path falls back
                         // to "cannot scalar replace" and quietly keeps buffers it did not need.
                         "net/amdfaster/cpu/BytecodeSizes.class",
+                        // The mixin layer. Asserted class by class because a mixin that is missing from
+                        // the jar is not an error at load time: the config lists it, Mixin cannot find it,
+                        // and with "required" false the whole config is skipped and the mod quietly loses
+                        // every hook in it.
+                        "net/amdfaster/mixin/ClientPacketListenerMixin.class",
+                        "net/amdfaster/mixin/LevelRendererMixin.class",
+                        "net/amdfaster/mixin/ParticleEngineMixin.class",
+                        "net/amdfaster/mixin/ParticleMixin.class",
+                        "net/amdfaster/mixin/SoundManagerMixin.class",
+                        // The config that names them. Unlisted in fabric.mod.json it is never read, and
+                        // nothing else fails.
+                        "amdfaster.mixins.json",
                         "net/amdfaster/platform/AmdArchitecture.class",
                         "net/amdfaster/platform/OccupancyModel.class",
                         "net/amdfaster/command/AmdFasterCommand.class",
@@ -716,6 +728,13 @@ tasks.register("verifyJar") {
                     if (!entrypoint || entrypoint[0][1].toString() != "net.amdfaster.AmdFasterClient") {
                         problems << jar.name + ": fabric.mod.json client entrypoint is wrong"
                     }
+                    // A mixin config that is not listed here is never read, and no other check fails:
+                    // the classes are in the jar, the config is in the jar, and the mod simply runs
+                    // without any of its hooks. That is the quietest way for all of this to do nothing.
+                    def mixinConfig = (text =~ /"mixins"\s*:\s*\[\s*"([^"]*)"/)
+                    if (!mixinConfig || mixinConfig[0][1].toString() != "amdfaster.mixins.json") {
+                        problems << jar.name + ": fabric.mod.json does not list amdfaster.mixins.json"
+                    }
                 }
             } finally {
                 zip.close()
@@ -761,8 +780,12 @@ def mixinTargetTable = [
         // The two per-event paths Fabric API has no hook for.
         ["net.minecraft.client.particle.ParticleEngine", "add",
          "(Lnet/minecraft/client/particle/Particle;)V"],
-        ["net.minecraft.client.sounds.SoundEngine", "play",
-         "(Lnet/minecraft/client/resources/sounds/SoundInstance;)Lnet/minecraft/client/sounds/SoundEngine\$PlayResult;"],
+        // SoundManager.play, not SoundEngine.play. The engine's returns a PlayResult, which a cancellable
+        // injection has to supply a value for, and inventing one is a guess about an enum this cannot see.
+        // The manager's is void, it is the single entry point every caller goes through, and cancelling it
+        // needs no return value at all.
+        ["net.minecraft.client.sounds.SoundManager", "play",
+         "(Lnet/minecraft/client/resources/sounds/SoundInstance;)V"],
         // What the server tells the client about blocks and light.
         ["net.minecraft.client.multiplayer.ClientPacketListener", "handleBlockUpdate",
          "(Lnet/minecraft/network/protocol/game/ClientboundBlockUpdatePacket;)V"],
@@ -773,9 +796,54 @@ def mixinTargetTable = [
         // Terrain invalidation.
         ["net.minecraft.client.renderer.LevelRenderer", "allChanged", "()V"],
         // What the culling frame reads: camera and window.
-        ["net.minecraft.client.Camera", "getPos", "()Lnet/minecraft/world/phys/Vec3;"],
-        ["net.minecraft.client.Camera", "getXRot", "()F"],
-        ["net.minecraft.client.Camera", "getYRot", "()F"],
+        // Camera's accessors are record-style in 1.21.11: position(), xRot(), yRot(). There is no
+        // getPos, getXRot or getYRot at all, which is exactly the kind of rename this table exists to
+        // catch before it reaches a player.
+        ["net.minecraft.client.Camera", "position", "()Lnet/minecraft/world/phys/Vec3;"],
+        ["net.minecraft.client.Camera", "xRot", "()F"],
+        ["net.minecraft.client.Camera", "yRot", "()F"],
+        // Where the camera comes from.
+        ["net.minecraft.client.renderer.GameRenderer", "getMainCamera", "()Lnet/minecraft/client/Camera;"],
+        // Everything a mixin handler is about to call, checked here for the same reason the injection
+        // points are: a mixin's target is a string, but the code inside the handler is ordinary Java and
+        // javac does check it -- so these rows are the ones that would otherwise only be caught one build
+        // later, after a handler had been written against a method that is not there.
+        ["net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket", "getPos",
+         "()Lnet/minecraft/core/BlockPos;"],
+        ["net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket", "runUpdates",
+         "(Ljava/util/function/BiConsumer;)V"],
+        ["net.minecraft.network.protocol.game.ClientboundLightUpdatePacket", "getChunkX", "()I"],
+        ["net.minecraft.network.protocol.game.ClientboundLightUpdatePacket", "getChunkZ", "()I"],
+        ["net.minecraft.core.BlockPos", "getX", "()I"],
+        ["net.minecraft.core.BlockPos", "getY", "()I"],
+        ["net.minecraft.core.BlockPos", "getZ", "()I"],
+        ["net.minecraft.world.phys.Vec3", "x", "()D"],
+        ["net.minecraft.world.phys.Vec3", "y", "()D"],
+        ["net.minecraft.world.phys.Vec3", "z", "()D"],
+        // A particle's type is the key the cross-mod budget shares on, and remove() is where the share is
+        // given back -- taking one without the other fills the budget permanently and every particle after
+        // that is refused.
+        ["net.minecraft.client.particle.Particle", "getParticleKey",
+         "()Lnet/minecraft/resources/ResourceLocation;"],
+        ["net.minecraft.client.particle.Particle", "remove", "()V"],
+        ["net.minecraft.resources.ResourceLocation", "toString", "()Ljava/lang/String;"],
+        // What a sound is, and where it is.
+        ["net.minecraft.client.resources.sounds.SoundInstance", "getX", "()D"],
+        ["net.minecraft.client.resources.sounds.SoundInstance", "getY", "()D"],
+        ["net.minecraft.client.resources.sounds.SoundInstance", "getZ", "()D"],
+        ["net.minecraft.client.resources.sounds.SoundInstance", "getSource",
+         "()Lnet/minecraft/sounds/SoundSource;"],
+        ["net.minecraft.client.resources.sounds.SoundInstance", "getLocation",
+         "()Lnet/minecraft/resources/ResourceLocation;"],
+        // A sound that is not attenuated has no position, and treating its zeroed coordinates as a place
+        // in the world would refuse the interface and the music.
+        ["net.minecraft.client.resources.sounds.SoundInstance", "getAttenuation",
+         "()Lnet/minecraft/client/resources/sounds/SoundInstance\$Attenuation;"],
+        ["net.minecraft.resources.ResourceLocation", "getNamespace", "()Ljava/lang/String;"],
+        // The engine dropping everything, where the grants have to be given back in bulk.
+        ["net.minecraft.client.particle.ParticleEngine", "clearParticles", "()V"],
+        // Guarding on this is what stops a frame before the camera is placed culling from (0, 0, 0).
+        ["net.minecraft.client.Camera", "isInitialized", "()Z"]
         ["com.mojang.blaze3d.platform.Window", "getWidth", "()I"],
         ["com.mojang.blaze3d.platform.Window", "getHeight", "()I"],
         ["net.minecraft.client.Options", "fov", "()Lnet/minecraft/client/OptionInstance;"]

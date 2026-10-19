@@ -211,6 +211,18 @@ public final class AmdFasterRuntime {
     private long framesTimed;
     private long chunksInvalidated;
 
+    /** Block updates the packet hooks have reported. */
+    private long blockChanges;
+
+    /** Light columns the packet hooks have reported. */
+    private long lightColumns;
+
+    /** Times the renderer threw away every chunk, which drops the culling result with it. */
+    private long terrainInvalidations;
+
+    /** The last culling decision, for the overlay. */
+    private CullRuntime.Frame lastCull;
+
     private AmdFasterRuntime(AmdFasterConfig config) {
         this.config = config;
         this.governor = new FrameGovernor(
@@ -255,6 +267,162 @@ public final class AmdFasterRuntime {
 
     public static AmdFasterRuntime get() {
         return instance;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The game-event hooks.
+    //
+    // Static, and every one of them null-tolerant, because they are called from mixins injected into
+    // Minecraft's own packet handler, renderer and engines -- which run whether or not this runtime
+    // installed. install() is written never to throw, on the grounds that a performance mod that stops
+    // the game starting has done the opposite of its job; the hooks have to honour the same bargain, or
+    // a failed install turns into a crash on the first block a player places.
+    //
+    // They also all return the answer that means "do nothing", rather than the answer that means "the
+    // optimisation is on". A hook that cannot reach its pipeline should cost nothing and change nothing.
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * A block changed on the client.
+     *
+     * <p>Clears what the caches say about that position and the sections around it. Light and height both
+     * cross section boundaries, so a block placed against the edge of a section changes the answer for the
+     * section beside it too.
+     *
+     * @param x the block x
+     * @param y the block y
+     * @param z the block z
+     */
+    public static void onBlockChanged(int x, int y, int z) {
+        AmdFasterRuntime runtime = instance;
+        if (runtime == null || !runtime.installed) {
+            return;
+        }
+        runtime.minecraft.onBlockChange(x, y, z);
+        // The shared block cache answers "air / opaque / emitting", which is what hidden-face culling and
+        // the light engine read. It has no per-entry removal, so it is cleared whole: an entry left holding
+        // the old block culls a face that is now exposed, and the player sees a hole in the world.
+        if (runtime.blockCache != null) {
+            runtime.blockCache.clear();
+        }
+        runtime.blockChanges++;
+    }
+
+    /**
+     * The server sent new light for a chunk column.
+     *
+     * <p>The packet carries section bitmasks rather than per-block levels, so there is no position and no
+     * emission to give the light batcher -- inventing them would feed it changes that did not happen. What
+     * it does establish is that the cached light for this column is stale, and emission is part of what the
+     * block cache stores, so that is what is dropped.
+     *
+     * @param chunkX the chunk x the light arrived for
+     * @param chunkZ the chunk z
+     */
+    public static void onLightColumnChanged(int chunkX, int chunkZ) {
+        AmdFasterRuntime runtime = instance;
+        if (runtime == null || !runtime.installed) {
+            return;
+        }
+        if (runtime.blockCache != null) {
+            runtime.blockCache.clear();
+        }
+        runtime.lightColumns++;
+    }
+
+    /**
+     * The renderer threw away every chunk it had.
+     *
+     * <p>Drops the culling result with it. The reuse path answers from last frame's visible set when
+     * nothing relevant moved, and terrain being replaced is the largest possible change to what is
+     * relevant -- but it is not a camera movement, so nothing else would notice.
+     */
+    public static void onTerrainInvalidated() {
+        AmdFasterRuntime runtime = instance;
+        if (runtime == null || !runtime.installed) {
+            return;
+        }
+        runtime.cull.onTerrainChange();
+        runtime.terrainInvalidations++;
+    }
+
+    /**
+     * Asks whether one more particle from this source may exist.
+     *
+     * <p>Called where the particle is created, which is the only place the cost can still be avoided: a
+     * particle refused here is never constructed, never ticked and never batched. Refusing it at draw time
+     * would still have paid for all three.
+     *
+     * @param source what is spawning it, such as a particle type
+     * @return false if the particle should not be created
+     */
+    public static boolean offerParticle(String source) {
+        AmdFasterRuntime runtime = instance;
+        if (runtime == null || !runtime.installed) {
+            return true;
+        }
+        return runtime.particles.allowSpawn(source);
+    }
+
+    /**
+     * Gives back a grant made by {@link #offerParticle}.
+     *
+     * <p>Not optional. The budget is a count of what is alive, so a grant that is never returned stays
+     * counted, the budget fills, and every particle after that point is refused -- which looks like the
+     * world quietly losing its effects rather than like a budget.
+     *
+     * @param source what spawned the particle being removed
+     */
+    public static void releaseParticle(String source) {
+        AmdFasterRuntime runtime = instance;
+        if (runtime == null || !runtime.installed) {
+            return;
+        }
+        runtime.particles.releaseBudget(source);
+    }
+
+    /**
+     * The particle engine dropped every particle it was holding.
+     *
+     * <p>A resource reload and a dimension change both arrive this way, and neither removes the particles
+     * one at a time, so there is nothing to hand back to {@link #releaseParticle}. The whole budget is
+     * emptied instead, which is the same thing a world change does and for the same reason: a grant that
+     * is never returned is still counted, and a budget that starts full refuses everything after it.
+     */
+    public static void onParticlesCleared() {
+        AmdFasterRuntime runtime = instance;
+        if (runtime == null || !runtime.installed) {
+            return;
+        }
+        runtime.particles.onWorldChange();
+    }
+
+    /**
+     * Asks whether a sound should be started at all.
+     *
+     * <p>Called where the sound is about to be handed to the engine. Deciding on a tick boundary would be
+     * deciding too late: by then the channel is allocated and the only saving left is the mixing.
+     *
+     * @param sound            the sound's identifier
+     * @param source           what is playing it, which is what the fairness limiter shares between
+     * @param category         the mixer category, which is what the budget shares between
+     * @param x                the source x
+     * @param y                the source y
+     * @param z                the source z
+     * @param angleFromFacing  how far it is from where the camera is looking, in degrees
+     * @param fieldOfView      the player's field of view setting, in degrees
+     * @return false if the sound should not be started
+     */
+    public static boolean refuseSound(String sound, String source,
+            net.amdfaster.sound.CategoryBudgetAllocator.Category category,
+            double x, double y, double z, double angleFromFacing, double fieldOfView) {
+        AmdFasterRuntime runtime = instance;
+        if (runtime == null || !runtime.installed) {
+            return false;
+        }
+        SoundRuntime.Decision decision = runtime.sound.decide(sound, source, category, x, y, z,
+                angleFromFacing, fieldOfView, runtime.sound.poolContested());
+        return !decision.plays();
     }
 
     /** Whether the handlers were registered successfully. */
@@ -453,6 +621,26 @@ public final class AmdFasterRuntime {
         return this.heapWarnings;
     }
 
+    /** Block updates reported by the packet hooks. Zero means the hooks are not being reached. */
+    public long blockChanges() {
+        return this.blockChanges;
+    }
+
+    /** Light columns reported by the packet hooks. */
+    public long lightColumns() {
+        return this.lightColumns;
+    }
+
+    /** Times the renderer invalidated all terrain. */
+    public long terrainInvalidations() {
+        return this.terrainInvalidations;
+    }
+
+    /** The last culling decision, or {@code null} before the first frame has been driven. */
+    public CullRuntime.Frame lastCull() {
+        return this.lastCull;
+    }
+
     /** How many chunk columns were left to Sodium instead of being meshed here. */
     public long meshingDeferredToSodium() {
         return this.meshingDeferredToSodium;
@@ -573,6 +761,7 @@ public final class AmdFasterRuntime {
      * wrong thing: the game ticks twenty times a second whatever the frame rate is.
      */
     private void onHudRender(Minecraft client, net.minecraft.client.gui.GuiGraphics graphics) {
+        driveCullFrame(client);
         long nowMs = System.currentTimeMillis();
         if (this.lastFrameAtMs >= 0) {
             long elapsedMs = nowMs - this.lastFrameAtMs;
@@ -676,6 +865,39 @@ public final class AmdFasterRuntime {
         this.lastPlayerZ = z;
         this.lastPlayerYaw = yaw;
         this.lastPlayerPitch = pitch;
+    }
+
+    /**
+     * Runs one frame of the culling decisions against the real camera.
+     *
+     * <p>Driven from the HUD callback because that is the one hook that runs once per rendered frame
+     * rather than once per tick, and the culling decisions are per frame: a camera that turns between two
+     * ticks still changes what is visible. The cost is that it runs after the world has been drawn, so the
+     * answer describes the next frame rather than this one. For what it decides -- whether last frame's
+     * visible set can be reused, and whether the depth pyramid has to be rebuilt -- one frame of lag is
+     * the correct behaviour anyway, since both are statements about the frame that is about to be built.
+     *
+     * <p>Read from the game's own camera rather than from the player, because in third person and in
+     * spectator mode those are not the same place, and a frustum built around the player while the camera
+     * is five blocks behind them culls what the player is looking at.
+     */
+    private void driveCullFrame(Minecraft client) {
+        if (client.gameRenderer == null || client.options == null) {
+            return;
+        }
+        net.minecraft.client.Camera camera = client.gameRenderer.getMainCamera();
+        if (camera == null || !camera.isInitialized()) {
+            return;
+        }
+        net.minecraft.world.phys.Vec3 position = camera.position();
+        com.mojang.blaze3d.platform.Window window = client.getWindow();
+        if (window == null) {
+            return;
+        }
+        Integer fov = client.options.fov().get();
+        this.lastCull = this.cull.frame((float) position.x(), (float) position.y(), (float) position.z(),
+                camera.yRot(), camera.xRot(), fov == null ? 70.0f : fov.floatValue(),
+                window.getWidth(), window.getHeight(), false);
     }
 
     private void endFrame() {
@@ -837,6 +1059,11 @@ public final class AmdFasterRuntime {
         // The mesh queue is per-world: sections from the last world are coordinates that no longer mean
         // anything, so the queue and the deduplicator go with them.
         this.mesh.onWorldChange();
+        // The particle budget counts what is alive, and the engine drops everything it holds without
+        // removing the particles one at a time -- so every grant made in the last world would still be
+        // counted in the next one, and a budget that starts full refuses every particle the new world
+        // tries to draw.
+        this.particles.onWorldChange();
         this.entityWorld.onWorldChange();
         this.gpu.onWorldChange();
         this.lastFrameAtMs = -1L;
