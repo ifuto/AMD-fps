@@ -24,11 +24,10 @@ public abstract class ParticleMixin {
 
     @Inject(method = "remove", at = @At("HEAD"))
     private void amdfaster$returnBudget(CallbackInfo info) {
+        // The same key ParticleEngineMixin took the grant with. It has to be the class rather than
+        // anything the particle could report about itself, because the grant and the release have to name
+        // the same source or the budget never balances.
         Particle self = (Particle) (Object) this;
-        net.minecraft.resources.ResourceLocation key = self.getParticleKey();
-        if (key == null) {
-            return;
-        }
-        AmdFasterRuntime.releaseParticle(key.toString());
+        AmdFasterRuntime.releaseParticle(self.getClass().getName());
     }
 }

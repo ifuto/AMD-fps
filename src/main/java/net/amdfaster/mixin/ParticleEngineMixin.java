@@ -30,15 +30,11 @@ public abstract class ParticleEngineMixin {
 
     @Inject(method = "add", at = @At("HEAD"), cancellable = true)
     private void amdfaster$budgetParticles(Particle particle, CallbackInfo info) {
-        // A key that is not there means the particle cannot be attributed to a source, and a budget that
-        // shares between sources has nothing to say about it. Letting it through is the only answer that
-        // is both correct and survivable: the alternative is an exception thrown inside a mixin handler on
-        // a mod's custom particle.
-        net.minecraft.resources.ResourceLocation key = particle.getParticleKey();
-        if (key == null) {
-            return;
-        }
-        if (!AmdFasterRuntime.offerParticle(key.toString())) {
+        // The source is the particle's own class. Particle exposes no accessor for the type it was made
+        // from, and the class is the better key anyway: it is what actually distinguishes one mod's
+        // particles from another's, where two mods could both be spawning something called "flame".
+        // Class.getName is cached on the Class, so this allocates nothing after the first call.
+        if (!AmdFasterRuntime.offerParticle(particle.getClass().getName())) {
             info.cancel();
         }
     }

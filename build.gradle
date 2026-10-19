@@ -433,7 +433,6 @@ tasks.register("verifyJar") {
                         "net/amdfaster/mixin/LevelRendererMixin.class",
                         "net/amdfaster/mixin/ParticleEngineMixin.class",
                         "net/amdfaster/mixin/ParticleMixin.class",
-                        "net/amdfaster/mixin/SoundManagerMixin.class",
                         // The config that names them. Unlisted in fabric.mod.json it is never read, and
                         // nothing else fails.
                         "amdfaster.mixins.json",
@@ -812,34 +811,30 @@ def mixinTargetTable = [
          "()Lnet/minecraft/core/BlockPos;"],
         ["net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket", "runUpdates",
          "(Ljava/util/function/BiConsumer;)V"],
-        ["net.minecraft.network.protocol.game.ClientboundLightUpdatePacket", "getChunkX", "()I"],
-        ["net.minecraft.network.protocol.game.ClientboundLightUpdatePacket", "getChunkZ", "()I"],
-        ["net.minecraft.core.BlockPos", "getX", "()I"],
-        ["net.minecraft.core.BlockPos", "getY", "()I"],
-        ["net.minecraft.core.BlockPos", "getZ", "()I"],
+        ["net.minecraft.network.protocol.game.ClientboundLightUpdatePacket", "getX", "()I"],
+        ["net.minecraft.network.protocol.game.ClientboundLightUpdatePacket", "getZ", "()I"],
+        // Declared on Vec3i and inherited by BlockPos, which is why the verifier walks superclasses.
+        ["net.minecraft.core.Vec3i", "getX", "()I"],
+        ["net.minecraft.core.Vec3i", "getY", "()I"],
+        ["net.minecraft.core.Vec3i", "getZ", "()I"],
         ["net.minecraft.world.phys.Vec3", "x", "()D"],
         ["net.minecraft.world.phys.Vec3", "y", "()D"],
         ["net.minecraft.world.phys.Vec3", "z", "()D"],
-        // A particle's type is the key the cross-mod budget shares on, and remove() is where the share is
-        // given back -- taking one without the other fills the budget permanently and every particle after
-        // that is refused.
-        ["net.minecraft.client.particle.Particle", "getParticleKey",
-         "()Lnet/minecraft/resources/ResourceLocation;"],
+        // remove() is where the share of the budget is given back -- taking one without the other fills
+        // the budget permanently and every particle after that is refused. Particle has no accessor for its
+        // own type, so the budget keys on the class instead, which needs nothing from Minecraft at all.
         ["net.minecraft.client.particle.Particle", "remove", "()V"],
-        ["net.minecraft.resources.ResourceLocation", "toString", "()Ljava/lang/String;"],
         // What a sound is, and where it is.
         ["net.minecraft.client.resources.sounds.SoundInstance", "getX", "()D"],
         ["net.minecraft.client.resources.sounds.SoundInstance", "getY", "()D"],
         ["net.minecraft.client.resources.sounds.SoundInstance", "getZ", "()D"],
         ["net.minecraft.client.resources.sounds.SoundInstance", "getSource",
          "()Lnet/minecraft/sounds/SoundSource;"],
-        ["net.minecraft.client.resources.sounds.SoundInstance", "getLocation",
-         "()Lnet/minecraft/resources/ResourceLocation;"],
+        ["net.minecraft.client.resources.sounds.SoundInstance", "getIdentifier", "()Ljava/lang/Object;"],
         // A sound that is not attenuated has no position, and treating its zeroed coordinates as a place
         // in the world would refuse the interface and the music.
         ["net.minecraft.client.resources.sounds.SoundInstance", "getAttenuation",
          "()Lnet/minecraft/client/resources/sounds/SoundInstance\$Attenuation;"],
-        ["net.minecraft.resources.ResourceLocation", "getNamespace", "()Ljava/lang/String;"],
         // The engine dropping everything, where the grants have to be given back in bulk.
         ["net.minecraft.client.particle.ParticleEngine", "clearParticles", "()V"],
         // Guarding on this is what stops a frame before the camera is placed culling from (0, 0, 0).
@@ -856,16 +851,14 @@ def mixinTargetTable = [
 // question: the failure annotation is delivered through the workflow's error line, and a survey of
 // Minecraft alone is long enough to be truncated before it reaches the answer.
 def mixinSurveyClasses = [
-        "net.minecraft.client.resources.sounds.SoundInstance",
-        "net.minecraft.client.particle.Particle",
-        "net.minecraft.network.protocol.game.ClientboundLightUpdatePacket",
-        "net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket"
+        "net.minecraft.client.sounds.SoundEngine\$PlayResult"
 ]
 
 // Simple names to look for anywhere in the jar, for when the question is not what a method is called but
 // which package the class ended up in.
 def mixinClassSearch = [
-        "SoundManager"
+        "ResourceLocation",
+        "Identifier"
 ]
 
 tasks.register("verifyMixinTargets") {
@@ -882,8 +875,15 @@ tasks.register("verifyMixinTargets") {
             def bytes
             zip.getInputStream(entry).withCloseable { input -> bytes = input.bytes }
             def byName = new TreeMap<String, List<String>>()
+            def superName = new String[1]
             new org.objectweb.asm.ClassReader(bytes).accept(
                     new org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                        @Override
+                        void visit(int version, int access, String name, String signature,
+                                String superClass, String[] interfaces) {
+                            superName[0] = superClass
+                        }
+
                         @Override
                         org.objectweb.asm.MethodVisitor visitMethod(int access, String name,
                                 String descriptor, String signature, String[] exceptions) {
@@ -892,7 +892,7 @@ tasks.register("verifyMixinTargets") {
                         }
                     },
                     org.objectweb.asm.ClassReader.SKIP_CODE | org.objectweb.asm.ClassReader.SKIP_DEBUG)
-            return byName
+            return [methods: byName, superClass: superName[0]]
         }
 
         // The jar that actually holds Minecraft. Found by content rather than by name, because loom's
@@ -916,11 +916,30 @@ tasks.register("verifyMixinTargets") {
 
         try {
             def cache = [:]
-            def lookup = { String className ->
+            def declared = { String className ->
                 if (!cache.containsKey(className)) {
                     cache[className] = methodsOf(minecraft, className)
                 }
                 return cache[className]
+            }
+            // Inherited methods count. A verifier that only read a class's own methods reports BlockPos as
+            // having no getX, because getX is declared on Vec3i -- and "this target does not exist" for a
+            // target that does is worse than no check at all, because it is believed.
+            def lookup = { String className ->
+                def merged = new TreeMap<String, List<String>>()
+                def current = className
+                int hops = 0
+                while (current != null && current != "java/lang/Object" && hops++ < 32) {
+                    def info = declared(current)
+                    if (info == null) {
+                        break
+                    }
+                    info.methods.each { String name, List<String> descriptors ->
+                        merged.computeIfAbsent(name, { k -> [] }).addAll(descriptors)
+                    }
+                    current = info.superClass
+                }
+                return merged.isEmpty() && declared(className) == null ? null : merged
             }
 
             def problems = []
@@ -953,25 +972,40 @@ tasks.register("verifyMixinTargets") {
                 // annotation that is too long to be delivered is worse than one that stops early.
                 def survey = []
                 for (String className : touched) {
-                    def methods = lookup(className)
-                    def names = methods == null ? ["<absent>"] : methods.keySet().take(500).toList()
-                    survey << className + " has: " + names.join(", ")
+                    def info = declared(className)
+                    def names = info == null ? ["<absent>"] : info.methods.keySet().take(500).toList()
+                    survey << className + " declares: " + names.join(", ")
                 }
                 def message = "mixin target verification failed -> " + problems.join(" | ")
                 message = message + " || SURVEY || " + survey.join(" || ")
                 if (!mixinClassSearch.isEmpty()) {
                     def wanted = new LinkedHashSet<String>(mixinClassSearch)
                     def found = [:]
-                    for (java.util.zip.ZipEntry entry : Collections.list(minecraft.entries())) {
-                        def entryName = entry.name
-                        if (!entryName.endsWith(".class")) {
+                    // Every jar on the classpath, not just Minecraft's. A class reported as "not in the
+                    // jar" may simply live in another one, and the difference matters: one of those is a
+                    // wrong name and the other is a wrong assumption about which jar to look in.
+                    for (File candidate : classpath) {
+                        if (!candidate.isFile() || !candidate.name.endsWith(".jar")) {
                             continue
                         }
-                        def simple = entryName.substring(entryName.lastIndexOf('/') + 1,
-                                entryName.length() - 6)
-                        if (wanted.contains(simple)) {
-                            def fqcn = entryName.substring(0, entryName.length() - 6).replace('/', '.')
-                            found.computeIfAbsent(simple, { k -> [] }).add(fqcn)
+                        def scanning = new java.util.zip.ZipFile(candidate)
+                        try {
+                            for (java.util.zip.ZipEntry entry : Collections.list(scanning.entries())) {
+                                def entryName = entry.name
+                                if (!entryName.endsWith(".class")) {
+                                    continue
+                                }
+                                def simple = entryName.substring(entryName.lastIndexOf('/') + 1,
+                                        entryName.length() - 6)
+                                if (wanted.contains(simple)) {
+                                    def fqcn = entryName.substring(0, entryName.length() - 6)
+                                            .replace('/', '.')
+                                    found.computeIfAbsent(simple, { k -> [] })
+                                            .add(fqcn + " (" + candidate.name + ")")
+                                }
+                            }
+                        } finally {
+                            scanning.close()
                         }
                     }
                     message = message + " || CLASSES || " + mixinClassSearch.collect { String simple ->

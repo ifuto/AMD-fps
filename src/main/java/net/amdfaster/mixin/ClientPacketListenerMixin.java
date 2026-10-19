@@ -67,6 +67,6 @@ public abstract class ClientPacketListenerMixin {
      */
     @Inject(method = "handleLightUpdatePacket", at = @At("HEAD"))
     private void amdfaster$onLightUpdate(ClientboundLightUpdatePacket packet, CallbackInfo info) {
-        AmdFasterRuntime.onLightColumnChanged(packet.getChunkX(), packet.getChunkZ());
+        AmdFasterRuntime.onLightColumnChanged(packet.getX(), packet.getZ());
     }
 }
