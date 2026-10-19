@@ -230,6 +230,24 @@
 > （描画 / 処理 / メモリ / ワールド生成 / ネットワーク / パーティクル）から
 > 次の 1 つを選んで**着手してから**締める。
 
+### 配線の状態（2026-10-19）
+
+「未結線は禁止」への回答。**`mixin/` の5クラス**がゲームの呼び出し経路に接続され、
+`932efd8` でビルド・全テスト・jar 検証が緑。
+
+| 経路 | 注入先 | 動くもの |
+| --- | --- | --- |
+| 光のみの再構築 | `ClientPacketListener.handleLightUpdatePacket` / `handleBlockUpdate` / `handleChunkBlocksUpdate` | `LightOnlyRebuildPlanner` の判定 → `LightRuntime`（毎tickの合算に載る） |
+| 全面描き直し | `LevelRenderer.allChanged` | `MeshRuntime` の記録と合算 |
+| パーティクル合計予算 | `ParticleEngine.add` | `CrossModParticleBudget`（キーは `getClass().getName()`） |
+| 予算の返却 | `Particle.tick` | 死んだパーティクルの枠を次tickから解放 |
+| 音 | `SoundManager.play` | `SoundRuntime` の8段（距離Lod/カテゴリ/遮蔽/ボイス上限/方向/保護/dup/プール） |
+| 毎tickの合算 | `Minecraft.tick` | 連鎖反応・爆発曝露・ブロック読み替え（tickをまたいでも失われない） |
+
+**まだ値が流れていない2本:** エンティティのカリング投入（`EntityWorldRuntime.cullEntities`）と
+チャンクメッシュの再構築投入数制限。どちらもモデルは完成しており、注入先が未確定。
+理由と次の一手は `26_mixin_layer.md` 末尾。
+
 | 99 | Vulkan メッシュシェーダー用の別バックエンド | ✅ | `render/MeshShaderBackendSelector`。**AMD では既定経路（compute cull + MDI）が勝つと判定**。① AMD の task shader は compute shader にコンパイルされ command processor 経由の固定 VRAM ring を使う（count に応じて伸びず、**32K items 構成が 7900 GRE で手動 compute cull に負けた実測**）→ 安全閾値 **1024**（12 chunk は 13,824 sections）② AMD 実測で **128 primitives 超は MDI が速い**（1 section=1,536 quads なので常に超過）③ ベンダー指針が **「TS+MS と compute culling を混ぜるな」**。mesh 経路を選ぶ唯一の条件は**メッシュレット内部の三角形単位 rejection**（indirect 経路の下限は 1 meshlet=62 quads）で、その場合も **task stage 無し** |
 | 100 | 自動ベンチマーク・ボトルネック診断 | **完了（基盤）** | `perf/FrameTimeRecorder`（平均・p50/p95/p99・**1% Low**・標準偏差・最悪フレーム）、`perf/StageTimer`（段階別内訳・スレッド間マージ）。**GPU タイムスタンプの取り込み口は `StageTimer.add` として用意済みだが `VK_QUERY_TYPE_TIMESTAMP` の発行は未実装** |
 
