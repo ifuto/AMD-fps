@@ -111,9 +111,12 @@ public final class WorldGenRuntime {
      * Generating each one from the template costs the full piece walk; copying costs a rotation lookup per
      * block. The cache is keyed on kind and variant, so two villages sharing a house shape share the work.
      *
+     * @param generate how to produce the piece the first time it is needed, which is the expensive path
+     *                 this exists to avoid repeating
      * @return the block ids to place, in the piece's own order
      */
-    public int[] placeStructurePiece(int kind, int variant, int turns, java.util.function.IntSupplier generate) {
+    public int[] placeStructurePiece(int kind, int variant, int turns,
+            java.util.function.Supplier<int[]> generate) {
         if (!this.structurePieces.contains(kind, variant)) {
             this.structurePieces.store(kind, variant, generate.get());
         }
