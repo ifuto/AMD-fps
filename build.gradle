@@ -858,7 +858,7 @@ def mixinTargetTable = [
 // renamed constant a build failure instead of a sound that quietly draws on the wrong budget, but only
 // if the constants are the ones this version has -- so they are checked like everything else.
 def mixinEnumConstants = [
-        "net.minecraft.sounds.SoundSource": ["MASTER", "MUSIC", "RECORDS", "WEATHER", "BLOCKS",
+        "net.minecraft.sounds.SoundSource": ["MASTER", "UI", "MUSIC", "RECORDS", "WEATHER", "BLOCKS",
                                              "HOSTILE", "NEUTRAL", "PLAYERS", "AMBIENT", "VOICE"]
 ]
 

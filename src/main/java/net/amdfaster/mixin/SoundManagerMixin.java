@@ -114,7 +114,10 @@ public abstract class SoundManagerMixin {
      */
     private static CategoryBudgetAllocator.Category categoryOf(SoundSource source) {
         return switch (source) {
-            case MASTER -> CategoryBudgetAllocator.Category.MASTER;
+            // UI shares MASTER's category, which is the one nothing is ever allowed to fill. Interface
+            // sounds are the case where dropping one is not a performance saving but a broken control,
+            // and 1.21.11 gave them their own source rather than leaving them under MASTER.
+            case MASTER, UI -> CategoryBudgetAllocator.Category.MASTER;
             case VOICE -> CategoryBudgetAllocator.Category.VOICE;
             case PLAYERS -> CategoryBudgetAllocator.Category.PLAYERS;
             case HOSTILE -> CategoryBudgetAllocator.Category.HOSTILE;
