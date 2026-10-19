@@ -852,8 +852,20 @@ def mixinTargetTable = [
 // Classes whose whole method list is dumped when anything above fails. Kept to the class actually in
 // question: the failure annotation is delivered through the workflow's error line, and a survey of
 // Minecraft alone is long enough to be truncated before it reaches the answer.
+// Classes whose whole method list is dumped when anything above fails. Kept to the classes actually in
+// question: the failure annotation is delivered through the workflow's error line, and a survey of
+// Minecraft alone is long enough to be truncated before it reaches the answer.
 def mixinSurveyClasses = [
-        "net.minecraft.client.Camera"
+        "net.minecraft.client.resources.sounds.SoundInstance",
+        "net.minecraft.client.particle.Particle",
+        "net.minecraft.network.protocol.game.ClientboundLightUpdatePacket",
+        "net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket"
+]
+
+// Simple names to look for anywhere in the jar, for when the question is not what a method is called but
+// which package the class ended up in.
+def mixinClassSearch = [
+        "SoundManager"
 ]
 
 tasks.register("verifyMixinTargets") {
@@ -947,6 +959,25 @@ tasks.register("verifyMixinTargets") {
                 }
                 def message = "mixin target verification failed -> " + problems.join(" | ")
                 message = message + " || SURVEY || " + survey.join(" || ")
+                if (!mixinClassSearch.isEmpty()) {
+                    def wanted = new LinkedHashSet<String>(mixinClassSearch)
+                    def found = [:]
+                    for (java.util.zip.ZipEntry entry : Collections.list(minecraft.entries())) {
+                        def entryName = entry.name
+                        if (!entryName.endsWith(".class")) {
+                            continue
+                        }
+                        def simple = entryName.substring(entryName.lastIndexOf('/') + 1,
+                                entryName.length() - 6)
+                        if (wanted.contains(simple)) {
+                            def fqcn = entryName.substring(0, entryName.length() - 6).replace('/', '.')
+                            found.computeIfAbsent(simple, { k -> [] }).add(fqcn)
+                        }
+                    }
+                    message = message + " || CLASSES || " + mixinClassSearch.collect { String simple ->
+                        simple + " -> " + (found[simple] ?: ["<not in the jar>"])
+                    }.join(" || ")
+                }
                 throw new GradleException(message)
             }
             println("verifyMixinTargets: all " + mixinTargetTable.size() + " mixin targets exist")
@@ -956,7 +987,13 @@ tasks.register("verifyMixinTargets") {
     }
 }
 
+// Before compileJava, not merely as part of check. The handlers are written against these names, so a
+// run that happens after compilation can only ever report them once the code already fails to build --
+// which is the cycle this task exists to remove.
+tasks.named("compileJava") {
+    dependsOn(tasks.named("verifyMixinTargets"))
+}
+
 tasks.named("check") {
     dependsOn(tasks.named("verifyJar"))
-    dependsOn(tasks.named("verifyMixinTargets"))
 }
