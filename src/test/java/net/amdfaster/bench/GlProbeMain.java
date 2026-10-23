@@ -63,7 +63,8 @@ final class GlProbeMain {
                     GL11.GL_TEXTURE_2D, colour, 0);
             int depth = GL30.glGenRenderbuffers();
             GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, depth);
-            GL30.glRenderbufferStorage(GL30.GL_RENDERBUFFER, GL11.GL_DEPTH_COMPONENT24, 1280, 720);
+            // 0x81A6 is GL_DEPTH_COMPONENT24, which lives in GL14 rather than GL11.
+            GL30.glRenderbufferStorage(GL30.GL_RENDERBUFFER, 0x81A6, 1280, 720);
             GL30.glFramebufferRenderbuffer(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT,
                     GL30.GL_RENDERBUFFER, depth);
             int status = GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER);
