@@ -50,6 +50,8 @@ class GlRenderBenchmark {
         int[] glFast = new int[3];
         int[] softBase = new int[3];
         double[] diff = new double[3];
+        int[] noCull = new int[3];
+        int[] mvpLoc = new int[3];
         String renderer = "?";
         int scenes = 0;
 
@@ -77,6 +79,8 @@ class GlRenderBenchmark {
                 glFast[scene] = (int) number(flat, "glFast=");
                 softBase[scene] = (int) number(flat, "softBase=");
                 diff[scene] = number(flat, "diffPercent=");
+                noCull[scene] = (int) number(flat, "noCull=");
+                mvpLoc[scene] = (int) number(flat, "mvpLoc=");
             }
         }
 
@@ -92,10 +96,11 @@ class GlRenderBenchmark {
         report.append(" | ").append(shorten(renderer, 90));
         for (int scene = 0; scene < 3; scene++) {
             report.append(String.format(Locale.ROOT,
-                    " | %c draws %d->%d ranges %d->%d tris %d->%d glpx %d/%d softpx %d diff %.1f%%",
+                    " | %c draws %d->%d ranges %d->%d glpx %d/%d softpx %d noCull %d mvp %d diff %.1f%%",
                     (char) ('A' + scene), baseDraws[scene], fastDraws[scene],
-                    baseRanges[scene], fastRanges[scene], baseTris[scene], fastTris[scene],
-                    glBase[scene], glFast[scene], softBase[scene], diff[scene]));
+                    baseRanges[scene], fastRanges[scene],
+                    glBase[scene], glFast[scene], softBase[scene], noCull[scene], mvpLoc[scene],
+                    diff[scene]));
         }
 
         // The picture has to survive the change of backend before the frame rate means anything. Coverage

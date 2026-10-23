@@ -150,6 +150,16 @@ class GlRaster extends SoftRenderer {
 
     private int currentState = -1;
 
+    /**
+     * Draws every face regardless of which way it points, and reports what that costs in coverage.
+     *
+     * <p>This exists because the first two runs of this backend painted 5% of the scene and the cause was
+     * a guess away from being found. Either the winding is wrong and culling is eating the world, or
+     * something else never reaches the framebuffer at all. One frame with culling off says which, and a
+     * diagnosis beats a third guess.
+     */
+    boolean debugNoCull;
+
     // ---- reported -------------------------------------------------------------------------------
     long glDraws;
     long glMultiDraws;
@@ -760,6 +770,16 @@ class GlRaster extends SoftRenderer {
      * <p>Redundant state changes are not free in a driver, and a renderer that issued them on every draw
      * would be measuring its own sloppiness rather than the pipelines.
      */
+    /** Forgets the cached pipeline state, so a change to {@link #debugNoCull} actually reaches GL. */
+    void invalidateState() {
+        this.currentState = -1;
+    }
+
+    /** The location the model-view-projection matrix was found at, or -1 if the driver did not expose it. */
+    int mvpLocation() {
+        return this.uniformMvp;
+    }
+
     private void applyState(int state) {
         if (state == this.currentState) {
             return;
@@ -771,7 +791,11 @@ class GlRaster extends SoftRenderer {
                 GL11.glEnable(GL11.GL_DEPTH_TEST);
                 GL11.glDepthMask(true);
                 GL11.glDisable(GL11.GL_BLEND);
-                GL11.glEnable(GL11.GL_CULL_FACE);
+                if (this.debugNoCull) {
+                    GL11.glDisable(GL11.GL_CULL_FACE);
+                } else {
+                    GL11.glEnable(GL11.GL_CULL_FACE);
+                }
                 break;
             case BLEND:
                 GL11.glEnable(GL11.GL_DEPTH_TEST);

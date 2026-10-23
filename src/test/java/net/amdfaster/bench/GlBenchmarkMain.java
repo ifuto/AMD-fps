@@ -137,9 +137,32 @@ final class GlBenchmarkMain {
                 kind, baseFps, fastFps, fastFps / Math.max(1e-9, baseFps),
                 baseDraws, renderer.glDraws, baseMulti, renderer.glMultiDraws,
                 baseRanges, renderer.glRanges, baseTriangles, renderer.glTriangles, renderer.glUploads));
+        // One frame with back-face culling switched off. If coverage jumps, the winding is wrong and
+        // culling was eating the world; if it does not, the geometry never reached the framebuffer and
+        // the winding was never the question.
+        renderer.debugNoCull = true;
+        renderer.invalidateState();
+        BaselinePipeline diagnostic = new BaselinePipeline();
+        diagnostic.prepare(scene, assets);
+        scene.view(0, aspect, view);
+        renderer.setCamera(view.x, view.y, view.z,
+                view.rightX, view.rightY, view.rightZ,
+                view.upX, view.upY, view.upZ,
+                view.fwdX, view.fwdY, view.fwdZ,
+                view.nearHalfWidth, view.nearHalfHeight, view.near);
+        renderer.setViewProjection(view.viewProjection);
+        diagnostic.renderFrame(scene, assets, renderer, view, 0);
+        renderer.endFrame();
+        ByteBuffer noCullImage = MemoryUtil.memAlloc(WIDTH * HEIGHT * 4);
+        renderer.readBack(noCullImage);
+        int noCullPainted = GlRaster.painted(noCullImage, WIDTH, HEIGHT, sky);
+        MemoryUtil.memFree(noCullImage);
+
         System.out.println(String.format(Locale.ROOT,
-                "GLBENCHPAINT scene=%d glBase=%d glFast=%d softBase=%d softFast=%d diffPercent=%.1f",
-                kind, basePainted, fastPainted, softBase, softFast, diff));
+                "GLBENCHPAINT scene=%d glBase=%d glFast=%d softBase=%d softFast=%d diffPercent=%.1f"
+                        + " noCull=%d mvpLoc=%d err=0x%x",
+                kind, basePainted, fastPainted, softBase, softFast, diff,
+                noCullPainted, renderer.mvpLocation(), GL11.glGetError()));
         renderer.close();
     }
 
