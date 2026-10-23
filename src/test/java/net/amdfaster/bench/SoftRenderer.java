@@ -54,6 +54,19 @@ final class SoftRenderer {
     private float centreY;
     private int skyColour;
 
+    /**
+     * Whether the rasteriser shades pixels or only accounts for them.
+     *
+     * <p>Turning this off measures the CPU-side pipeline on its own: culling, sorting, batching, the
+     * model-view composition, the vertex transform, the clip, the projection and the triangle setup, with
+     * the per-pixel work left out. That split is not a convenience, it is the difference between the two
+     * things a frame is made of. On a real client the pixels belong to the GPU and cost a fraction of a
+     * millisecond at this resolution, while everything else is the CPU's and is what the frame rate is
+     * actually made of. A software rasteriser puts both on one core, which is why it reports a floor
+     * rather than the answer: the fill it charges is the one term the two pipelines cannot differ on.
+     */
+    private boolean fillEnabled = true;
+
     private final float[] inX = new float[3];
     private final float[] inY = new float[3];
     private final float[] inZ = new float[3];
@@ -151,6 +164,14 @@ final class SoftRenderer {
             return Float.POSITIVE_INFINITY;
         }
         return this.scaleY / viewDepth;
+    }
+
+    void setFillEnabled(boolean enabled) {
+        this.fillEnabled = enabled;
+    }
+
+    boolean fillEnabled() {
+        return this.fillEnabled;
     }
 
     void resetCounters() {
@@ -385,6 +406,10 @@ final class SoftRenderer {
         if (px0 > px1 || py0 > py1) {
             return;
         }
+        if (!this.fillEnabled) {
+            this.pixelsTested += (long) (px1 - px0 + 1) * (py1 - py0 + 1);
+            return;
+        }
 
         float c0 = this.invZ[i0];
         float c1 = this.invZ[i1];
@@ -468,6 +493,10 @@ final class SoftRenderer {
         int px1 = Math.min(this.width - 1, x1);
         int py1 = Math.min(this.height - 1, y1);
         if (px0 > px1 || py0 > py1) {
+            return;
+        }
+        if (!this.fillEnabled) {
+            this.pixelsTested += (long) (px1 - px0 + 1) * (py1 - py0 + 1);
             return;
         }
         int spanX = Math.max(1, x1 - x0);
