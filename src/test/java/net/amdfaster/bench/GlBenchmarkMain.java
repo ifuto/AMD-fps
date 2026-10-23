@@ -143,6 +143,7 @@ final class GlBenchmarkMain {
         renderer.debugNoCull = true;
         renderer.debugNoMultiDraw = true;
         renderer.debugNoDepth = true;
+        renderer.debugNoSharedBuffer = true;
         renderer.invalidateState();
         BaselinePipeline diagnostic = new BaselinePipeline();
         diagnostic.prepare(scene, assets);
@@ -186,6 +187,7 @@ final class GlBenchmarkMain {
                     view.fwdX, view.fwdY, view.fwdZ,
                     view.nearHalfWidth, view.nearHalfHeight, view.near);
             renderer.setViewProjection(view.viewProjection);
+            renderer.setProjection(view.near, view.nearHalfWidth, view.nearHalfHeight, view.far);
             pipeline.renderFrame(scene, assets, renderer, view, frame);
             renderer.endFrame();
         }
@@ -199,6 +201,7 @@ final class GlBenchmarkMain {
                     view.fwdX, view.fwdY, view.fwdZ,
                     view.nearHalfWidth, view.nearHalfHeight, view.near);
             renderer.setViewProjection(view.viewProjection);
+            renderer.setProjection(view.near, view.nearHalfWidth, view.nearHalfHeight, view.far);
             pipeline.renderFrame(scene, assets, renderer, view, frames);
             renderer.endFrame();
             frames++;

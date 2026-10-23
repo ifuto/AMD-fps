@@ -143,6 +143,7 @@ class GlRaster extends SoftRenderer {
     private int screenFloats;
 
     private final float[] viewProjection = new float[16];
+    private final float[] projection = new float[16];
     private final float[] mvp = new float[16];
 
     private int batchLayer = -1;
@@ -173,6 +174,9 @@ class GlRaster extends SoftRenderer {
 
     /** Skips the depth test, which is the last thing between a submitted triangle and a fragment. */
     boolean debugNoDepth;
+
+    /** Draws terrain meshes one at a time through the per-mesh path instead of the shared layer buffers. */
+    boolean debugNoSharedBuffer;
 
     /** First vertex of the opaque terrain layer, kept so a report can push it through the matrix. */
     private final float[] probeVertex = new float[3];
@@ -416,13 +420,38 @@ class GlRaster extends SoftRenderer {
     }
 
     /**
+     * Builds the projection on its own, without the view.
+     *
+     * <p>{@code drawMeshWith} is handed a model-VIEW matrix, exactly as the software rasteriser takes it:
+     * the caller has already folded the camera in. Multiplying that by view-projection applies the view
+     * twice, which does not fail loudly -- it moves every entity, particle and rain drop to somewhere
+     * else that is usually still on screen, so the frame looks busy and the numbers look plausible.
+     * Terrain passes no model at all and needs view-projection; this is what the other path needs.
+     */
+    void setProjection(float near, float nearHalfWidth, float nearHalfHeight, float far) {
+        float sx = near / nearHalfWidth;
+        float sy = near / nearHalfHeight;
+        float a = -near / (far - near);
+        float b = near * far / (far - near);
+        java.util.Arrays.fill(this.projection, 0.0f);
+        this.projection[0] = sx;
+        this.projection[5] = sy;
+        this.projection[10] = a;
+        this.projection[14] = b;
+        this.projection[11] = 1.0f;
+    }
+
+    /**
      * Folds a twelve float row-major model-view into the projection, or copies the projection when there
      * is no model. Folding rather than transforming twice is what a renderer does: an entity's yaw, its
      * position and the camera would otherwise be three passes over the same vertices instead of one.
      */
     private void compose(float[] modelView) {
         float[] out = this.mvp;
-        float[] vp = this.viewProjection;
+        // No model means the vertices are already in world space and the view has to come from here.
+        // A model means it is a model-view matrix and already contains the view, so only the projection
+        // is left to apply. Getting this the wrong way round draws the same picture in the wrong place.
+        float[] vp = modelView == null ? this.viewProjection : this.projection;
         for (int column = 0; column < 4; column++) {
             float m0;
             float m1;
@@ -619,7 +648,7 @@ class GlRaster extends SoftRenderer {
         if (mesh.triangleCount == 0) {
             return;
         }
-        if (this.batchLayer >= 0) {
+        if (this.batchLayer >= 0 && !this.debugNoSharedBuffer) {
             int[] range = this.terrainRange.get(mesh);
             if (range != null && range[0] == this.batchLayer) {
                 if (this.batchSize == this.firstBuffer.capacity()) {
@@ -647,7 +676,7 @@ class GlRaster extends SoftRenderer {
     @Override
     void drawFaceMeshes(Mesh[] faces, int mode, Texture[] textures) {
         int[] range = this.faceRange.get(faces);
-        if (range == null || this.batchLayer < 0) {
+        if (range == null || this.batchLayer < 0 || this.debugNoSharedBuffer) {
             super.drawFaceMeshes(faces, mode, textures);
             return;
         }
