@@ -140,6 +140,8 @@ class GlRaster extends SoftRenderer {
     private final FloatBuffer matrixBuffer = MemoryUtil.memAllocFloat(16);
     /** One float, for the explicit depth clear. */
     private final FloatBuffer depthClear = MemoryUtil.memAllocFloat(1);
+    /** The error the explicit depth clear produced, because an invalid enum there fails silently. */
+    int depthClearError;
 
     private float[] screenData = new float[5 * 6 * 512];
     private int screenFloats;
@@ -939,7 +941,11 @@ class GlRaster extends SoftRenderer {
         // uninitialised memory because clearing to 0.25 did not change it. It was the truth: the buffer
         // holds what the last frame left in it, and every frame is depth tested against the one before.
         this.depthClear.put(0, 1.0f);
-        GL30.glClearBufferfv(0x8200, 0, this.depthClear);
+        // GL_DEPTH here is 0x1801, the old glDrawBuffer enum that glClearBufferfv reuses -- not 0x8200,
+        // which is a framebuffer attachment enum and produces GL_INVALID_ENUM and nothing else. Getting
+        // that wrong is silent, which is the whole reason the error is read straight back.
+        GL30.glClearBufferfv(GL11.GL_DEPTH, 0, this.depthClear);
+        this.depthClearError = GL11.glGetError();
     }
 
     /**
@@ -969,8 +975,8 @@ class GlRaster extends SoftRenderer {
         MemoryUtil.memFree(pixel);
         GL11.glClearDepth(1.0);
         return String.format(java.util.Locale.ROOT,
-                "depthFunc=0x%x readAt1=%.4f readAt0.25=%.4f err=0x%x",
-                GL11.glGetInteger(GL11.GL_DEPTH_FUNC), atOne, atQuarter, GL11.glGetError());
+                "depthFunc=0x%x readAt1=%.4f readAt0.25=%.4f clearBufErr=0x%x",
+                GL11.glGetInteger(GL11.GL_DEPTH_FUNC), atOne, atQuarter, this.depthClearError);
     }
 
     /** Submits the GUI quads collected during the frame as one draw. */
