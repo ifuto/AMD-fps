@@ -103,6 +103,20 @@ final class GlBenchmarkMain {
         // memory looks like rather than what a depth buffer looks like.
         int depthType = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_FRAMEBUFFER,
                 GL30.GL_DEPTH_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
+        if (depthType == GL11.GL_NONE) {
+            // No depth buffer, so fall back to a depth texture. A renderbuffer that did not take is not
+            // worth another round trip to find out about, and the report says which of the two is in use.
+            int depthTexture = GL11.glGenTextures();
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, depthTexture);
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, 0x81A6, WIDTH, HEIGHT, 0,
+                    GL11.GL_DEPTH_COMPONENT, GL11.GL_UNSIGNED_INT, (ByteBuffer) null);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
+            GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT,
+                    GL11.GL_TEXTURE_2D, depthTexture, 0);
+            depthType = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_FRAMEBUFFER,
+                    GL30.GL_DEPTH_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
+        }
         int depthName = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_FRAMEBUFFER,
                 GL30.GL_DEPTH_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
         System.out.println("GLBENCHFBO status=0x" + Integer.toHexString(status)
