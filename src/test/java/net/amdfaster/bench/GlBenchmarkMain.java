@@ -91,11 +91,27 @@ final class GlBenchmarkMain {
         GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, depth);
         // 0x81A6 is GL_DEPTH_COMPONENT24, which is a GL 1.4 constant rather than a GL 1.1 one.
         GL30.glRenderbufferStorage(GL30.GL_RENDERBUFFER, 0x81A6, WIDTH, HEIGHT);
+        int errAfterStorage = GL11.glGetError();
         GL30.glFramebufferRenderbuffer(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT,
                 GL30.GL_RENDERBUFFER, depth);
-        if (GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER) != GL30.GL_FRAMEBUFFER_COMPLETE) {
-            throw new IllegalStateException("framebuffer incomplete: 0x"
-                    + Integer.toHexString(GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER)));
+        int errAfterAttach = GL11.glGetError();
+        int status = GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER);
+        // "Complete" does not mean "has a depth buffer". A framebuffer with a colour attachment and
+        // nothing else is complete too, so this check on its own proved nothing for five runs while every
+        // fragment in the world failed a depth test against a buffer that was never cleared -- and a read
+        // of that buffer returned the same two values in two different scenes, which is what uninitialised
+        // memory looks like rather than what a depth buffer looks like.
+        int depthType = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_FRAMEBUFFER,
+                GL30.GL_DEPTH_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
+        int depthName = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_FRAMEBUFFER,
+                GL30.GL_DEPTH_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
+        System.out.println("GLBENCHFBO status=0x" + Integer.toHexString(status)
+                + " errAfterStorage=0x" + Integer.toHexString(errAfterStorage)
+                + " errAfterAttach=0x" + Integer.toHexString(errAfterAttach)
+                + " depthType=0x" + Integer.toHexString(depthType)
+                + " depthName=" + depthName);
+        if (status != GL30.GL_FRAMEBUFFER_COMPLETE) {
+            throw new IllegalStateException("framebuffer incomplete: 0x" + Integer.toHexString(status));
         }
         GL11.glViewport(0, 0, WIDTH, HEIGHT);
     }
