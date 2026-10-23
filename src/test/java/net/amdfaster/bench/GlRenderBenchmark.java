@@ -127,7 +127,7 @@ class GlRenderBenchmark {
         for (int scene = 0; scene < 3; scene++) {
             double coverage = glBase[scene] / (double) Math.max(1, softBase[scene]);
             if (coverage < 0.80 || coverage > 1.25) {
-                assertTrue(false, report + report2 + " || GL painted " + glBase[scene]
+                assertTrue(false, report.toString() + report2 + " || GL painted " + glBase[scene]
                         + " pixels where the software rasteriser painted " + softBase[scene]
                         + ", so the GL backend is not drawing the same picture");
             }
