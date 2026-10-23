@@ -163,17 +163,25 @@ final class GlBenchmarkMain {
         renderer.debugRedrawOpaqueRange();
         renderer.readBack(noCullImage);
         int redrawPainted = GlRaster.painted(noCullImage, WIDTH, HEIGHT, sky);
+        // The same section, one face orientation at a time, with culling on.
+        renderer.debugProbeOpaque(GL11.GL_CCW);
+        renderer.readBack(noCullImage);
+        int ccwPainted = GlRaster.painted(noCullImage, WIDTH, HEIGHT, sky);
+        renderer.debugProbeOpaque(GL11.GL_CW);
+        renderer.readBack(noCullImage);
+        int cwPainted = GlRaster.painted(noCullImage, WIDTH, HEIGHT, sky);
         MemoryUtil.memFree(noCullImage);
 
         System.out.println(String.format(Locale.ROOT,
                 "GLBENCHPAINT scene=%d glBase=%d glFast=%d softBase=%d softFast=%d diffPercent=%.1f"
                         + " diag=%d mvpLoc=%d err=0x%x tv0=%d batch=%d range0=%d,%d"
-                        + " redraw=%d opqRange=%d,%d",
+                        + " redraw=%d opqRange=%d,%d ccw=%d cw=%d",
                 kind, basePainted, fastPainted, softBase, softFast, diff,
                 noCullPainted, renderer.mvpLocation(), GL11.glGetError(),
                 renderer.terrainVertices(0), renderer.lastBatchSize,
                 renderer.lastRangeFirst, renderer.lastRangeCount,
-                redrawPainted, renderer.opaqueProbeFirst, renderer.opaqueProbeCount));
+                redrawPainted, renderer.opaqueProbeFirst, renderer.opaqueProbeCount,
+                ccwPainted, cwPainted));
         float[] probe = renderer.probeVertex();
         System.out.println("GLBENCHMATRIX scene=" + kind
                 + " vertex=" + probe[0] + "," + probe[1] + "," + probe[2]

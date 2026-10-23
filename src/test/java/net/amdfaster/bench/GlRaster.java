@@ -193,6 +193,40 @@ class GlRaster extends SoftRenderer {
      * the buffer that is already there, tells those apart: if this draws and the frame did not, the
      * resident vertex array is the fault; if this also draws nothing, the buffer or the ranges are.
      */
+    /**
+     * Clears to sky and draws the opaque terrain range once, with back-face culling on and the front face
+     * set to whichever of the two the caller names.
+     *
+     * <p>The winding has now been guessed twice and been wrong twice, and both guesses were made while a
+     * separate bug -- ranges counted in floats and read as vertices -- was hiding the answer. With the
+     * ranges right, this settles it by measurement: one of the two settings draws the section and the
+     * other draws nothing, and the coverage check says which.
+     */
+    void debugProbeOpaque(int frontFace) {
+        if (this.opaqueProbeCount <= 0) {
+            return;
+        }
+        GL11.glClearColor(0x78 / 255.0f, 0xA7 / 255.0f, 0xFF / 255.0f, 1.0f);
+        GL11.glClearDepth(0.0);
+        GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+        GL11.glDisable(GL11.GL_DEPTH_TEST);
+        GL11.glDisable(GL11.GL_BLEND);
+        GL11.glEnable(GL11.GL_CULL_FACE);
+        GL11.glCullFace(GL11.GL_BACK);
+        GL11.glFrontFace(frontFace);
+        GL30.glBindVertexArray(this.terrainVao[OPAQUE]);
+        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.terrainVbo[OPAQUE]);
+        bindAttributes(this.program);
+        compose(null);
+        GL20.glUseProgram(this.program);
+        GL20.glUniformMatrix4fv(this.uniformMvp, false, this.matrixBuffer);
+        GL20.glUniform1f(this.uniformCut, 0.0f);
+        GL11.glDrawArrays(GL11.GL_TRIANGLES, this.opaqueProbeFirst, this.opaqueProbeCount);
+        GL11.glFinish();
+        // The cached state no longer describes the driver, so the next real draw has to say it again.
+        this.currentState = -1;
+    }
+
     void debugRedrawOpaqueRange() {
         if (this.opaqueProbeCount <= 0) {
             return;
