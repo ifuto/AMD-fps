@@ -312,7 +312,17 @@ class GlRaster extends SoftRenderer {
         // Reversed Z: the near plane is depth 1 and the far plane is 0, so "greater" is nearer and the
         // clear value is zero. The projection is the one ViewProjection builds, and clip control puts the
         // depth range on [0, 1] to match it rather than letting GL rescale it into [-1, 1].
-        GL45.glClipControl(GL45.GL_LOWER_LEFT, GL45.GL_ZERO_TO_ONE);
+        // Deliberately NOT calling glClipControl.
+        //
+        // It is the one piece of non-default state in the depth path, and the depth path is the one thing
+        // left that does not work: culling, the multi-draw, the matrices, the geometry, the ranges, the
+        // vertex arrays and the buffers have each been isolated by measurement and each cleared, the
+        // driver reports the clear value and the comparison it was handed, the depth buffer is attached
+        // with no error from either call that made it, and switching between reversed Z and standard Z
+        // changed the painted count by exactly zero. Every combination of those ought to pass the test,
+        // so the remaining suspect is the one that changes how the driver maps depth at all. Leaving it
+        // out costs a rescale of [-1, 1] into [0, 1] and nothing else; the ordering it preserves is the
+        // ordering the test needs.
         // Clockwise, which looks like a typo and is not. Screen x grows with right.p and screen y with
         // up.p, and the camera looks along forward, so the frame the screen is drawn in is
         // (right, up, -forward) -- left handed, because (right, up, forward) is right handed. A triangle
