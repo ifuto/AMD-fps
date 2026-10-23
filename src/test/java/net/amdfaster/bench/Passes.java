@@ -61,21 +61,57 @@ final class Passes {
      * player. That rebuild is the thing {@code WeatherMeshCache} removes: the mesh does not change, only
      * its offset does, and an offset is one number rather than six hundred quads.
      */
-    static Mesh rain(Random random) {
-        MeshBuilder builder = new MeshBuilder();
+    static final float RAIN_HALF_WIDTH = 0.05f;
+    static final float RAIN_HEIGHT = 0.9f;
+
+    /**
+     * The drop positions, in camera-relative space, three floats each.
+     *
+     * <p>Both pipelines are handed the same array from the same seed. That is the only way the rain can
+     * be a measurement of culling rather than of one pipeline happening to get fewer drops.
+     */
+    static void rainOffsets(Random random, float[] out) {
         for (int i = 0; i < RAIN_QUADS; i++) {
-            float x = (random.nextFloat() - 0.5f) * 20.0f;
-            float y = random.nextFloat() * 16.0f;
-            float z = (random.nextFloat() - 0.5f) * 20.0f;
-            float halfWidth = 0.05f;
-            float height = 0.9f;
-            // Two crossed quads, so the drop reads from any angle the way a billboarded one would not.
+            out[i * 3] = (random.nextFloat() - 0.5f) * 20.0f;
+            out[i * 3 + 1] = random.nextFloat() * 16.0f;
+            out[i * 3 + 2] = (random.nextFloat() - 0.5f) * 20.0f;
+        }
+    }
+
+    /** One drop at the origin: two crossed quads, so it reads from any angle a billboard would not. */
+    static Mesh rainDrop(int texture) {
+        MeshBuilder builder = new MeshBuilder();
+        float halfWidth = RAIN_HALF_WIDTH;
+        float height = RAIN_HEIGHT;
+        builder.quad(-halfWidth, 0f, 0f, 0f, 0f, halfWidth, 0f, 0f, 1f, 0f,
+                -halfWidth, height, 0f, 0f, 1f, halfWidth, height, 0f, 1f, 1f, texture, 0.7f);
+        builder.quad(0f, 0f, -halfWidth, 0f, 0f, 0f, 0f, halfWidth, 1f, 0f,
+                0f, height, -halfWidth, 0f, 1f, 0f, height, halfWidth, 1f, 1f, texture, 0.7f);
+        return builder.build();
+    }
+
+    /**
+     * Every drop baked into one mesh, which is what vanilla does: it builds a box of rain around the
+     * player and submits it as a single buffer.
+     *
+     * <p>That is also why vanilla cannot cull it. One buffer has one bounding box, the box straddles the
+     * whole view, and the half of the drops behind the camera is inside it. Splitting the mesh is what
+     * makes per-drop culling possible at all.
+     */
+    static Mesh rain(float[] offsets, int texture) {
+        MeshBuilder builder = new MeshBuilder();
+        float halfWidth = RAIN_HALF_WIDTH;
+        float height = RAIN_HEIGHT;
+        for (int i = 0; i < RAIN_QUADS; i++) {
+            float x = offsets[i * 3];
+            float y = offsets[i * 3 + 1];
+            float z = offsets[i * 3 + 2];
             builder.quad(x - halfWidth, y, z, 0f, 0f, x + halfWidth, y, z, 1f, 0f,
                     x - halfWidth, y + height, z, 0f, 1f, x + halfWidth, y + height, z, 1f, 1f,
-                    0, 0.7f);
+                    texture, 0.7f);
             builder.quad(x, y, z - halfWidth, 0f, 0f, x, y, z + halfWidth, 1f, 0f,
                     x, y + height, z - halfWidth, 0f, 1f, x, y + height, z + halfWidth, 1f, 1f,
-                    0, 0.7f);
+                    texture, 0.7f);
         }
         return builder.build();
     }

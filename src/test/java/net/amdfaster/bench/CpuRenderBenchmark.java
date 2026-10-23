@@ -173,7 +173,8 @@ class CpuRenderBenchmark {
                         + " %.0f px shaded, %.0f draws, %.1f%% of screen painted%n"
                         + "sections %d->%d (occluded %d) | face meshes culled %d | entities %d->%d"
                         + " (coarse %d, occluded %d) | shadows %d->%d | particles %d->%d | block entities animated %d skipped %d | hud rebuilds %d"
-                        + " (%d elements) | gui batches %d | rain rebuilds %d->%d | texture uploads %d->%d"
+                        + " (%d elements) | gui batches %d | rain rebuilds %d->%d, drops %d->%d"
+                        + " | texture uploads %d->%d"
                         + " | world %d blocks, %d textures, %d texels",
                 scene.name, WIDTH, HEIGHT, base.fps, fast.fps, ratio, retention * 100.0,
                 base.trianglesPerFrame, base.testedPerFrame, base.pixelsPerFrame, base.drawsPerFrame,
@@ -186,6 +187,7 @@ class CpuRenderBenchmark {
                 detail.blockEntitiesAnimated, detail.blockEntitiesSkipped, detail.hudRebuilds,
                 detail.hudElements, detail.guiBatches,
                 detail.baseRainRebuilds, detail.fastRainRebuilds,
+                detail.baseRainDrops, detail.fastRainDrops,
                 detail.baseTextureUpdates, detail.fastTextureUploads,
                 scene.worldBlocks(), assets.textureCount(), assets.texelCount());
     }
@@ -232,6 +234,10 @@ class CpuRenderBenchmark {
         d.guiBatches = fast.guiBatches;
         d.baseRainRebuilds = base.rainRebuilds;
         d.fastRainRebuilds = fast.rainRebuilds;
+        d.baseRainDrops = base.rainDrops;
+        d.fastRainDrops = fast.rainDrawn;
+        d.baseRainDrops = base.rainDrops;
+        d.fastRainDrops = fast.rainDrawn;
         d.baseTextureUpdates = base.textureUpdates;
         d.fastTextureUploads = fast.textureUploads;
         return d;
@@ -257,6 +263,10 @@ class CpuRenderBenchmark {
         long guiBatches;
         long baseRainRebuilds;
         long fastRainRebuilds;
+        long baseRainDrops;
+        long fastRainDrops;
+        long baseRainDrops;
+        long fastRainDrops;
         long baseTextureUpdates;
         long fastTextureUploads;
     }

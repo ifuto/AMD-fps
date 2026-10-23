@@ -527,6 +527,39 @@ final class SoftRenderer {
     }
 
     /**
+     * Draws a directional mesh unless the whole of it turns away from the camera.
+     *
+     * <p>This is what a GPU does for free: back-facing triangles are rejected at setup, after the vertex
+     * shader and before a single pixel is touched. A benchmark that rasterised them per pixel would be
+     * charging the baseline for work no driver performs, and the speedup would be a measurement of that
+     * unfairness rather than of anything AMD-Faster does.
+     *
+     * <p>The test uses the face normal and the box rather than the screen-space winding, so it does not
+     * depend on how the mesher happened to order a quad's corners -- a dependency that would be invisible
+     * here and would show up as a world with holes in it.
+     *
+     * @param nx normal of every triangle in the mesh, which is what makes it directional
+     */
+    void drawDirectional(Mesh mesh, int mode, Texture[] textures, float nx, float ny, float nz) {
+        if (mesh.triangleCount == 0) {
+            return;
+        }
+        // The furthest corner along the normal, not the centre: a face at the top of a section is
+        // visible from below the section's middle, and testing the middle would drop it.
+        float px = nx > 0.0f ? mesh.minX : mesh.maxX;
+        float py = ny > 0.0f ? mesh.minY : mesh.maxY;
+        float pz = nz > 0.0f ? mesh.minZ : mesh.maxZ;
+        float dx = this.camX - px;
+        float dy = this.camY - py;
+        float dz = this.camZ - pz;
+        if (nx * dx + ny * dy + nz * dz <= 0.0f) {
+            this.trianglesBackface += mesh.triangleCount;
+            return;
+        }
+        drawMesh(mesh, mode, textures);
+    }
+
+    /**
      * Projects a world-space box to a screen rectangle and the nearest depth it reaches.
      *
      * <p>This is what an occlusion culler is handed: not the box, but the rectangle it covers and how

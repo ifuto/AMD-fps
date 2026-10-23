@@ -33,6 +33,16 @@ final class BaselinePipeline implements Pipeline {
     /** The low twenty bits of a sort key hold the section index; the rest holds the distance. */
     private static final long INDEX_MASK = (1L << 20) - 1;
 
+    /** Outward normal of each face direction, in the order {@code Assets} numbers them. */
+    private static final float[][] NORMALS = {
+        {0.0f, -1.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f},
+        {0.0f, 0.0f, -1.0f},
+        {0.0f, 0.0f, 1.0f},
+        {-1.0f, 0.0f, 0.0f},
+        {1.0f, 0.0f, 0.0f},
+    };
+
     private final Frustum frustum = new Frustum(new float[16]);
     private final Random random = new Random(12345L);
     private final List<GuiBatcher.Element> hud = new ArrayList<>();
@@ -49,6 +59,8 @@ final class BaselinePipeline implements Pipeline {
     private Mesh shadowQuad;
     private Mesh cloudMesh;
     private Mesh rainMesh;
+    private float[] rainOffsets = new float[0];
+    private int waterTexture;
     private Mesh[] particleQuads = new Mesh[0];
 
     private int[] order = new int[0];
@@ -61,6 +73,7 @@ final class BaselinePipeline implements Pipeline {
     long particlesDrawn;
     long hudElements;
     long rainRebuilds;
+    long rainDrops;
     long textureUpdates;
 
     @Override
@@ -82,7 +95,9 @@ final class BaselinePipeline implements Pipeline {
                 assets.glassTexture, 0.35f);
         this.shadowQuad = shadow.build();
         this.cloudMesh = Passes.clouds(scene, assets);
-        this.rainMesh = Passes.rain(this.random);
+        this.rainOffsets = new float[Passes.RAIN_QUADS * 3];
+        Passes.rainOffsets(new java.util.Random(12345L), this.rainOffsets);
+        this.rainMesh = Passes.rain(this.rainOffsets, assets.waterBase);
         this.particleQuads = Passes.particleQuads(assets);
         this.textures = assets.textures;
         int sections = scene.sections.length;
@@ -102,7 +117,7 @@ final class BaselinePipeline implements Pipeline {
         entities(scene, assets, renderer, viewMatrix);
         blockEntities(scene, renderer, viewMatrix, frame);
         particles(scene, renderer, view, viewMatrix);
-        clouds(renderer);
+        clouds(renderer, view);
         if (scene.raining) {
             rain(scene, renderer, view, viewMatrix, frame);
         }
@@ -140,10 +155,12 @@ final class BaselinePipeline implements Pipeline {
             int index = (int) (toSort[n] & INDEX_MASK);
             SectionMeshes section = scene.sections[index];
             this.sectionsDrawn++;
-            // Every direction, because the mesh holds them all together and there is no cheaper place to
-            // make the decision once the vertices are in one buffer.
+            // Every direction is submitted, because the mesh was built once and has to serve every
+            // camera angle. The driver rejects the ones facing away; it does not get the vertex work back.
             for (int face = 0; face < 6; face++) {
-                renderer.drawMesh(section.opaque[face], SoftRenderer.OPAQUE, this.textures);
+                float[] normal = NORMALS[face];
+                renderer.drawDirectional(section.opaque[face], SoftRenderer.OPAQUE, this.textures,
+                        normal[0], normal[1], normal[2]);
             }
             renderer.drawMesh(section.cutout, SoftRenderer.CUTOUT, this.textures);
         }
@@ -213,15 +230,23 @@ final class BaselinePipeline implements Pipeline {
         }
     }
 
-    private void clouds(SoftRenderer renderer) {
+    private void clouds(SoftRenderer renderer, Scene.View view) {
+        // One mesh, one frustum test. Looking down at the ground the whole layer is behind the camera
+        // and the driver would reject every triangle in it; asking first is free.
+        if (!this.frustum.intersectsAabb(this.cloudMesh.minX, this.cloudMesh.minY, this.cloudMesh.minZ,
+                this.cloudMesh.maxX, this.cloudMesh.maxY, this.cloudMesh.maxZ)) {
+            return;
+        }
         renderer.drawMesh(this.cloudMesh, SoftRenderer.BLEND, this.textures);
     }
 
     private void rain(Scene scene, SoftRenderer renderer, Scene.View view, float[] viewMatrix,
             int frame) {
-        // Rebuilt, not moved. This is the vanilla path and it is the whole cost the cache removes.
-        this.rainMesh = Passes.rain(this.random);
+        // Rebuilt, not moved: twelve hundred quads re-emitted every frame because the box has to follow
+        // the player and the drops have to fall. That rebuild is the whole cost the cache removes.
+        this.rainMesh = Passes.rain(this.rainOffsets, this.waterTexture);
         this.rainRebuilds++;
+        this.rainDrops += Passes.RAIN_QUADS;
         Mat.translate(view.x, view.y - 8.0f, view.z, this.model);
         Mat.multiply(viewMatrix, this.model, this.modelView);
         renderer.drawMeshWith(this.rainMesh, SoftRenderer.BLEND, this.textures, this.modelView);

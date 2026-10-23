@@ -84,7 +84,8 @@ final class AmdFasterPipeline implements Pipeline {
     private Mesh chestBox;
     private Mesh shadowQuad;
     private Mesh cloudMesh;
-    private Mesh rainMesh;
+    private Mesh rainDrop;
+    private float[] rainOffsets = new float[0];
     private Mesh[] particleQuads = new Mesh[0];
 
     private int[] survivors = new int[0];
@@ -117,6 +118,8 @@ final class AmdFasterPipeline implements Pipeline {
     long hudElements;
     long guiBatches;
     long rainRebuilds;
+    long rainDrawn;
+    long rainCulled;
     long textureUploads;
 
     @Override
@@ -166,7 +169,9 @@ final class AmdFasterPipeline implements Pipeline {
         this.shadowQuad = shadow.build();
 
         this.cloudMesh = Passes.clouds(scene, assets);
-        this.rainMesh = Passes.rain(new java.util.Random(12345L));
+        this.rainOffsets = new float[Passes.RAIN_QUADS * 3];
+        Passes.rainOffsets(new java.util.Random(12345L), this.rainOffsets);
+        this.rainDrop = Passes.rainDrop(assets.waterBase);
         this.particleQuads = Passes.particleQuads(assets);
         this.survivors = new int[scene.sections.length];
         this.sortKeys = new long[scene.sections.length];
@@ -462,19 +467,35 @@ final class AmdFasterPipeline implements Pipeline {
         if (this.cloudCache.needsRebuild(CloudMeshCache.shapeAt(frame))) {
             this.cloudMesh = Passes.clouds(this.scene, this.assets);
         }
+        if (!this.frustum.intersectsAabb(this.cloudMesh.minX, this.cloudMesh.minY, this.cloudMesh.minZ,
+                this.cloudMesh.maxX, this.cloudMesh.maxY, this.cloudMesh.maxZ)) {
+            return;
+        }
         renderer.drawMesh(this.cloudMesh, SoftRenderer.BLEND, this.textures);
     }
 
     private void rain(Scene scene, SoftRenderer renderer, Scene.View view, int frame) {
         if (this.weatherCache.needsRebuild(scene.raining ? 1 : 0)) {
-            this.rainMesh = Passes.rain(new java.util.Random(12345L));
             this.rainRebuilds++;
         }
-        // The fall is an offset, not a rebuild: six hundred quads replaced by one addition.
-        float fall = (float) WeatherMeshCache.fallOffset(frame, 0.6);
-        Mat.translate(view.x, view.y - 8.0f - (fall % 16.0f), view.z, this.model);
-        Mat.multiply(this.viewMatrix, this.model, this.modelView);
-        renderer.drawMeshWith(this.rainMesh, SoftRenderer.BLEND, this.textures, this.modelView);
+        // The fall is an offset rather than a rebuild, and every drop is its own object so the ones
+        // behind the camera can be dropped. Vanilla bakes them into one buffer and cannot.
+        float fall = (float) WeatherMeshCache.fallOffset(frame, 0.6) % 16.0f;
+        for (int i = 0; i < Passes.RAIN_QUADS; i++) {
+            float x = view.x + this.rainOffsets[i * 3];
+            float y = view.y - 8.0f + this.rainOffsets[i * 3 + 1] - fall;
+            float z = view.z + this.rainOffsets[i * 3 + 2];
+            float halfWidth = Passes.RAIN_HALF_WIDTH;
+            if (!this.frustum.intersectsAabb(x - halfWidth, y, z - halfWidth,
+                    x + halfWidth, y + Passes.RAIN_HEIGHT, z + halfWidth)) {
+                this.rainCulled++;
+                continue;
+            }
+            Mat.translate(x, y, z, this.model);
+            Mat.multiply(this.viewMatrix, this.model, this.modelView);
+            renderer.drawMeshWith(this.rainDrop, SoftRenderer.BLEND, this.textures, this.modelView);
+            this.rainDrawn++;
+        }
     }
 
     private void animateTextures(Assets assets, int frame) {
