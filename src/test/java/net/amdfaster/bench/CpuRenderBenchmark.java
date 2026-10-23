@@ -265,8 +265,6 @@ class CpuRenderBenchmark {
         long fastRainRebuilds;
         long baseRainDrops;
         long fastRainDrops;
-        long baseRainDrops;
-        long fastRainDrops;
         long baseTextureUpdates;
         long fastTextureUploads;
     }

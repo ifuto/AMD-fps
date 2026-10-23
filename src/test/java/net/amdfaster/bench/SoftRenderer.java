@@ -73,6 +73,7 @@ final class SoftRenderer {
     // ---- counters, all of them read by the benchmark report -------------------------------
     long trianglesSubmitted;
     long trianglesBehindNear;
+    long trianglesBackface;
     long trianglesDegenerate;
     long pixelsTested;
     long pixelsShaded;
@@ -155,6 +156,7 @@ final class SoftRenderer {
     void resetCounters() {
         this.trianglesSubmitted = 0;
         this.trianglesBehindNear = 0;
+        this.trianglesBackface = 0;
         this.trianglesDegenerate = 0;
         this.pixelsTested = 0;
         this.pixelsShaded = 0;
