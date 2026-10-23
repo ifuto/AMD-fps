@@ -175,6 +175,17 @@ class GlRaster extends SoftRenderer {
     /** Skips the depth test, which is the last thing between a submitted triangle and a fragment. */
     boolean debugNoDepth;
 
+    /**
+     * Overrides the depth comparison, or 0 to leave it alone.
+     *
+     * <p>Everything else has been isolated and cleared, and what is left is a depth test that rejects
+     * every fragment in the world while the driver reports the clear value and the comparison it was
+     * handed. GL_ALWAYS with the test still enabled separates the two halves of that sentence: if it
+     * paints the scene, the comparison against the buffer is what fails; if it does not, merely enabling
+     * the test is enough to stop the world drawing, and the buffer is not the question at all.
+     */
+    int debugDepthFunc;
+
     /** Draws terrain meshes one at a time through the per-mesh path instead of the shared layer buffers. */
     boolean debugNoSharedBuffer;
 
@@ -1016,6 +1027,9 @@ class GlRaster extends SoftRenderer {
                     GL11.glDisable(GL11.GL_DEPTH_TEST);
                 } else {
                     GL11.glEnable(GL11.GL_DEPTH_TEST);
+                    if (this.debugDepthFunc != 0) {
+                        GL11.glDepthFunc(this.debugDepthFunc);
+                    }
                 }
                 GL11.glDepthMask(true);
                 GL11.glDisable(GL11.GL_BLEND);
@@ -1030,6 +1044,9 @@ class GlRaster extends SoftRenderer {
                     GL11.glDisable(GL11.GL_DEPTH_TEST);
                 } else {
                     GL11.glEnable(GL11.GL_DEPTH_TEST);
+                    if (this.debugDepthFunc != 0) {
+                        GL11.glDepthFunc(this.debugDepthFunc);
+                    }
                 }
                 GL11.glDepthMask(false);
                 GL11.glEnable(GL11.GL_BLEND);

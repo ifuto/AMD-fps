@@ -172,10 +172,13 @@ final class GlBenchmarkMain {
         // combination was measured while the ranges were still counted in floats. Coverage is compared
         // against the software rasteriser's frame zero, so the configurations are compared with each
         // other and not with a frame from a different camera angle.
-        int allOn = diagFrame(scene, assets, renderer, view, aspect, true, true, true);
-        int noMulti = diagFrame(scene, assets, renderer, view, aspect, true, true, false);
-        int noDepth = diagFrame(scene, assets, renderer, view, aspect, true, false, true);
-        int bare = diagFrame(scene, assets, renderer, view, aspect, false, false, false);
+        int allOn = diagFrame(scene, assets, renderer, view, aspect, true, true, true, 0);
+        int noDepth = diagFrame(scene, assets, renderer, view, aspect, true, false, true, 0);
+        int bare = diagFrame(scene, assets, renderer, view, aspect, false, false, false, 0);
+        // The same frame with the depth test enabled but the comparison set to something that cannot
+        // fail, and to something that cannot pass. Those two bracket the whole question.
+        int always = diagFrame(scene, assets, renderer, view, aspect, true, true, true, GL11.GL_ALWAYS);
+        int never = diagFrame(scene, assets, renderer, view, aspect, true, true, true, GL11.GL_NEVER);
         ByteBuffer diagImage = MemoryUtil.memAlloc(WIDTH * HEIGHT * 4);
         renderer.readBack(diagImage);
         int lastDiag = GlRaster.painted(diagImage, WIDTH, HEIGHT, sky);
@@ -184,12 +187,12 @@ final class GlBenchmarkMain {
         System.out.println(String.format(Locale.ROOT,
                 "GLBENCHPAINT scene=%d glBase=%d glFast=%d softBase=%d softFast=%d diffPercent=%.1f"
                         + " diag=%d mvpLoc=%d err=0x%x tv0=%d batch=%d range0=%d,%d"
-                        + " d(cull,depth,multi)=%d d(noMulti)=%d d(noDepth)=%d d(bare)=%d %s",
+                        + " d(all)=%d d(noDepth)=%d d(bare)=%d d(ALWAYS)=%d d(NEVER)=%d %s",
                 kind, basePainted, fastPainted, softBase, softFast, diff,
                 lastDiag, renderer.mvpLocation(), GL11.glGetError(),
                 renderer.terrainVertices(0), renderer.lastBatchSize,
                 renderer.lastRangeFirst, renderer.lastRangeCount,
-                allOn, noMulti, noDepth, bare, renderer.debugDepthState()));
+                allOn, noDepth, bare, always, never, renderer.debugDepthState()));
         float[] probe = renderer.probeVertex();
         System.out.println("GLBENCHMATRIX scene=" + kind
                 + " vertex=" + probe[0] + "," + probe[1] + "," + probe[2]
@@ -247,10 +250,11 @@ final class GlBenchmarkMain {
 
     /** Renders frame zero once under one combination of the three switches and says how much it painted. */
     private static int diagFrame(Scene scene, Assets assets, GlRaster renderer, Scene.View view,
-            float aspect, boolean cull, boolean depth, boolean multi) {
+            float aspect, boolean cull, boolean depth, boolean multi, int depthFunc) {
         renderer.debugNoCull = !cull;
         renderer.debugNoDepth = !depth;
         renderer.debugNoMultiDraw = !multi;
+        renderer.debugDepthFunc = depthFunc;
         renderer.invalidateState();
         BaselinePipeline pipeline = new BaselinePipeline();
         pipeline.prepare(scene, assets);
