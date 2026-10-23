@@ -1,0 +1,156 @@
+{
+  "elements": [
+    {
+      "animated": false,
+      "faces": {
+        "down": {
+          "texture": "#all",
+          "uv": [
+            0,
+            0,
+            14,
+            10
+          ]
+        },
+        "east": {
+          "texture": "#all",
+          "uv": [
+            0,
+            0,
+            14,
+            10
+          ]
+        },
+        "north": {
+          "texture": "#all",
+          "uv": [
+            0,
+            0,
+            14,
+            10
+          ]
+        },
+        "south": {
+          "texture": "#all",
+          "uv": [
+            0,
+            0,
+            14,
+            10
+          ]
+        },
+        "up": {
+          "texture": "#all",
+          "uv": [
+            0,
+            0,
+            14,
+            10
+          ]
+        },
+        "west": {
+          "texture": "#all",
+          "uv": [
+            0,
+            0,
+            14,
+            10
+          ]
+        }
+      },
+      "from": [
+        1,
+        0,
+        1
+      ],
+      "name": "box",
+      "to": [
+        15,
+        10,
+        15
+      ],
+      "uv": [
+        0,
+        0
+      ]
+    },
+    {
+      "animated": true,
+      "faces": {
+        "down": {
+          "texture": "#all",
+          "uv": [
+            0,
+            16,
+            14,
+            4
+          ]
+        },
+        "east": {
+          "texture": "#all",
+          "uv": [
+            0,
+            16,
+            14,
+            4
+          ]
+        },
+        "north": {
+          "texture": "#all",
+          "uv": [
+            0,
+            16,
+            14,
+            4
+          ]
+        },
+        "south": {
+          "texture": "#all",
+          "uv": [
+            0,
+            16,
+            14,
+            4
+          ]
+        },
+        "up": {
+          "texture": "#all",
+          "uv": [
+            0,
+            16,
+            14,
+            4
+          ]
+        },
+        "west": {
+          "texture": "#all",
+          "uv": [
+            0,
+            16,
+            14,
+            4
+          ]
+        }
+      },
+      "from": [
+        1,
+        10,
+        1
+      ],
+      "name": "lid",
+      "to": [
+        15,
+        14,
+        15
+      ],
+      "uv": [
+        0,
+        16
+      ]
+    }
+  ],
+  "parent": "builtin/none",
+  "textures": {
+    "all": "chest"
+  }
+}

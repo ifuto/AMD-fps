@@ -1,0 +1,262 @@
+package net.amdfaster.bench;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.Locale;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+
+/**
+ * The FPS number, measured rather than modelled.
+ *
+ * <p>Everything before this class produced arithmetic: a frame split, a set of percentages, a ratio. That
+ * arithmetic was wrong once in a way that mattered -- a 4.0 ms "irreducible" residual silently capped
+ * every speedup the model could report at 1.93x, so the 3x the project is aiming at was unreachable
+ * before any code was written. A cost model can be self-consistent and still be fiction.
+ *
+ * <p>So this renders. Real PNG textures and real model JSON from {@code bench/assets}, a real voxel world
+ * with a real mesher, a real perspective-correct software rasteriser writing 1280x720 pixels, and a
+ * stopwatch. Nothing is displayed, which is the point: the number is the deliverable.
+ *
+ * <p>It fails until AMD-Faster is three times the all-mods stack, and while it fails the assertion message
+ * carries the measurement. That is deliberate. The CI log cannot be downloaded in this environment and the
+ * annotations are the only channel out of it, so the numbers travel in the failure text.
+ *
+ * <h2>What this benchmark can and cannot see</h2>
+ *
+ * <p>The cost of a pixel and the cost of a submitted vertex are identical for both pipelines, so what the
+ * ratio measures is how much less geometry and how much less fill AMD-Faster submits. It cannot see the
+ * price of a GL draw call, because a software rasteriser has no driver -- so {@code EntityBatcher} turning
+ * three hundred draws into nine shows up here as a count and not as time. On AMD hardware, where a draw
+ * call costs an order of magnitude more than on NVIDIA, that count is a large part of the real win and this
+ * benchmark understates it. Stating the blind spot is the honest thing to do; quietly letting the number
+ * stand for more than it measures is not.
+ */
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+class CpuRenderBenchmark {
+
+    static final int WIDTH = 1280;
+    static final int HEIGHT = 720;
+
+    /** The acceptance criterion: three times the all-mods stack. */
+    static final double TARGET = 3.0;
+
+    /** Frames run before the clock starts, so the measured loop is compiled code rather than interpreted. */
+    static final int WARMUP_FRAMES = 10;
+
+    /** How long each pipeline is timed for, in nanoseconds. */
+    static final long BUDGET_NANOS = 1_500_000_000L;
+
+    /** A ceiling on frames, so a very fast machine does not turn this into a long test. */
+    static final int MAX_FRAMES = 400;
+
+    /**
+     * How much of the baseline's picture AMD-Faster must still draw.
+     *
+     * <p>This is the correctness guard, and it is the reason the benchmark cannot be won by culling too
+     * much. Everything AMD-Faster removes is supposed to be invisible already -- occluded geometry, faces
+     * turned away, entities two pixels tall -- so the pixel count should barely move. If a mask or a
+     * matrix is wrong, the frame rate goes up and this goes down, and the test fails on the second number
+     * rather than passing on the first.
+     */
+    static final double MIN_PIXEL_RETENTION = 0.90;
+
+    private static Assets assets;
+
+    @BeforeAll
+    static void loadAssets() throws Exception {
+        assets = Assets.load();
+    }
+
+    @Test
+    @Order(1)
+    void plainsRd12() {
+        run(Scene.PLAINS);
+    }
+
+    @Test
+    @Order(2)
+    void villageOverCave() {
+        run(Scene.VILLAGE_CAVE);
+    }
+
+    @Test
+    @Order(3)
+    void hundredTnt() {
+        run(Scene.TNT);
+    }
+
+    private static final class Result {
+        double fps;
+        long frames;
+        double trianglesPerFrame;
+        double pixelsPerFrame;
+        double drawsPerFrame;
+        int drawnPixels;
+    }
+
+    private void run(int kind) {
+        Scene scene = Scene.build(kind, assets);
+        SoftRenderer renderer = new SoftRenderer(WIDTH, HEIGHT);
+        float aspect = WIDTH / (float) HEIGHT;
+
+        Result base = measure(new BaselinePipeline(), scene, renderer, aspect);
+        Result fast = measure(new AmdFasterPipeline(), scene, renderer, aspect);
+        double ratio = fast.fps / base.fps;
+        double retention = fast.drawnPixels / (double) Math.max(1, base.drawnPixels);
+
+        String report = report(scene, base, fast, ratio, retention);
+        // Retention first: a pipeline that is fast because it stopped drawing the world is not a result,
+        // and reporting its frame rate without saying so would be the same mistake the cost model made.
+        assertTrue(retention >= MIN_PIXEL_RETENTION,
+                "AMD-Faster drew only " + percent(retention) + " of the baseline's pixels, which means a "
+                        + "culler is removing visible geometry and the frame rate below is meaningless.\n"
+                        + report);
+        assertTrue(ratio >= TARGET,
+                "measured " + String.format(Locale.ROOT, "%.2f", ratio) + "x, target is " + TARGET + "x\n"
+                        + report);
+    }
+
+    private static Result measure(Pipeline pipeline, Scene scene, SoftRenderer renderer, float aspect) {
+        pipeline.prepare(scene, assets);
+        Scene.View view = new Scene.View();
+        for (int frame = 0; frame < WARMUP_FRAMES; frame++) {
+            scene.view(frame, aspect, view);
+            renderer.setCamera(view.x, view.y, view.z,
+                    view.rightX, view.rightY, view.rightZ,
+                    view.upX, view.upY, view.upZ,
+                    view.fwdX, view.fwdY, view.fwdZ,
+                    view.nearHalfWidth, view.nearHalfHeight, view.near);
+            pipeline.renderFrame(scene, assets, renderer, view, frame);
+        }
+
+        renderer.resetCounters();
+        int firstDrawn = renderer.drawnPixels();
+        long start = System.nanoTime();
+        int frames = 0;
+        do {
+            scene.view(frames, aspect, view);
+            renderer.setCamera(view.x, view.y, view.z,
+                    view.rightX, view.rightY, view.rightZ,
+                    view.upX, view.upY, view.upZ,
+                    view.fwdX, view.fwdY, view.fwdZ,
+                    view.nearHalfWidth, view.nearHalfHeight, view.near);
+            pipeline.renderFrame(scene, assets, renderer, view, frames);
+            frames++;
+        } while (System.nanoTime() - start < BUDGET_NANOS && frames < MAX_FRAMES);
+        long elapsed = System.nanoTime() - start;
+
+        Result result = new Result();
+        result.frames = frames;
+        result.fps = frames * 1_000_000_000.0 / elapsed;
+        result.trianglesPerFrame = renderer.trianglesSubmitted / (double) frames;
+        result.pixelsPerFrame = renderer.pixelsShaded / (double) frames;
+        result.drawsPerFrame = renderer.drawCalls / (double) frames;
+        result.drawnPixels = firstDrawn;
+        return result;
+    }
+
+    private static String report(Scene scene, Result base, Result fast, double ratio, double retention) {
+        // The counters live on the pipelines, which are gone by the time the report is built, so the
+        // per-pass detail is collected in a second untimed pass over the same scene. Cheap, and it keeps
+        // the timed loop free of bookkeeping.
+        Detail detail = detail(scene);
+        return String.format(Locale.ROOT,
+                "%s %dx%d | baseline %.1f FPS | AMD-Faster %.1f FPS | %.2fx | pixels retained %.1f%%%n"
+                        + "per frame  baseline: %.0f tris, %.0f px shaded, %.0f draws"
+                        + "  ||  AMD-Faster: %.0f tris, %.0f px shaded, %.0f draws%n"
+                        + "sections %d->%d (occluded %d) | face meshes culled %d | entities %d->%d"
+                        + " (coarse %d, occluded %d) | shadows %d->%d | particles %d->%d | block entities animated %d skipped %d | hud rebuilds %d"
+                        + " (%d elements) | gui batches %d | rain rebuilds %d->%d | texture uploads %d->%d"
+                        + " | world %d blocks, %d textures, %d texels",
+                scene.name, WIDTH, HEIGHT, base.fps, fast.fps, ratio, retention * 100.0,
+                base.trianglesPerFrame, base.pixelsPerFrame, base.drawsPerFrame,
+                fast.trianglesPerFrame, fast.pixelsPerFrame, fast.drawsPerFrame,
+                detail.baseSections, detail.fastSections, detail.occluded, detail.faceMeshesCulled,
+                detail.baseEntities, detail.fastEntities, detail.coarse, detail.entitiesOccluded,
+                detail.baseShadows, detail.fastShadows, detail.baseParticles, detail.fastParticles,
+                detail.blockEntitiesAnimated, detail.blockEntitiesSkipped, detail.hudRebuilds,
+                detail.hudElements, detail.guiBatches,
+                detail.baseRainRebuilds, detail.fastRainRebuilds,
+                detail.baseTextureUpdates, detail.fastTextureUploads,
+                scene.worldBlocks(), assets.textureCount(), assets.texelCount());
+    }
+
+    /** One untimed frame per pipeline, for the counters the report quotes. */
+    private static Detail detail(Scene scene) {
+        SoftRenderer renderer = new SoftRenderer(WIDTH, HEIGHT);
+        Scene.View view = new Scene.View();
+        scene.view(0, WIDTH / (float) HEIGHT, view);
+        renderer.setCamera(view.x, view.y, view.z,
+                view.rightX, view.rightY, view.rightZ,
+                view.upX, view.upY, view.upZ,
+                view.fwdX, view.fwdY, view.fwdZ,
+                view.nearHalfWidth, view.nearHalfHeight, view.near);
+        BaselinePipeline base = new BaselinePipeline();
+        base.prepare(scene, assets);
+        base.renderFrame(scene, assets, renderer, view, 0);
+        renderer.setCamera(view.x, view.y, view.z,
+                view.rightX, view.rightY, view.rightZ,
+                view.upX, view.upY, view.upZ,
+                view.fwdX, view.fwdY, view.fwdZ,
+                view.nearHalfWidth, view.nearHalfHeight, view.near);
+        AmdFasterPipeline fast = new AmdFasterPipeline();
+        fast.prepare(scene, assets);
+        fast.renderFrame(scene, assets, renderer, view, 0);
+
+        Detail d = new Detail();
+        d.baseSections = base.sectionsDrawn;
+        d.fastSections = fast.sectionsDrawn;
+        d.occluded = fast.sectionsOccluded;
+        d.faceMeshesCulled = fast.faceMeshesCulled;
+        d.baseEntities = base.entitiesDrawn;
+        d.fastEntities = fast.entitiesDrawn;
+        d.coarse = fast.entitiesCoarse;
+        d.entitiesOccluded = fast.entitiesOccluded;
+        d.baseShadows = base.shadowsDrawn;
+        d.fastShadows = fast.shadowsDrawn;
+        d.baseParticles = base.particlesDrawn;
+        d.fastParticles = fast.particlesDrawn;
+        d.blockEntitiesAnimated = fast.blockEntitiesAnimated;
+        d.blockEntitiesSkipped = fast.blockEntitiesSkipped;
+        d.hudRebuilds = fast.hudRebuilds;
+        d.hudElements = fast.hudElements;
+        d.guiBatches = fast.guiBatches;
+        d.baseRainRebuilds = base.rainRebuilds;
+        d.fastRainRebuilds = fast.rainRebuilds;
+        d.baseTextureUpdates = base.textureUpdates;
+        d.fastTextureUploads = fast.textureUploads;
+        return d;
+    }
+
+    private static final class Detail {
+        long baseSections;
+        long fastSections;
+        long occluded;
+        long faceMeshesCulled;
+        long baseEntities;
+        long fastEntities;
+        long coarse;
+        long entitiesOccluded;
+        long baseShadows;
+        long fastShadows;
+        long baseParticles;
+        long fastParticles;
+        long blockEntitiesAnimated;
+        long blockEntitiesSkipped;
+        long hudRebuilds;
+        long hudElements;
+        long guiBatches;
+        long baseRainRebuilds;
+        long fastRainRebuilds;
+        long baseTextureUpdates;
+        long fastTextureUploads;
+    }
+
+    private static String percent(double fraction) {
+        return String.format(Locale.ROOT, "%.1f%%", fraction * 100.0);
+    }
+}
