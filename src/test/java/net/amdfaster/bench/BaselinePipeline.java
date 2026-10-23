@@ -33,16 +33,6 @@ final class BaselinePipeline implements Pipeline {
     /** The low twenty bits of a sort key hold the section index; the rest holds the distance. */
     private static final long INDEX_MASK = (1L << 20) - 1;
 
-    /** Outward normal of each face direction, in the order {@code Assets} numbers them. */
-    private static final float[][] NORMALS = {
-        {0.0f, -1.0f, 0.0f},
-        {0.0f, 1.0f, 0.0f},
-        {0.0f, 0.0f, -1.0f},
-        {0.0f, 0.0f, 1.0f},
-        {-1.0f, 0.0f, 0.0f},
-        {1.0f, 0.0f, 0.0f},
-    };
-
     private final Frustum frustum = new Frustum(new float[16]);
     private final Random random = new Random(12345L);
     private final List<GuiBatcher.Element> hud = new ArrayList<>();
@@ -151,23 +141,28 @@ final class BaselinePipeline implements Pipeline {
         }
         long[] toSort = Arrays.copyOf(this.keys, visible);
         Arrays.sort(toSort);
+        // One batch per layer rather than one draw per section, because Sodium submits its chunk sections
+        // with a multi-draw. Three loops instead of one is the same work in a software rasteriser and is
+        // what makes the GL backend an honest comparison.
+        renderer.beginTerrain(SoftRenderer.OPAQUE);
         for (int n = 0; n < visible; n++) {
-            int index = (int) (toSort[n] & INDEX_MASK);
-            SectionMeshes section = scene.sections[index];
-            this.sectionsDrawn++;
-            // Every direction is submitted, because the mesh was built once and has to serve every
-            // camera angle. The driver rejects the ones facing away; it does not get the vertex work back.
-            for (int face = 0; face < 6; face++) {
-                float[] normal = NORMALS[face];
-                renderer.drawDirectional(section.opaque[face], SoftRenderer.OPAQUE, this.textures,
-                        normal[0], normal[1], normal[2]);
-            }
-            renderer.drawMesh(section.cutout, SoftRenderer.CUTOUT, this.textures);
-        }
-        for (int n = visible - 1; n >= 0; n--) {
             SectionMeshes section = scene.sections[(int) (toSort[n] & INDEX_MASK)];
-            renderer.drawMesh(section.blend, SoftRenderer.BLEND, this.textures);
+            this.sectionsDrawn++;
+            renderer.drawFaceMeshes(section.opaque, SoftRenderer.OPAQUE, this.textures);
         }
+        renderer.endTerrain();
+        renderer.beginTerrain(SoftRenderer.CUTOUT);
+        for (int n = 0; n < visible; n++) {
+            renderer.drawMesh(scene.sections[(int) (toSort[n] & INDEX_MASK)].cutout,
+                    SoftRenderer.CUTOUT, this.textures);
+        }
+        renderer.endTerrain();
+        renderer.beginTerrain(SoftRenderer.BLEND);
+        for (int n = visible - 1; n >= 0; n--) {
+            renderer.drawMesh(scene.sections[(int) (toSort[n] & INDEX_MASK)].blend,
+                    SoftRenderer.BLEND, this.textures);
+        }
+        renderer.endTerrain();
     }
 
     private void entities(Scene scene, Assets assets, SoftRenderer renderer, float[] viewMatrix) {

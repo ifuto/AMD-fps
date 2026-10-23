@@ -18,7 +18,22 @@ package net.amdfaster.bench;
  * directly, which is both linear in screen space and monotonic in view-space depth, so the depth buffer
  * needs no conversion and reversed-Z falls out for free.
  */
-final class SoftRenderer {
+class SoftRenderer {
+
+    /**
+     * Outward normal of each face direction, indexed the way {@link Assets} numbers them.
+     *
+     * <p>Shared rather than copied into each pipeline: a merged mesh and a directional draw have to agree
+     * on which way a face points, and two copies of that table are how they stop agreeing.
+     */
+    static final float[][] FACE_NORMALS = {
+        {0.0f, -1.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f},
+        {0.0f, 0.0f, -1.0f},
+        {0.0f, 0.0f, 1.0f},
+        {-1.0f, 0.0f, 0.0f},
+        {1.0f, 0.0f, 0.0f},
+    };
 
     /** Depth write, no blend. */
     static final int OPAQUE = 0;
@@ -194,6 +209,41 @@ final class SoftRenderer {
 
     int skyColour() {
         return this.skyColour;
+    }
+
+    /**
+     * Draws the six directional face meshes of a section as one submission.
+     *
+     * <p>This is what Sodium's mesher produces: one mesh per section per layer, not one per face, with
+     * the faces turned away rejected by the GPU rather than by the caller. Modelling the baseline as six
+     * separate submissions would charge it for six draw calls no renderer in the comparison stack issues,
+     * and the speedup would measure that invention. Here the six are walked and the ones facing away are
+     * dropped before any vertex work, which is the same outcome the driver reaches for free.
+     */
+    void drawFaceMeshes(Mesh[] faces, int mode, Texture[] textures) {
+        for (int face = 0; face < faces.length; face++) {
+            float[] normal = FACE_NORMALS[face];
+            drawDirectional(faces[face], mode, textures, normal[0], normal[1], normal[2]);
+        }
+    }
+
+    /**
+     * Opens a batch of terrain draws that {@link #endTerrain()} submits together.
+     *
+     * <p>Sodium batches chunk sections with {@code glMultiDrawElementsBaseVertex}, grouped into regions,
+     * so a baseline that issued one draw call per section would be a straw man. Both pipelines get the
+     * same batching here; what differs is how many ranges end up in the batch and how many vertices each
+     * range carries.
+     */
+    void beginTerrain(int mode) {
+    }
+
+    /** Submits whatever {@link #beginTerrain(int)} collected. */
+    void endTerrain() {
+    }
+
+    /** Ends the frame, flushing anything the renderer has been holding. */
+    void endFrame() {
     }
 
     /** Draws a baked mesh whose vertices are already in world space. */

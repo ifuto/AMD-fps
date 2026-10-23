@@ -90,6 +90,11 @@ final class AmdFasterPipeline implements Pipeline {
 
     private int[] survivors = new int[0];
     private int survivorCount;
+    /** Surviving (section, face) pairs, section index times eight plus the face, decided then batched. */
+    private int[] faceQueue = new int[0];
+    private int faceQueueCount;
+    private int[] cutoutQueue = new int[0];
+    private int cutoutQueueCount;
     private long[] sortKeys = new long[0];
     private int[] sortPayload = new int[0];
     private int[] translucentOrder = new int[0];
@@ -211,6 +216,12 @@ final class AmdFasterPipeline implements Pipeline {
     private void terrain(Scene scene, SoftRenderer renderer, Scene.View view) {
         int cameraMask = MeshletFaceMaskCuller.visibleMask(facing(view), vertical(view));
         this.survivorCount = 0;
+        this.faceQueueCount = 0;
+        this.cutoutQueueCount = 0;
+        if (this.faceQueue.length < scene.sections.length * 6) {
+            this.faceQueue = new int[scene.sections.length * 6];
+            this.cutoutQueue = new int[scene.sections.length];
+        }
         this.hierarchical.cull(this.frustum, 0, 0, 0,
                 scene.sectionsX, scene.sectionsY, scene.sectionsZ,
                 (sectionX, sectionY, sectionZ) -> {
@@ -295,9 +306,12 @@ final class AmdFasterPipeline implements Pipeline {
                     this.faceMeshesCulled++;
                     continue;
                 }
-                renderer.drawMesh(mesh, SoftRenderer.OPAQUE, this.textures);
+                // Decided here, submitted after the walk. The occlusion test is progressive -- each
+                // section is tested against the ones already accepted -- so the decisions cannot move,
+                // but the submission can, and batching it is what a real renderer does with the list.
+                this.faceQueue[this.faceQueueCount++] = this.sortPayload[i] * 8 + face;
             }
-            renderer.drawMesh(section.cutout, SoftRenderer.CUTOUT, this.textures);
+            this.cutoutQueue[this.cutoutQueueCount++] = this.sortPayload[i];
 
             if (x0 <= x1 && y0 <= y1) {
                 this.occlusion.addOccluder(x0, y0, x1, y1, nearDepth);
@@ -305,17 +319,29 @@ final class AmdFasterPipeline implements Pipeline {
             this.translucentOrder[this.translucentCount++] = this.sortPayload[i];
         }
 
+        renderer.beginTerrain(SoftRenderer.OPAQUE);
+        for (int i = 0; i < this.faceQueueCount; i++) {
+            int entry = this.faceQueue[i];
+            renderer.drawMesh(scene.sections[entry / 8].opaque[entry % 8],
+                    SoftRenderer.OPAQUE, this.textures);
+        }
+        renderer.endTerrain();
+        renderer.beginTerrain(SoftRenderer.CUTOUT);
+        for (int i = 0; i < this.cutoutQueueCount; i++) {
+            renderer.drawMesh(scene.sections[this.cutoutQueue[i]].cutout,
+                    SoftRenderer.CUTOUT, this.textures);
+        }
+        renderer.endTerrain();
+
         translucent(scene, renderer, view);
     }
 
-    private static final float[][] FACE_NORMALS = {
-        {0.0f, -1.0f, 0.0f},
-        {0.0f, 1.0f, 0.0f},
-        {0.0f, 0.0f, -1.0f},
-        {0.0f, 0.0f, 1.0f},
-        {-1.0f, 0.0f, 0.0f},
-        {1.0f, 0.0f, 0.0f},
-    };
+    /**
+     * The one table of face normals, owned by the renderer. A second copy here would be a second opinion
+     * about which way a face points, and the merged mesh the GL backend builds has to agree with the
+     * cone test below or it culls the faces the player is looking at.
+     */
+    private static final float[][] FACE_NORMALS = SoftRenderer.FACE_NORMALS;
 
     private void translucent(Scene scene, SoftRenderer renderer, Scene.View view) {
         if (this.translucentCount == 0) {
@@ -343,12 +369,14 @@ final class AmdFasterPipeline implements Pipeline {
             }
             System.arraycopy(sorted, 0, this.translucentOrder, 0, this.translucentCount);
         }
+        renderer.beginTerrain(SoftRenderer.BLEND);
         for (int i = this.translucentCount - 1; i >= 0; i--) {
             SectionMeshes section = scene.sections[this.translucentOrder[i]];
             if (!section.blend.isEmpty()) {
                 renderer.drawMesh(section.blend, SoftRenderer.BLEND, this.textures);
             }
         }
+        renderer.endTerrain();
         this.translucentCount = 0;
     }
 
