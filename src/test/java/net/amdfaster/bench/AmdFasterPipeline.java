@@ -17,6 +17,7 @@ import net.amdfaster.entity.EntityBatcher;
 import net.amdfaster.entity.EntityInstance;
 import net.amdfaster.entity.EntityLodSelector;
 import net.amdfaster.entity.ShadowCuller;
+import net.amdfaster.particle.ParticleDrawBatcher;
 import net.amdfaster.render.AnimatedTextureScheduler;
 import net.amdfaster.render.CloudMeshCache;
 import net.amdfaster.render.GuiBatcher;
@@ -63,6 +64,7 @@ final class AmdFasterPipeline implements Pipeline {
     private final AnimatedTextureScheduler textureScheduler = new AnimatedTextureScheduler();
     private final CloudMeshCache cloudCache = new CloudMeshCache();
     private final WeatherMeshCache weatherCache = new WeatherMeshCache();
+    private final ParticleDrawBatcher rainBatch = new ParticleDrawBatcher();
 
     private final List<GuiBatcher.Element> hud = new ArrayList<>();
     private final float[] uv = new float[4];
@@ -127,6 +129,7 @@ final class AmdFasterPipeline implements Pipeline {
     long rainRebuilds;
     long rainDrawn;
     long rainCulled;
+    long rainBatches;
     long textureUploads;
 
     @Override
@@ -508,9 +511,19 @@ final class AmdFasterPipeline implements Pipeline {
         if (this.weatherCache.needsRebuild(scene.raining ? 1 : 0)) {
             this.rainRebuilds++;
         }
-        // The fall is an offset rather than a rebuild, and every drop is its own object so the ones
+        // The fall is an offset rather than a rebuild, and every drop is tested on its own so the ones
         // behind the camera can be dropped. Vanilla bakes them into one buffer and cannot.
         float fall = (float) WeatherMeshCache.fallOffset(frame, 0.6) % 16.0f;
+        // Culled one at a time and then submitted as one mesh, because the two halves of that sentence
+        // pull against each other. Per-drop culling needs the drops to be separate objects, and separate
+        // objects are one draw call each -- so without something to put them back together, dropping 492
+        // of 600 drops would trade 492 quads for 108 draw calls, and on a driver that is the worse trade.
+        // ParticleDrawBatcher is that something: same texture, order preserved, one submission.
+        MeshBuilder batch = new MeshBuilder();
+        float[] drop = this.rainDrop.verts;
+        int[] dropTexture = this.rainDrop.triTex;
+        float[] dropShade = this.rainDrop.triShade;
+        int dropTriangles = this.rainDrop.triangleCount;
         for (int i = 0; i < Passes.RAIN_QUADS; i++) {
             float x = view.x + this.rainOffsets[i * 3];
             float y = view.y - 8.0f + this.rainOffsets[i * 3 + 1] - fall;
@@ -521,11 +534,21 @@ final class AmdFasterPipeline implements Pipeline {
                 this.rainCulled++;
                 continue;
             }
-            Mat.translate(x, y, z, this.model);
-            Mat.multiply(this.viewMatrix, this.model, this.modelView);
-            renderer.drawMeshWith(this.rainDrop, SoftRenderer.BLEND, this.textures, this.modelView);
+            this.rainBatch.add("rain");
+            for (int t = 0; t < dropTriangles; t++) {
+                int b = t * 15;
+                batch.triangle(
+                        x + drop[b], y + drop[b + 1], z + drop[b + 2], drop[b + 3], drop[b + 4],
+                        x + drop[b + 5], y + drop[b + 6], z + drop[b + 7], drop[b + 8], drop[b + 9],
+                        x + drop[b + 10], y + drop[b + 11], z + drop[b + 12], drop[b + 13], drop[b + 14],
+                        dropTexture[t], dropShade[t]);
+            }
             this.rainDrawn++;
         }
+        this.rainBatch.endFrame();
+        // The batcher counts submissions for the whole run, so this is read rather than accumulated.
+        this.rainBatches = this.rainBatch.calls();
+        renderer.drawMesh(batch.build(), SoftRenderer.BLEND, this.textures);
     }
 
     private void animateTextures(Assets assets, int frame) {

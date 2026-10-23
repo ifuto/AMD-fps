@@ -197,7 +197,9 @@ class GlRaster extends SoftRenderer {
         this.screenVbo = GL15.glGenBuffers();
         GL30.glBindVertexArray(this.screenVao);
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.screenVbo);
-        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, (FloatBuffer) null, GL15.GL_STREAM_DRAW);
+        // Sized rather than left unallocated: LWJGL's glBufferData takes a size or a buffer, and passing a
+        // null buffer dereferences it. endFrame re-specifies the store with the real quads every frame.
+        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, 20L * 6 * 512, GL15.GL_STREAM_DRAW);
         bindScreenAttributes(this.screenProgram);
 
         // Reversed Z: the near plane is depth 1 and the far plane is 0, so "greater" is nearer and the
