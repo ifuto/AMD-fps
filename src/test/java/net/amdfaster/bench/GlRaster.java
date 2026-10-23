@@ -551,6 +551,10 @@ class GlRaster extends SoftRenderer {
             float[] data = new float[triangles * 3 * FLOATS_PER_VERTEX];
             int[] faceFirst = new int[6];
             int[] faceCount = new int[6];
+            // Vertices, not floats. glDrawArrays and glMultiDrawArrays both count vertices, and the
+            // buffer holds six floats per vertex, so a range recorded in floats points six times too far
+            // into the buffer and reads six times too much -- the wrong sections, drawn from the wrong
+            // place, which still puts triangles on screen and so still looks like it is working.
             int at = 0;
             for (SectionMeshes section : sections) {
                 if (layer == 0) {
@@ -591,11 +595,17 @@ class GlRaster extends SoftRenderer {
         GL30.glBindVertexArray(0);
     }
 
-    /** Writes one mesh into a layer buffer, optionally repairing its winding against a known normal. */
-    private int append(float[] data, int at, Mesh mesh, float[] normal) {
+    /**
+     * Writes one mesh into a layer buffer, optionally repairing its winding against a known normal.
+     *
+     * <p>Takes and returns a vertex index. The buffer is floats and the draw calls are vertices, and
+     * letting the caller convert is how the two got confused once already.
+     */
+    private int append(float[] data, int vertexAt, Mesh mesh, float[] normal) {
         float[] verts = mesh.verts;
         int[] triTex = mesh.triTex;
         float[] triShade = mesh.triShade;
+        int at = vertexAt * FLOATS_PER_VERTEX;
         for (int triangle = 0; triangle < mesh.triangleCount; triangle++) {
             int base = triangle * 15;
             int texture = triTex[triangle];
@@ -631,7 +641,7 @@ class GlRaster extends SoftRenderer {
                 at += FLOATS_PER_VERTEX;
             }
         }
-        return at;
+        return at / FLOATS_PER_VERTEX;
     }
 
     @Override
