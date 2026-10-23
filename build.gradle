@@ -65,10 +65,14 @@ dependencies {
     // with no display server and no device node present.
     testImplementation "org.lwjgl:lwjgl-opengl:${project.lwjgl_version}"
     testImplementation "org.lwjgl:lwjgl-egl:${project.lwjgl_version}"
+    // GLFW is how the render benchmark reaches GLX: the runner has no libEGL, so a context can only
+    // come from an X display, and GLFW is the only X11 client LWJGL binds.
+    testImplementation "org.lwjgl:lwjgl-glfw:${project.lwjgl_version}"
     for (String nativesClassifier in ["natives-linux", "natives-windows", "natives-macos", "natives-macos-arm64"]) {
         testRuntimeOnly "org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}:${nativesClassifier}"
         testRuntimeOnly "org.lwjgl:lwjgl:${project.lwjgl_version}:${nativesClassifier}"
         testRuntimeOnly "org.lwjgl:lwjgl-opengl:${project.lwjgl_version}:${nativesClassifier}"
+        testRuntimeOnly "org.lwjgl:lwjgl-glfw:${project.lwjgl_version}:${nativesClassifier}"
     }
 }
 
