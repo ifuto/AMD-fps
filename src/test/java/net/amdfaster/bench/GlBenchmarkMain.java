@@ -143,7 +143,6 @@ final class GlBenchmarkMain {
         renderer.debugNoCull = true;
         renderer.debugNoMultiDraw = true;
         renderer.debugNoDepth = true;
-        renderer.debugNoSharedBuffer = true;
         renderer.invalidateState();
         BaselinePipeline diagnostic = new BaselinePipeline();
         diagnostic.prepare(scene, assets);

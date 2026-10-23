@@ -626,6 +626,13 @@ class GlRaster extends SoftRenderer {
         GL20.glUniformMatrix4fv(this.uniformMvp, false, this.matrixBuffer);
         GL20.glUniform1f(this.uniformCut, this.batchState == CUTOUT ? 0.5f : 0.0f);
         GL30.glBindVertexArray(this.terrainVao[layer]);
+        // Re-declared rather than trusted. The per-mesh path draws the very same triangles from the very
+        // same meshes and they land on screen; this one, set up by textually identical calls, does not.
+        // So the vertex array state built once at startup is not the state in force at draw time, and
+        // rather than guess a third time this says so: if coverage comes back with these three lines, the
+        // cause is the cached state and not the geometry, the ranges, the matrix or the draw call.
+        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.terrainVbo[layer]);
+        bindAttributes(this.program);
         this.lastBatchSize = this.batchSize;
         this.lastRangeFirst = this.firstBuffer.get(0);
         this.lastRangeCount = this.countBuffer.get(0);

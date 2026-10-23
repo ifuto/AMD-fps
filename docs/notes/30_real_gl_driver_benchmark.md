@@ -97,7 +97,18 @@ region 単位で `glMultiDrawElementsBaseVertex` に出す（deepwiki / Sodium �
 5 % だった。**しかも FPS は 2.65〜3.24 倍と「良さそう」に出ていた。** 被覆チェックが無ければ
 そのまま報告していた数字である。
 
-### 2. （調査中）地形がまだ出ていない
+### 2. model-view 行列に view が二重に入っていた
+
+`SoftRenderer.drawMeshWith` が受け取るのは **model-VIEW 行列**（呼び出し側がカメラを畳み込み済み）。
+これを view-projection と掛けると **view が二重適用**になる。しかも**派手に壊れない** —
+エンティティ・パーティクル・雨粒が別の場所に移動するだけで、大抵は画面内に残るので
+フレームは賑やかで数字ももっともらしい。
+
+地形は model を渡さない（頂点が世界座標）ので正しく、**だから絵の半分だけが合っていた**。
+修正: `GlRaster.setProjection(near, nearHalfWidth, nearHalfHeight, far)` で射影単体を別に作り、
+`compose()` は model が null のとき view-projection、model があるとき射影単体を使う。
+
+### 3. （調査中）地形がまだ出ていない
 
 `GL_CW` に直しても被覆は 5 % のまま。切り分けた結果:
 
@@ -107,7 +118,8 @@ region 単位で `glMultiDrawElementsBaseVertex` に出す（deepwiki / Sodium �
 | レンジが壊れている | 違う — `range0 = 171144 + 3492`、バッチ 32 レンジ |
 | バックフェースカリング | 違う — **オフにすると被覆はむしろ減った** |
 | multi-draw | 違う — **`glDrawArrays` をレンジ毎に発行しても同じ** |
-| エンティティ／雲／雨／GUI | **描けている**（同じ world プログラム・同じ行列） |
+| 雲／雨／GUI | **描けている**（世界座標＋model なし＝行列が正しい経路） |
+| エンティティ／パーティクル | 描けるが**位置が違う**（上記の view 二重適用） |
 
 描けているものと描けないものの差は **地形の VAO/VBO だけ** になった。
 次の一手は深度テストを切り、行列の実値と 1 頂点のクリップ座標を報告させること
