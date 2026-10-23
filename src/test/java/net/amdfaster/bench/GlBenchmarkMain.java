@@ -154,12 +154,12 @@ final class GlBenchmarkMain {
         System.out.println(String.format(Locale.ROOT,
                 "GLBENCHPAINT scene=%d glBase=%d glFast=%d softBase=%d softFast=%d diffPercent=%.1f"
                         + " diag=%d mvpLoc=%d err=0x%x tv0=%d batch=%d range0=%d,%d"
-                        + " d(cull,depth,multi)=%d d(noMulti)=%d d(noDepth)=%d d(bare)=%d",
+                        + " d(cull,depth,multi)=%d d(noMulti)=%d d(noDepth)=%d d(bare)=%d %s",
                 kind, basePainted, fastPainted, softBase, softFast, diff,
                 lastDiag, renderer.mvpLocation(), GL11.glGetError(),
                 renderer.terrainVertices(0), renderer.lastBatchSize,
                 renderer.lastRangeFirst, renderer.lastRangeCount,
-                allOn, noMulti, noDepth, bare));
+                allOn, noMulti, noDepth, bare, renderer.debugDepthState()));
         float[] probe = renderer.probeVertex();
         System.out.println("GLBENCHMATRIX scene=" + kind
                 + " vertex=" + probe[0] + "," + probe[1] + "," + probe[2]

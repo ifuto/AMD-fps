@@ -882,8 +882,21 @@ class GlRaster extends SoftRenderer {
         int g = (sky >> 8) & 0xFF;
         int b = sky & 0xFF;
         GL11.glClearColor(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
+        // Re-asserted every frame rather than trusted from the constructor. Reversed Z clears to zero
+        // and compares with GL_GREATER, and the pair only works together: the default clear value is 1.0
+        // and the default comparison is GL_LESS, so either half reverting on its own makes every fragment
+        // in the world fail the test while the GUI -- which has the depth test off -- keeps drawing.
+        // That is exactly the picture this backend produced for a dozen runs.
+        GL11.glClearDepth(0.0);
+        GL11.glDepthFunc(GL11.GL_GREATER);
         GL11.glViewport(0, 0, this.width, this.height);
         GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+    }
+
+    /** What the driver actually holds, so a state that reverted says so instead of being guessed at. */
+    String debugDepthState() {
+        return String.format(java.util.Locale.ROOT, "clearDepth=%.2f depthFunc=0x%x",
+                GL11.glGetFloat(GL11.GL_DEPTH_CLEAR_VALUE), GL11.glGetInteger(GL11.GL_DEPTH_FUNC));
     }
 
     /** Submits the GUI quads collected during the frame as one draw. */
