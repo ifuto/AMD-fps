@@ -241,15 +241,24 @@ final class SoftRenderer {
                 continue;
             }
 
+            // When nothing needed clipping the vertices are still in the input arrays, and reading the
+            // output arrays instead would project the previous triangle's leftovers. That is not a
+            // theoretical worry: it is what this code did first, and the frame it produced had 95 percent
+            // of its pixels missing while every counter looked plausible.
+            float[] eyeX = allInFront ? this.inX : this.outX;
+            float[] eyeY = allInFront ? this.inY : this.outY;
+            float[] eyeZ = allInFront ? this.inZ : this.outZ;
+            float[] eyeU = allInFront ? this.inU : this.outU;
+            float[] eyeV = allInFront ? this.inV : this.outV;
             int n = allInFront ? 3 : clipNearPlane();
             for (int k = 0; k < n; k++) {
-                float z = this.outZ[k];
+                float z = eyeZ[k];
                 float inv = 1.0f / z;
-                this.sx[k] = this.centreX + this.outX[k] * inv * this.scaleX;
-                this.sy[k] = this.centreY - this.outY[k] * inv * this.scaleY;
+                this.sx[k] = this.centreX + eyeX[k] * inv * this.scaleX;
+                this.sy[k] = this.centreY - eyeY[k] * inv * this.scaleY;
                 this.invZ[k] = inv;
-                this.uOverZ[k] = this.outU[k] * inv;
-                this.vOverZ[k] = this.outV[k] * inv;
+                this.uOverZ[k] = eyeU[k] * inv;
+                this.vOverZ[k] = eyeV[k] * inv;
             }
             Texture texture = textures[triTex[t]];
             float shade = triShade[t];

@@ -94,6 +94,7 @@ class CpuRenderBenchmark {
         long frames;
         double trianglesPerFrame;
         double pixelsPerFrame;
+        double testedPerFrame;
         double drawsPerFrame;
         int drawnPixels;
     }
@@ -154,6 +155,7 @@ class CpuRenderBenchmark {
         result.fps = frames * 1_000_000_000.0 / elapsed;
         result.trianglesPerFrame = renderer.trianglesSubmitted / (double) frames;
         result.pixelsPerFrame = renderer.pixelsShaded / (double) frames;
+        result.testedPerFrame = renderer.pixelsTested / (double) frames;
         result.drawsPerFrame = renderer.drawCalls / (double) frames;
         result.drawnPixels = firstDrawn;
         return result;
@@ -166,15 +168,18 @@ class CpuRenderBenchmark {
         Detail detail = detail(scene);
         return String.format(Locale.ROOT,
                 "%s %dx%d | baseline %.1f FPS | AMD-Faster %.1f FPS | %.2fx | pixels retained %.1f%%%n"
-                        + "per frame  baseline: %.0f tris, %.0f px shaded, %.0f draws"
-                        + "  ||  AMD-Faster: %.0f tris, %.0f px shaded, %.0f draws%n"
+                        + "per frame  base: %.0f tris, %.0f px tested, %.0f px shaded, %.0f draws,"
+                        + " %.1f%% of screen painted  ||  fast: %.0f tris, %.0f px tested,"
+                        + " %.0f px shaded, %.0f draws, %.1f%% of screen painted%n"
                         + "sections %d->%d (occluded %d) | face meshes culled %d | entities %d->%d"
                         + " (coarse %d, occluded %d) | shadows %d->%d | particles %d->%d | block entities animated %d skipped %d | hud rebuilds %d"
                         + " (%d elements) | gui batches %d | rain rebuilds %d->%d | texture uploads %d->%d"
                         + " | world %d blocks, %d textures, %d texels",
                 scene.name, WIDTH, HEIGHT, base.fps, fast.fps, ratio, retention * 100.0,
-                base.trianglesPerFrame, base.pixelsPerFrame, base.drawsPerFrame,
-                fast.trianglesPerFrame, fast.pixelsPerFrame, fast.drawsPerFrame,
+                base.trianglesPerFrame, base.testedPerFrame, base.pixelsPerFrame, base.drawsPerFrame,
+                100.0 * base.drawnPixels / (WIDTH * HEIGHT),
+                fast.trianglesPerFrame, fast.testedPerFrame, fast.pixelsPerFrame, fast.drawsPerFrame,
+                100.0 * fast.drawnPixels / (WIDTH * HEIGHT),
                 detail.baseSections, detail.fastSections, detail.occluded, detail.faceMeshesCulled,
                 detail.baseEntities, detail.fastEntities, detail.coarse, detail.entitiesOccluded,
                 detail.baseShadows, detail.fastShadows, detail.baseParticles, detail.fastParticles,
