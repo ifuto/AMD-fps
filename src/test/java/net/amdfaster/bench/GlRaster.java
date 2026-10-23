@@ -207,7 +207,14 @@ class GlRaster extends SoftRenderer {
         // depth range on [0, 1] to match it rather than letting GL rescale it into [-1, 1].
         GL45.glClipControl(GL45.GL_LOWER_LEFT, GL45.GL_ZERO_TO_ONE);
         GL11.glDepthFunc(GL11.GL_GREATER);
-        GL11.glFrontFace(GL11.GL_CCW);
+        // Clockwise, which looks like a typo and is not. Screen x grows with right.p and screen y with
+        // up.p, and the camera looks along forward, so the frame the screen is drawn in is
+        // (right, up, -forward) -- left handed, because (right, up, forward) is right handed. A triangle
+        // wound counter-clockwise as seen from outside therefore reaches the framebuffer clockwise, and
+        // GL_CCW here would reject every front face in the world. The first run of this backend did
+        // exactly that: both pipelines painted only their clouds, their rain and their GUI, and the
+        // coverage check against the software rasteriser is what said so.
+        GL11.glFrontFace(GL11.GL_CW);
         GL11.glCullFace(GL11.GL_BACK);
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
         GL11.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -714,6 +721,7 @@ class GlRaster extends SoftRenderer {
     @Override
     void endFrame() {
         if (this.screenFloats == 0) {
+            finishFrame();
             return;
         }
         FloatBuffer buffer = MemoryUtil.memAllocFloat(this.screenFloats);
@@ -730,8 +738,14 @@ class GlRaster extends SoftRenderer {
         MemoryUtil.memFree(buffer);
         this.screenFloats = 0;
         this.glDraws++;
-        // Wait for the frame to actually finish. GL is asynchronous, and a stopwatch around a queue of
-        // commands nobody has executed yet measures how fast the queue fills, not how fast it drains.
+        finishFrame();
+    }
+
+    /**
+     * Waits for the frame to actually finish. GL is asynchronous, and a stopwatch around a queue of
+     * commands nobody has executed yet measures how fast the queue fills rather than how fast it drains.
+     */
+    private static void finishFrame() {
         GL11.glFinish();
     }
 
