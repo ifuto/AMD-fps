@@ -178,6 +178,38 @@ class GlRaster extends SoftRenderer {
     /** Draws terrain meshes one at a time through the per-mesh path instead of the shared layer buffers. */
     boolean debugNoSharedBuffer;
 
+    /** First range of the opaque batch, kept so it can be drawn again through a fresh vertex array. */
+    int opaqueProbeFirst;
+    int opaqueProbeCount;
+
+    /**
+     * Draws one terrain range again, through a vertex array built at this instant over the buffer that is
+     * already resident.
+     *
+     * <p>This is the last fork in the investigation. The per-mesh path draws the same triangles and they
+     * appear; this path, set up by the same calls, draws a quarter of them. Re-declaring the attribute
+     * state at draw time changed nothing. So either the buffer built at startup does not hold what was
+     * put into it, or the ranges do not describe where it was put. Building the vertex array here, over
+     * the buffer that is already there, tells those apart: if this draws and the frame did not, the
+     * resident vertex array is the fault; if this also draws nothing, the buffer or the ranges are.
+     */
+    void debugRedrawOpaqueRange() {
+        if (this.opaqueProbeCount <= 0) {
+            return;
+        }
+        int vao = GL30.glGenVertexArrays();
+        GL30.glBindVertexArray(vao);
+        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.terrainVbo[OPAQUE]);
+        bindAttributes(this.program);
+        applyState(OPAQUE);
+        compose(null);
+        GL20.glUseProgram(this.program);
+        GL20.glUniformMatrix4fv(this.uniformMvp, false, this.matrixBuffer);
+        GL20.glUniform1f(this.uniformCut, 0.0f);
+        GL11.glDrawArrays(GL11.GL_TRIANGLES, this.opaqueProbeFirst, this.opaqueProbeCount);
+        GL30.glDeleteVertexArrays(vao);
+    }
+
     /** First vertex of the opaque terrain layer, kept so a report can push it through the matrix. */
     private final float[] probeVertex = new float[3];
 
@@ -636,6 +668,10 @@ class GlRaster extends SoftRenderer {
         this.lastBatchSize = this.batchSize;
         this.lastRangeFirst = this.firstBuffer.get(0);
         this.lastRangeCount = this.countBuffer.get(0);
+        if (layer == OPAQUE) {
+            this.opaqueProbeFirst = this.lastRangeFirst;
+            this.opaqueProbeCount = this.lastRangeCount;
+        }
         if (this.debugNoMultiDraw) {
             for (int i = 0; i < this.batchSize; i++) {
                 GL11.glDrawArrays(GL11.GL_TRIANGLES, this.firstBuffer.get(i), this.countBuffer.get(i));

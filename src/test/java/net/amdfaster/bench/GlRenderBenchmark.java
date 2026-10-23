@@ -78,6 +78,10 @@ class GlRenderBenchmark {
                 scenes++;
                 continue;
             }
+            if (flat.startsWith("GLBENCHPAINT ")) {
+                report2.append(" || ").append(shorten(flat, 340));
+                continue;
+            }
             if (flat.startsWith("GLBENCHMATRIX ")) {
                 report2.append(" || ").append(shorten(flat, 300));
                 continue;

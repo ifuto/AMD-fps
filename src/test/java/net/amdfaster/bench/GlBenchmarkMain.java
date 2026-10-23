@@ -159,15 +159,21 @@ final class GlBenchmarkMain {
         ByteBuffer noCullImage = MemoryUtil.memAlloc(WIDTH * HEIGHT * 4);
         renderer.readBack(noCullImage);
         int noCullPainted = GlRaster.painted(noCullImage, WIDTH, HEIGHT, sky);
+        // The same range again, through a vertex array made now rather than at startup.
+        renderer.debugRedrawOpaqueRange();
+        renderer.readBack(noCullImage);
+        int redrawPainted = GlRaster.painted(noCullImage, WIDTH, HEIGHT, sky);
         MemoryUtil.memFree(noCullImage);
 
         System.out.println(String.format(Locale.ROOT,
                 "GLBENCHPAINT scene=%d glBase=%d glFast=%d softBase=%d softFast=%d diffPercent=%.1f"
-                        + " diag=%d mvpLoc=%d err=0x%x tv0=%d batch=%d range0=%d,%d",
+                        + " diag=%d mvpLoc=%d err=0x%x tv0=%d batch=%d range0=%d,%d"
+                        + " redraw=%d opqRange=%d,%d",
                 kind, basePainted, fastPainted, softBase, softFast, diff,
                 noCullPainted, renderer.mvpLocation(), GL11.glGetError(),
                 renderer.terrainVertices(0), renderer.lastBatchSize,
-                renderer.lastRangeFirst, renderer.lastRangeCount));
+                renderer.lastRangeFirst, renderer.lastRangeCount,
+                redrawPainted, renderer.opaqueProbeFirst, renderer.opaqueProbeCount));
         float[] probe = renderer.probeVertex();
         System.out.println("GLBENCHMATRIX scene=" + kind
                 + " vertex=" + probe[0] + "," + probe[1] + "," + probe[2]
