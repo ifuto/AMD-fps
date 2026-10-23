@@ -171,6 +171,12 @@ class GlRaster extends SoftRenderer {
      */
     boolean debugNoMultiDraw;
 
+    /** Skips the depth test, which is the last thing between a submitted triangle and a fragment. */
+    boolean debugNoDepth;
+
+    /** First vertex of the opaque terrain layer, kept so a report can push it through the matrix. */
+    private final float[] probeVertex = new float[3];
+
     /** Vertex count of a terrain layer buffer, so a report can show whether anything was baked into it. */
     int terrainVertices(int layer) {
         return this.terrainVertexCount[layer];
@@ -504,6 +510,11 @@ class GlRaster extends SoftRenderer {
                 }
             }
             this.terrainVertexCount[layer] = at;
+            if (layer == 0 && at > 0) {
+                this.probeVertex[0] = data[0];
+                this.probeVertex[1] = data[1];
+                this.probeVertex[2] = data[2];
+            }
             FloatBuffer buffer = MemoryUtil.memAllocFloat(data.length);
             buffer.put(data);
             buffer.flip();
@@ -820,7 +831,11 @@ class GlRaster extends SoftRenderer {
         switch (state) {
             case OPAQUE:
             case CUTOUT:
-                GL11.glEnable(GL11.GL_DEPTH_TEST);
+                if (this.debugNoDepth) {
+                    GL11.glDisable(GL11.GL_DEPTH_TEST);
+                } else {
+                    GL11.glEnable(GL11.GL_DEPTH_TEST);
+                }
                 GL11.glDepthMask(true);
                 GL11.glDisable(GL11.GL_BLEND);
                 if (this.debugNoCull) {
@@ -830,7 +845,11 @@ class GlRaster extends SoftRenderer {
                 }
                 break;
             case BLEND:
-                GL11.glEnable(GL11.GL_DEPTH_TEST);
+                if (this.debugNoDepth) {
+                    GL11.glDisable(GL11.GL_DEPTH_TEST);
+                } else {
+                    GL11.glEnable(GL11.GL_DEPTH_TEST);
+                }
                 GL11.glDepthMask(false);
                 GL11.glEnable(GL11.GL_BLEND);
                 GL11.glDisable(GL11.GL_CULL_FACE);
@@ -841,6 +860,38 @@ class GlRaster extends SoftRenderer {
                 GL11.glDisable(GL11.GL_CULL_FACE);
                 break;
         }
+    }
+
+    /**
+     * Pushes a world-space point through the matrix the driver was last handed, and says what comes out.
+     *
+     * <p>The software rasteriser and this one are supposed to be running the same projection, and this is
+     * how that is checked rather than assumed: a point that leaves the clip cube is a triangle no driver
+     * will ever rasterise, and it looks exactly like a triangle that was never submitted.
+     */
+    String debugClip(float x, float y, float z) {
+        float[] m = this.mvp;
+        float cx = m[0] * x + m[4] * y + m[8] * z + m[12];
+        float cy = m[1] * x + m[5] * y + m[9] * z + m[13];
+        float cz = m[2] * x + m[6] * y + m[10] * z + m[14];
+        float cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+        if (cw == 0.0f) {
+            return "w=0";
+        }
+        return String.format(java.util.Locale.ROOT, "clip=%.1f,%.1f,%.1f,%.1f ndc=%.2f,%.2f,%.2f",
+                cx, cy, cz, cw, cx / cw, cy / cw, cz / cw);
+    }
+
+    /** The first vertex of the baked opaque terrain, in world space. */
+    float[] probeVertex() {
+        return this.probeVertex;
+    }
+
+    /** The model-view-projection matrix the driver was last handed, for the same check. */
+    String debugMatrix() {
+        float[] m = this.mvp;
+        return String.format(java.util.Locale.ROOT, "m0=%.3f m5=%.3f m10=%.3f m12=%.1f m13=%.1f m14=%.1f",
+                m[0], m[5], m[10], m[12], m[13], m[14]);
     }
 
     /** Reads the framebuffer back, which is how the report proves a picture was drawn and not skipped. */

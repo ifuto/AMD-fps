@@ -58,6 +58,7 @@ class GlRenderBenchmark {
         int[] rangeCount = new int[3];
         String renderer = "?";
         int scenes = 0;
+        StringBuilder report2 = new StringBuilder();
 
         for (String line : output.split("\n")) {
             String flat = line.trim();
@@ -75,6 +76,10 @@ class GlRenderBenchmark {
                 baseTris[scene] = (long) number(flat, "baseTris=");
                 fastTris[scene] = (long) number(flat, "fastTris=");
                 scenes++;
+                continue;
+            }
+            if (flat.startsWith("GLBENCHMATRIX ")) {
+                report2.append(" || ").append(shorten(flat, 300));
                 continue;
             }
             if (flat.startsWith("GLBENCHPAINT scene=")) {
@@ -122,7 +127,7 @@ class GlRenderBenchmark {
         for (int scene = 0; scene < 3; scene++) {
             double coverage = glBase[scene] / (double) Math.max(1, softBase[scene]);
             if (coverage < 0.80 || coverage > 1.25) {
-                assertTrue(false, report + " || GL painted " + glBase[scene]
+                assertTrue(false, report + report2 + " || GL painted " + glBase[scene]
                         + " pixels where the software rasteriser painted " + softBase[scene]
                         + ", so the GL backend is not drawing the same picture");
             }
@@ -132,7 +137,7 @@ class GlRenderBenchmark {
             }
         }
 
-        assertTrue(worst >= TARGET, report.toString());
+        assertTrue(worst >= TARGET, report + report2.toString());
     }
 
     /** Reads the number that follows a key, so the report format is the only contract between the two JVMs. */

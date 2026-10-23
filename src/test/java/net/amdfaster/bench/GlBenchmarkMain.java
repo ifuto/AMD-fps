@@ -142,6 +142,7 @@ final class GlBenchmarkMain {
         // the winding was never the question.
         renderer.debugNoCull = true;
         renderer.debugNoMultiDraw = true;
+        renderer.debugNoDepth = true;
         renderer.invalidateState();
         BaselinePipeline diagnostic = new BaselinePipeline();
         diagnostic.prepare(scene, assets);
@@ -166,6 +167,11 @@ final class GlBenchmarkMain {
                 noCullPainted, renderer.mvpLocation(), GL11.glGetError(),
                 renderer.terrainVertices(0), renderer.lastBatchSize,
                 renderer.lastRangeFirst, renderer.lastRangeCount));
+        float[] probe = renderer.probeVertex();
+        System.out.println("GLBENCHMATRIX scene=" + kind
+                + " vertex=" + probe[0] + "," + probe[1] + "," + probe[2]
+                + " " + renderer.debugMatrix()
+                + " " + renderer.debugClip(probe[0], probe[1], probe[2]));
         renderer.close();
     }
 
