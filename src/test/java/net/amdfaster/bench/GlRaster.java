@@ -1010,6 +1010,15 @@ class GlRaster extends SoftRenderer {
                 m[0], m[5], m[10], m[12], m[13], m[14]);
     }
 
+    /** Painted pixels of the current framebuffer, against the sky the frame was cleared to. */
+    int paintedNow() {
+        ByteBuffer image = MemoryUtil.memAlloc(this.width * this.height * 4);
+        readBack(image);
+        int count = painted(image, this.width, this.height, 0x78A7FF);
+        MemoryUtil.memFree(image);
+        return count;
+    }
+
     /** Reads the framebuffer back, which is how the report proves a picture was drawn and not skipped. */
     void readBack(ByteBuffer target) {
         GL11.glReadPixels(0, 0, this.width, this.height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, target);

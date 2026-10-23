@@ -137,51 +137,29 @@ final class GlBenchmarkMain {
                 kind, baseFps, fastFps, fastFps / Math.max(1e-9, baseFps),
                 baseDraws, renderer.glDraws, baseMulti, renderer.glMultiDraws,
                 baseRanges, renderer.glRanges, baseTriangles, renderer.glTriangles, renderer.glUploads));
-        // One frame with back-face culling switched off. If coverage jumps, the winding is wrong and
-        // culling was eating the world; if it does not, the geometry never reached the framebuffer and
-        // the winding was never the question.
-        renderer.debugNoCull = true;
-        renderer.debugNoMultiDraw = true;
-        renderer.debugNoDepth = true;
-        renderer.invalidateState();
-        BaselinePipeline diagnostic = new BaselinePipeline();
-        diagnostic.prepare(scene, assets);
-        scene.view(0, aspect, view);
-        renderer.setCamera(view.x, view.y, view.z,
-                view.rightX, view.rightY, view.rightZ,
-                view.upX, view.upY, view.upZ,
-                view.fwdX, view.fwdY, view.fwdZ,
-                view.nearHalfWidth, view.nearHalfHeight, view.near);
-        renderer.setViewProjection(view.viewProjection);
-        renderer.setProjection(view.near, view.nearHalfWidth, view.nearHalfHeight, view.far);
-        diagnostic.renderFrame(scene, assets, renderer, view, 0);
-        renderer.endFrame();
-        ByteBuffer noCullImage = MemoryUtil.memAlloc(WIDTH * HEIGHT * 4);
-        renderer.readBack(noCullImage);
-        int noCullPainted = GlRaster.painted(noCullImage, WIDTH, HEIGHT, sky);
-        // The same range again, through a vertex array made now rather than at startup.
-        renderer.debugRedrawOpaqueRange();
-        renderer.readBack(noCullImage);
-        int redrawPainted = GlRaster.painted(noCullImage, WIDTH, HEIGHT, sky);
-        // The same section, one face orientation at a time, with culling on.
-        renderer.debugProbeOpaque(GL11.GL_CCW);
-        renderer.readBack(noCullImage);
-        int ccwPainted = GlRaster.painted(noCullImage, WIDTH, HEIGHT, sky);
-        renderer.debugProbeOpaque(GL11.GL_CW);
-        renderer.readBack(noCullImage);
-        int cwPainted = GlRaster.painted(noCullImage, WIDTH, HEIGHT, sky);
-        MemoryUtil.memFree(noCullImage);
+        // Frame zero four ways. Culling, the depth test and the multi-draw have each been suspected and
+        // each cleared in isolation, but never against each other with correct ranges: every earlier
+        // combination was measured while the ranges were still counted in floats. Coverage is compared
+        // against the software rasteriser's frame zero, so the configurations are compared with each
+        // other and not with a frame from a different camera angle.
+        int allOn = diagFrame(scene, assets, renderer, view, aspect, true, true, true);
+        int noMulti = diagFrame(scene, assets, renderer, view, aspect, true, true, false);
+        int noDepth = diagFrame(scene, assets, renderer, view, aspect, true, false, true);
+        int bare = diagFrame(scene, assets, renderer, view, aspect, false, false, false);
+        ByteBuffer diagImage = MemoryUtil.memAlloc(WIDTH * HEIGHT * 4);
+        renderer.readBack(diagImage);
+        int lastDiag = GlRaster.painted(diagImage, WIDTH, HEIGHT, sky);
+        MemoryUtil.memFree(diagImage);
 
         System.out.println(String.format(Locale.ROOT,
                 "GLBENCHPAINT scene=%d glBase=%d glFast=%d softBase=%d softFast=%d diffPercent=%.1f"
                         + " diag=%d mvpLoc=%d err=0x%x tv0=%d batch=%d range0=%d,%d"
-                        + " redraw=%d opqRange=%d,%d ccw=%d cw=%d",
+                        + " d(cull,depth,multi)=%d d(noMulti)=%d d(noDepth)=%d d(bare)=%d",
                 kind, basePainted, fastPainted, softBase, softFast, diff,
-                noCullPainted, renderer.mvpLocation(), GL11.glGetError(),
+                lastDiag, renderer.mvpLocation(), GL11.glGetError(),
                 renderer.terrainVertices(0), renderer.lastBatchSize,
                 renderer.lastRangeFirst, renderer.lastRangeCount,
-                redrawPainted, renderer.opaqueProbeFirst, renderer.opaqueProbeCount,
-                ccwPainted, cwPainted));
+                allOn, noMulti, noDepth, bare));
         float[] probe = renderer.probeVertex();
         System.out.println("GLBENCHMATRIX scene=" + kind
                 + " vertex=" + probe[0] + "," + probe[1] + "," + probe[2]
@@ -235,5 +213,31 @@ final class GlBenchmarkMain {
                 view.nearHalfWidth, view.nearHalfHeight, view.near);
         pipeline.renderFrame(scene, assets, renderer, view, 0);
         return renderer.drawnPixels();
+    }
+
+    /** Renders frame zero once under one combination of the three switches and says how much it painted. */
+    private static int diagFrame(Scene scene, Assets assets, GlRaster renderer, Scene.View view,
+            float aspect, boolean cull, boolean depth, boolean multi) {
+        renderer.debugNoCull = !cull;
+        renderer.debugNoDepth = !depth;
+        renderer.debugNoMultiDraw = !multi;
+        renderer.invalidateState();
+        BaselinePipeline pipeline = new BaselinePipeline();
+        pipeline.prepare(scene, assets);
+        scene.view(0, aspect, view);
+        applyView(renderer, view);
+        pipeline.renderFrame(scene, assets, renderer, view, 0);
+        renderer.endFrame();
+        return renderer.paintedNow();
+    }
+
+    private static void applyView(GlRaster renderer, Scene.View view) {
+        renderer.setCamera(view.x, view.y, view.z,
+                view.rightX, view.rightY, view.rightZ,
+                view.upX, view.upY, view.upZ,
+                view.fwdX, view.fwdY, view.fwdZ,
+                view.nearHalfWidth, view.nearHalfHeight, view.near);
+        renderer.setViewProjection(view.viewProjection);
+        renderer.setProjection(view.near, view.nearHalfWidth, view.nearHalfHeight, view.far);
     }
 }
