@@ -313,7 +313,6 @@ class GlRaster extends SoftRenderer {
         // clear value is zero. The projection is the one ViewProjection builds, and clip control puts the
         // depth range on [0, 1] to match it rather than letting GL rescale it into [-1, 1].
         GL45.glClipControl(GL45.GL_LOWER_LEFT, GL45.GL_ZERO_TO_ONE);
-        GL11.glDepthFunc(GL11.GL_GREATER);
         // Clockwise, which looks like a typo and is not. Screen x grows with right.p and screen y with
         // up.p, and the camera looks along forward, so the frame the screen is drawn in is
         // (right, up, -forward) -- left handed, because (right, up, forward) is right handed. A triangle
@@ -547,6 +546,24 @@ class GlRaster extends SoftRenderer {
                         + vp[8 + row] * m2 + vp[12 + row] * m3;
             }
         }
+        // Turn the depth row round: z' = w - z, so ndc z' is 1 - ndc z, near is 0 and far is 1.
+        //
+        // ViewProjection is reversed-Z on [0, 1] because the occlusion culler wants nearer to be larger
+        // and a Vulkan D32_SFLOAT buffer makes that exact. This driver path is not that. It is a 24 bit
+        // integer depth buffer behind a GL default clear value of 1.0 and a default comparison of
+        // GL_LESS, and with near 0.1 against far 190 the reversed values land between 0.0005 and 0.01 --
+        // which is where the last four runs went to die, with the driver reporting the clear value and
+        // the comparison it had been given and every fragment in the world failing anyway. Standard Z
+        // costs nothing here: the two pipelines are compared with each other on the same driver, and
+        // neither of them is served by the depth precision.
+        float z0 = out[2];
+        float z1 = out[6];
+        float z2 = out[10];
+        float z3 = out[14];
+        out[2] = out[3] - z0;
+        out[6] = out[7] - z1;
+        out[10] = out[11] - z2;
+        out[14] = out[15] - z3;
         this.matrixBuffer.clear();
         this.matrixBuffer.put(out);
         this.matrixBuffer.flip();
@@ -887,16 +904,31 @@ class GlRaster extends SoftRenderer {
         // and the default comparison is GL_LESS, so either half reverting on its own makes every fragment
         // in the world fail the test while the GUI -- which has the depth test off -- keeps drawing.
         // That is exactly the picture this backend produced for a dozen runs.
-        GL11.glClearDepth(0.0);
-        GL11.glDepthFunc(GL11.GL_GREATER);
+        GL11.glClearDepth(1.0);
+        GL11.glDepthFunc(GL11.GL_LESS);
         GL11.glViewport(0, 0, this.width, this.height);
         GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
     }
 
-    /** What the driver actually holds, so a state that reverted says so instead of being guessed at. */
+    /**
+     * What the driver holds, and what is in the depth buffer after a clear.
+     *
+     * <p>The last four runs were spent on a depth test that rejected everything while the driver reported
+     * the exact clear value and comparison it had been handed. Reporting the buffer itself is the part
+     * that was missing: a clear value that is right and a buffer that is not cleared to it are different
+     * faults with the same symptoms.
+     */
     String debugDepthState() {
-        return String.format(java.util.Locale.ROOT, "clearDepth=%.2f depthFunc=0x%x",
-                GL11.glGetFloat(GL11.GL_DEPTH_CLEAR_VALUE), GL11.glGetInteger(GL11.GL_DEPTH_FUNC));
+        GL11.glClearDepth(1.0);
+        GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
+        ByteBuffer pixel = MemoryUtil.memAlloc(4);
+        GL11.glReadPixels(this.width / 2, this.height / 2, 1, 1,
+                GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, pixel);
+        float afterClear = pixel.getFloat(0);
+        MemoryUtil.memFree(pixel);
+        return String.format(java.util.Locale.ROOT, "clearDepth=%.2f depthFunc=0x%x bufferAfterClear=%.4f",
+                GL11.glGetFloat(GL11.GL_DEPTH_CLEAR_VALUE), GL11.glGetInteger(GL11.GL_DEPTH_FUNC),
+                afterClear);
     }
 
     /** Submits the GUI quads collected during the frame as one draw. */
