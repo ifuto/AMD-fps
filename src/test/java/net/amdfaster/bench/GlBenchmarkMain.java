@@ -154,6 +154,7 @@ final class GlBenchmarkMain {
                 view.fwdX, view.fwdY, view.fwdZ,
                 view.nearHalfWidth, view.nearHalfHeight, view.near);
         renderer.setViewProjection(view.viewProjection);
+        renderer.setProjection(view.near, view.nearHalfWidth, view.nearHalfHeight, view.far);
         diagnostic.renderFrame(scene, assets, renderer, view, 0);
         renderer.endFrame();
         ByteBuffer noCullImage = MemoryUtil.memAlloc(WIDTH * HEIGHT * 4);
