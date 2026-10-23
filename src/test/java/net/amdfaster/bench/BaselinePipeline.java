@@ -104,7 +104,7 @@ final class BaselinePipeline implements Pipeline {
         particles(scene, renderer, view, viewMatrix);
         clouds(renderer);
         if (scene.raining) {
-            rain(scene, renderer, viewMatrix, frame);
+            rain(scene, renderer, view, viewMatrix, frame);
         }
         animateTextures(assets, frame);
         gui(renderer, assets);
@@ -217,7 +217,8 @@ final class BaselinePipeline implements Pipeline {
         renderer.drawMesh(this.cloudMesh, SoftRenderer.BLEND, this.textures);
     }
 
-    private void rain(Scene scene, SoftRenderer renderer, float[] viewMatrix, int frame) {
+    private void rain(Scene scene, SoftRenderer renderer, Scene.View view, float[] viewMatrix,
+            int frame) {
         // Rebuilt, not moved. This is the vanilla path and it is the whole cost the cache removes.
         this.rainMesh = Passes.rain(this.random);
         this.rainRebuilds++;
