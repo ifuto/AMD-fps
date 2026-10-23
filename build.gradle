@@ -60,9 +60,15 @@ dependencies {
     // Without this the shaders are text nobody has checked, and a typo in a compute shader
     // surfaces as a driver error at runtime on someone else's machine.
     testImplementation "org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}"
+    // The render benchmark runs both pipelines through a real OpenGL implementation, because a software
+    // rasteriser has no driver and so cannot price a draw call. lwjgl-egl is how a context is created
+    // with no display server and no device node present.
+    testImplementation "org.lwjgl:lwjgl-opengl:${project.lwjgl_version}"
+    testImplementation "org.lwjgl:lwjgl-egl:${project.lwjgl_version}"
     for (String nativesClassifier in ["natives-linux", "natives-windows", "natives-macos", "natives-macos-arm64"]) {
         testRuntimeOnly "org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}:${nativesClassifier}"
         testRuntimeOnly "org.lwjgl:lwjgl:${project.lwjgl_version}:${nativesClassifier}"
+        testRuntimeOnly "org.lwjgl:lwjgl-opengl:${project.lwjgl_version}:${nativesClassifier}"
     }
 }
 
