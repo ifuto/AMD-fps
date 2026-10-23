@@ -919,16 +919,26 @@ class GlRaster extends SoftRenderer {
      * faults with the same symptoms.
      */
     String debugDepthState() {
+        ByteBuffer pixel = MemoryUtil.memAlloc(4);
         GL11.glClearDepth(1.0);
         GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
-        ByteBuffer pixel = MemoryUtil.memAlloc(4);
         GL11.glReadPixels(this.width / 2, this.height / 2, 1, 1,
                 GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, pixel);
-        float afterClear = pixel.getFloat(0);
+        float atOne = pixel.getFloat(0);
+        // Cleared again to a different value. If the read follows the clear value, the read is real and
+        // the buffer really is being cleared, and the depth test is failing for some other reason. If it
+        // does not follow, the read is reporting uninitialised memory and says nothing at all -- which is
+        // what two different scenes reporting the same 0.6164 already suggested.
+        GL11.glClearDepth(0.25);
+        GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
+        GL11.glReadPixels(this.width / 2, this.height / 2, 1, 1,
+                GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, pixel);
+        float atQuarter = pixel.getFloat(0);
         MemoryUtil.memFree(pixel);
-        return String.format(java.util.Locale.ROOT, "clearDepth=%.2f depthFunc=0x%x bufferAfterClear=%.4f",
-                GL11.glGetFloat(GL11.GL_DEPTH_CLEAR_VALUE), GL11.glGetInteger(GL11.GL_DEPTH_FUNC),
-                afterClear);
+        GL11.glClearDepth(1.0);
+        return String.format(java.util.Locale.ROOT,
+                "depthFunc=0x%x readAt1=%.4f readAt0.25=%.4f err=0x%x",
+                GL11.glGetInteger(GL11.GL_DEPTH_FUNC), atOne, atQuarter, GL11.glGetError());
     }
 
     /** Submits the GUI quads collected during the frame as one draw. */
