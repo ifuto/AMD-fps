@@ -97,6 +97,8 @@ final class AmdFasterPipeline implements Pipeline {
     private boolean[] coarseLastFrame = new boolean[0];
     private long lastWaterFrame = -1;
     private long lastLavaFrame = -1;
+    private float[] hudQuads;
+    private int hudQuadCount;
     private boolean chestBaked;
     private double lidAngle;
 
@@ -532,23 +534,34 @@ final class AmdFasterPipeline implements Pipeline {
 
     private void gui(SoftRenderer renderer, Assets assets, int frame) {
         // Rebuilt when the player acts or the debug overlay opens, which for a stationary camera is never.
-        if (this.hud.isEmpty() || this.hudScheduler.shouldUpdate(frame % 240 == 0, false)) {
+        // What is rebuilt is a vertex buffer, not a list of draw calls: the batching happens here, once,
+        // and the frame below submits the result rather than deciding anything.
+        if (this.hudQuads == null || this.hudScheduler.shouldUpdate(frame % 240 == 0, false)) {
             this.hud.clear();
             this.hudElements += Passes.hudElements(renderer.width, renderer.height,
                     assets.guiAtlas, this.hud);
+            List<GuiBatcher.Batch> batches = this.guiBatcher.batch(this.hud);
+            this.guiBatches += batches.size();
+            int count = this.hud.size();
+            this.hudQuads = new float[count * 8];
+            this.hudQuadCount = count;
+            for (int i = 0; i < count; i++) {
+                GuiBatcher.Element element = this.hud.get(i);
+                Passes.hudUv(i, this.uv);
+                int b = i * 8;
+                this.hudQuads[b] = element.x();
+                this.hudQuads[b + 1] = element.y();
+                this.hudQuads[b + 2] = element.x() + element.width();
+                this.hudQuads[b + 3] = element.y() + element.height();
+                this.hudQuads[b + 4] = this.uv[0];
+                this.hudQuads[b + 5] = this.uv[1];
+                this.hudQuads[b + 6] = this.uv[2];
+                this.hudQuads[b + 7] = this.uv[3];
+            }
             this.hudRebuilds++;
         }
-        int count = this.hud.size();
-        List<GuiBatcher.Batch> batches = this.guiBatcher.batch(this.hud);
-        this.guiBatches += batches.size();
-        Texture atlas = assets.textures[assets.guiAtlas];
-        for (int i = 0; i < count; i++) {
-            GuiBatcher.Element element = this.hud.get(i);
-            Passes.hudUv(i, this.uv);
-            renderer.drawScreenQuad(atlas, this.uv[0], this.uv[1], this.uv[2], this.uv[3],
-                    element.x(), element.y(), element.x() + element.width(),
-                    element.y() + element.height(), 1.0f);
-        }
+        renderer.drawScreenBatch(this.hudQuads, this.hudQuadCount,
+                assets.textures[assets.guiAtlas], 1.0f);
     }
 
     /** Which way the camera looks horizontally, in the constants the face mask uses. */

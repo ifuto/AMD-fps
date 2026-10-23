@@ -547,6 +547,69 @@ final class SoftRenderer {
         return count;
     }
 
+    /**
+     * Draws a batch of screen-space quads in one submission.
+     *
+     * <p>Eight floats per quad -- x0, y0, x1, y1, u0, v0, u1, v1 -- and one call for all of them. This is
+     * what batching actually is: not fewer pixels, because the pixels are the pixels, but one buffer, one
+     * state setup and one dispatch instead of six hundred. A software rasteriser feels that difference as
+     * method calls and bounds arithmetic rather than as driver overhead, so it understates it; it does not
+     * invent it.
+     */
+    void drawScreenBatch(float[] quads, int quadCount, Texture texture, float brightness) {
+        if (quadCount <= 0) {
+            return;
+        }
+        this.drawCalls++;
+        int texW = texture.width;
+        int texH = texture.height;
+        int[] texels = texture.argb;
+        for (int q = 0; q < quadCount; q++) {
+            int b = q * 8;
+            int x0 = (int) quads[b];
+            int y0 = (int) quads[b + 1];
+            int x1 = (int) quads[b + 2];
+            int y1 = (int) quads[b + 3];
+            float u0 = quads[b + 4];
+            float v0 = quads[b + 5];
+            float du = (quads[b + 6] - u0) / Math.max(1, x1 - x0);
+            float dv = (quads[b + 7] - v0) / Math.max(1, y1 - y0);
+            int px0 = Math.max(0, x0);
+            int py0 = Math.max(0, y0);
+            int px1 = Math.min(this.width - 1, x1);
+            int py1 = Math.min(this.height - 1, y1);
+            for (int py = py0; py <= py1; py++) {
+                int ty = ((int) Math.floor(v0 + (py - y0) * dv)) & (texH - 1);
+                int rowBase = py * this.width;
+                for (int px = px0; px <= px1; px++) {
+                    this.pixelsTested++;
+                    if (!this.fillEnabled) {
+                        continue;
+                    }
+                    int tx = ((int) Math.floor(u0 + (px - x0) * du)) & (texW - 1);
+                    int texel = texels[ty * texW + tx];
+                    int alpha = texel >>> 24;
+                    if (alpha == 0) {
+                        continue;
+                    }
+                    int r = (int) (((texel >> 16) & 0xFF) * brightness);
+                    int g = (int) (((texel >> 8) & 0xFF) * brightness);
+                    int blue = (int) ((texel & 0xFF) * brightness);
+                    if (alpha < 255) {
+                        this.pixelsBlended++;
+                        int dst = this.colour[rowBase + px];
+                        int inv = 255 - alpha;
+                        r = (r * alpha + ((dst >> 16) & 0xFF) * inv) / 255;
+                        g = (g * alpha + ((dst >> 8) & 0xFF) * inv) / 255;
+                        blue = (blue * alpha + (dst & 0xFF) * inv) / 255;
+                    }
+                    this.colour[rowBase + px] = 0xFF000000 | (r << 16) | (g << 8) | blue;
+                    this.pixelsShaded++;
+                }
+            }
+        }
+    }
+
     /** A cheap content fingerprint, so a report can show the two pipelines drew comparable scenes. */
     long checksum() {
         long sum = 1469598103934665603L;
