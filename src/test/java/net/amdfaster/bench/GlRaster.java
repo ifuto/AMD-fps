@@ -138,6 +138,8 @@ class GlRaster extends SoftRenderer {
     private final IntBuffer firstBuffer = MemoryUtil.memAllocInt(8192);
     private final IntBuffer countBuffer = MemoryUtil.memAllocInt(8192);
     private final FloatBuffer matrixBuffer = MemoryUtil.memAllocFloat(16);
+    /** One float, for the explicit depth clear. */
+    private final FloatBuffer depthClear = MemoryUtil.memAllocFloat(1);
 
     private float[] screenData = new float[5 * 6 * 512];
     private int screenFloats;
@@ -929,6 +931,15 @@ class GlRaster extends SoftRenderer {
         GL11.glDepthFunc(GL11.GL_LESS);
         GL11.glViewport(0, 0, this.width, this.height);
         GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+        // And again, explicitly. glClear with the depth bit was not clearing anything: the comparison
+        // itself works -- GL_ALWAYS paints the whole scene and GL_NEVER paints only the GUI -- but
+        // GL_LESS against a buffer cleared to 1.0 rejected every fragment in the world, and so did
+        // GL_GREATER against the same buffer cleared to 0.0. Only one buffer content is consistent with
+        // both, and it is the 0.6164 that a read of it kept returning and that I twice wrote off as
+        // uninitialised memory because clearing to 0.25 did not change it. It was the truth: the buffer
+        // holds what the last frame left in it, and every frame is depth tested against the one before.
+        this.depthClear.put(0, 1.0f);
+        GL30.glClearBufferfv(0x8200, 0, this.depthClear);
     }
 
     /**
