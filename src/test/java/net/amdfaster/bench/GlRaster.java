@@ -113,6 +113,7 @@ class GlRaster extends SoftRenderer {
     private final int screenVbo;
     private final int[] terrainVao = new int[3];
     private final int[] terrainVbo = new int[3];
+    private final int[] terrainVertexCount = new int[3];
 
     private final LinkedHashMap<Mesh, int[]> meshCache = new LinkedHashMap<>(256, 0.75f, false) {
         @Override
@@ -159,6 +160,26 @@ class GlRaster extends SoftRenderer {
      * diagnosis beats a third guess.
      */
     boolean debugNoCull;
+
+    /**
+     * Submits every terrain range as its own {@code glDrawArrays} instead of one multi-draw.
+     *
+     * <p>The ranges demonstrably reach the driver -- the report counts eleven thousand of them -- and the
+     * picture is still empty, so either the ranges describe nothing or the call that consumes them does
+     * nothing. Drawing them one at a time separates those, and it is also the fallback this backend uses
+     * on a driver with no multi-draw.
+     */
+    boolean debugNoMultiDraw;
+
+    /** Vertex count of a terrain layer buffer, so a report can show whether anything was baked into it. */
+    int terrainVertices(int layer) {
+        return this.terrainVertexCount[layer];
+    }
+
+    /** Ranges in the batch most recently submitted, and the first of them. */
+    int lastBatchSize;
+    int lastRangeFirst;
+    int lastRangeCount;
 
     // ---- reported -------------------------------------------------------------------------------
     long glDraws;
@@ -482,6 +503,7 @@ class GlRaster extends SoftRenderer {
                     this.terrainRange.put(mesh, new int[] {layer, start, at - start});
                 }
             }
+            this.terrainVertexCount[layer] = at;
             FloatBuffer buffer = MemoryUtil.memAllocFloat(data.length);
             buffer.put(data);
             buffer.flip();
@@ -564,6 +586,16 @@ class GlRaster extends SoftRenderer {
         GL20.glUniformMatrix4fv(this.uniformMvp, false, this.matrixBuffer);
         GL20.glUniform1f(this.uniformCut, this.batchState == CUTOUT ? 0.5f : 0.0f);
         GL30.glBindVertexArray(this.terrainVao[layer]);
+        this.lastBatchSize = this.batchSize;
+        this.lastRangeFirst = this.firstBuffer.get(0);
+        this.lastRangeCount = this.countBuffer.get(0);
+        if (this.debugNoMultiDraw) {
+            for (int i = 0; i < this.batchSize; i++) {
+                GL11.glDrawArrays(GL11.GL_TRIANGLES, this.firstBuffer.get(i), this.countBuffer.get(i));
+            }
+            this.glDraws += this.batchSize;
+            return;
+        }
         this.firstBuffer.limit(this.batchSize);
         this.countBuffer.limit(this.batchSize);
         GL14.glMultiDrawArrays(GL11.GL_TRIANGLES, this.firstBuffer, this.countBuffer);

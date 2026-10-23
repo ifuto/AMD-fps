@@ -50,8 +50,12 @@ class GlRenderBenchmark {
         int[] glFast = new int[3];
         int[] softBase = new int[3];
         double[] diff = new double[3];
-        int[] noCull = new int[3];
         int[] mvpLoc = new int[3];
+        int[] diag = new int[3];
+        int[] tv0 = new int[3];
+        int[] batch = new int[3];
+        int[] rangeFirst = new int[3];
+        int[] rangeCount = new int[3];
         String renderer = "?";
         int scenes = 0;
 
@@ -79,8 +83,14 @@ class GlRenderBenchmark {
                 glFast[scene] = (int) number(flat, "glFast=");
                 softBase[scene] = (int) number(flat, "softBase=");
                 diff[scene] = number(flat, "diffPercent=");
-                noCull[scene] = (int) number(flat, "noCull=");
                 mvpLoc[scene] = (int) number(flat, "mvpLoc=");
+                diag[scene] = (int) number(flat, "diag=");
+                tv0[scene] = (int) number(flat, "tv0=");
+                batch[scene] = (int) number(flat, "batch=");
+                rangeFirst[scene] = (int) number(flat, "range0=");
+                String tail = flat.substring(flat.indexOf("range0=") + 7);
+                rangeCount[scene] = (int) number(tail.contains(",") ? tail.substring(tail.indexOf(',') + 1)
+                        : tail, "");
             }
         }
 
@@ -96,11 +106,14 @@ class GlRenderBenchmark {
         report.append(" | ").append(shorten(renderer, 90));
         for (int scene = 0; scene < 3; scene++) {
             report.append(String.format(Locale.ROOT,
-                    " | %c draws %d->%d ranges %d->%d glpx %d/%d softpx %d noCull %d mvp %d diff %.1f%%",
+                    " | %c draws %d->%d ranges %d->%d glpx %d/%d softpx %d mvp %d diff %.1f%%",
                     (char) ('A' + scene), baseDraws[scene], fastDraws[scene],
                     baseRanges[scene], fastRanges[scene],
-                    glBase[scene], glFast[scene], softBase[scene], noCull[scene], mvpLoc[scene],
-                    diff[scene]));
+                    glBase[scene], glFast[scene], softBase[scene], mvpLoc[scene], diff[scene]));
+            report.append(String.format(Locale.ROOT,
+                    " | %c diag(noCull,noMulti)=%d terrainVerts=%d batch=%d range0=%d+%d",
+                    (char) ('A' + scene), diag[scene], tv0[scene], batch[scene],
+                    rangeFirst[scene], rangeCount[scene]));
         }
 
         // The picture has to survive the change of backend before the frame rate means anything. Coverage

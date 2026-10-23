@@ -141,6 +141,7 @@ final class GlBenchmarkMain {
         // culling was eating the world; if it does not, the geometry never reached the framebuffer and
         // the winding was never the question.
         renderer.debugNoCull = true;
+        renderer.debugNoMultiDraw = true;
         renderer.invalidateState();
         BaselinePipeline diagnostic = new BaselinePipeline();
         diagnostic.prepare(scene, assets);
@@ -160,9 +161,11 @@ final class GlBenchmarkMain {
 
         System.out.println(String.format(Locale.ROOT,
                 "GLBENCHPAINT scene=%d glBase=%d glFast=%d softBase=%d softFast=%d diffPercent=%.1f"
-                        + " noCull=%d mvpLoc=%d err=0x%x",
+                        + " diag=%d mvpLoc=%d err=0x%x tv0=%d batch=%d range0=%d,%d",
                 kind, basePainted, fastPainted, softBase, softFast, diff,
-                noCullPainted, renderer.mvpLocation(), GL11.glGetError()));
+                noCullPainted, renderer.mvpLocation(), GL11.glGetError(),
+                renderer.terrainVertices(0), renderer.lastBatchSize,
+                renderer.lastRangeFirst, renderer.lastRangeCount));
         renderer.close();
     }
 
