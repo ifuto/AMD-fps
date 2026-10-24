@@ -113,7 +113,6 @@ class CpuRenderBenchmark {
         Result fastFill = measure(AmdFasterPipeline::new, scene, renderer, aspect, true);
         Result baseCpu = measure(BaselinePipeline::new, scene, renderer, aspect, false);
         Result fastCpu = measure(AmdFasterPipeline::new, scene, renderer, aspect, false);
-        AmdFasterPipeline timedFast = (AmdFasterPipeline) lastPipeline;
 
         double fillRatio = fastFill.fps / baseFill.fps;
         double cpuRatio = fastCpu.fps / baseCpu.fps;
@@ -181,6 +180,9 @@ class CpuRenderBenchmark {
 
     private static String report(Scene scene, Result base, Result fast, Result baseCpu, Result fastCpu,
             double fillRatio, double cpuRatio, double retention) {
+        // The pipeline the last measure() ran, which is the AMD-Faster one, and the reason this method
+        // can quote its stage timings without them being threaded through its signature.
+        AmdFasterPipeline timed = (AmdFasterPipeline) lastPipeline;
         // The counters live on the pipelines, which are gone by the time the report is built, so the
         // per-pass detail is collected in a second untimed pass over the same scene. Cheap, and it keeps
         // the timed loop free of bookkeeping.
@@ -212,12 +214,12 @@ class CpuRenderBenchmark {
                 detail.baseRainDrops, detail.fastRainDrops,
                 detail.baseTextureUpdates, detail.fastTextureUploads,
                 scene.worldBlocks(), assets.textureCount(), assets.texelCount(),
-                timedFast.nsTerrain / 1000.0 / fastCpu.frames,
-                timedFast.nsOcclusion / 1000.0 / fastCpu.frames,
-                timedFast.nsEntities / 1000.0 / fastCpu.frames,
-                timedFast.nsParticles / 1000.0 / fastCpu.frames,
-                timedFast.nsClouds / 1000.0 / fastCpu.frames,
-                timedFast.nsGui / 1000.0 / fastCpu.frames);
+                timed.nsTerrain / 1000.0 / fastCpu.frames,
+                timed.nsOcclusion / 1000.0 / fastCpu.frames,
+                timed.nsEntities / 1000.0 / fastCpu.frames,
+                timed.nsParticles / 1000.0 / fastCpu.frames,
+                timed.nsClouds / 1000.0 / fastCpu.frames,
+                timed.nsGui / 1000.0 / fastCpu.frames);
     }
 
     /** One untimed frame per pipeline, for the counters the report quotes. */
