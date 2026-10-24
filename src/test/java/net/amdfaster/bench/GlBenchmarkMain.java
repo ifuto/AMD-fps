@@ -101,10 +101,8 @@ final class GlBenchmarkMain {
      * different clear path, and the readback here says whether the value survives.
      */
     private static void reportSurface() {
-        System.out.println("GLBENCHFBO surface=default depthBits="
-                + GL11.glGetInteger(GL11.GL_DEPTH_BITS)
-                + " colorBits=" + GL11.glGetInteger(GL11.GL_RED_BITS)
-                + " err=0x" + Integer.toHexString(GL11.glGetError()));
+        System.out.println("GLBENCHFBO surface=default err=0x"
+                + Integer.toHexString(GL11.glGetError()));
     }
 
     private static void run(int kind, Assets assets, ByteBuffer baseImage, ByteBuffer fastImage) {
@@ -156,6 +154,11 @@ final class GlBenchmarkMain {
         // fail, and to something that cannot pass. Those two bracket the whole question.
         int always = diagFrame(scene, assets, renderer, view, aspect, true, true, true, GL11.GL_ALWAYS);
         int never = diagFrame(scene, assets, renderer, view, aspect, true, true, true, GL11.GL_NEVER);
+        // And the two inclusive ones. GL_LESS and GL_GREATER both rejecting the world says the depth
+        // being tested is not on either side of what is in the buffer, which for a finite value is
+        // impossible. Inclusive comparisons separate that from a buffer that merely equals the fragment.
+        int lequal = diagFrame(scene, assets, renderer, view, aspect, true, true, true, GL11.GL_LEQUAL);
+        int gequal = diagFrame(scene, assets, renderer, view, aspect, true, true, true, GL11.GL_GEQUAL);
         ByteBuffer diagImage = MemoryUtil.memAlloc(WIDTH * HEIGHT * 4);
         renderer.readBack(diagImage);
         int lastDiag = GlRaster.painted(diagImage, WIDTH, HEIGHT, sky);
@@ -164,12 +167,13 @@ final class GlBenchmarkMain {
         System.out.println(String.format(Locale.ROOT,
                 "GLBENCHPAINT scene=%d glBase=%d glFast=%d softBase=%d softFast=%d diffPercent=%.1f"
                         + " diag=%d mvpLoc=%d err=0x%x tv0=%d batch=%d range0=%d,%d"
-                        + " d(all)=%d d(noDepth)=%d d(bare)=%d d(ALWAYS)=%d d(NEVER)=%d %s",
+                        + " d(all)=%d d(noDepth)=%d d(bare)=%d d(ALWAYS)=%d d(NEVER)=%d"
+                        + " d(LEQUAL)=%d d(GEQUAL)=%d %s",
                 kind, basePainted, fastPainted, softBase, softFast, diff,
                 lastDiag, renderer.mvpLocation(), GL11.glGetError(),
                 renderer.terrainVertices(0), renderer.lastBatchSize,
                 renderer.lastRangeFirst, renderer.lastRangeCount,
-                allOn, noDepth, bare, always, never, renderer.debugDepthState()));
+                allOn, noDepth, bare, always, never, lequal, gequal, renderer.debugDepthState()));
         float[] probe = renderer.probeVertex();
         System.out.println("GLBENCHMATRIX scene=" + kind
                 + " vertex=" + probe[0] + "," + probe[1] + "," + probe[2]

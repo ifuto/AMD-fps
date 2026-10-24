@@ -111,6 +111,19 @@ class GlRaster extends SoftRenderer {
     // ---- objects --------------------------------------------------------------------------------
     private final int screenVao;
     private final int screenVbo;
+
+    /**
+     * A full-screen quad at the far plane, and the program that puts it there.
+     *
+     * <p>This backend's depth buffer will not take a clear: neither glClear with the depth bit nor
+     * glClearBufferfv writes it, and no call that builds the attachment reports an error, so the buffer
+     * holds whatever the previous frame left and every fragment in the world fails a depth test against
+     * it. It is written by drawing to it instead -- one quad, comparison forced to always pass, colour
+     * writes masked off.
+     */
+    private final int depthClearVao;
+
+    private final int depthClearProgram;
     private final int[] terrainVao = new int[3];
     private final int[] terrainVbo = new int[3];
     private final int[] terrainVertexCount = new int[3];
@@ -262,6 +275,9 @@ class GlRaster extends SoftRenderer {
     /** First vertex of the opaque terrain layer, kept so a report can push it through the matrix. */
     private final float[] probeVertex = new float[3];
 
+    /** Set once a frame, when the first opaque range has been drawn and its first vertex read back. */
+    private boolean probeCaptured;
+
     /** Vertex count of a terrain layer buffer, so a report can show whether anything was baked into it. */
     int terrainVertices(int layer) {
         return this.terrainVertexCount[layer];
@@ -345,6 +361,24 @@ class GlRaster extends SoftRenderer {
         // GL_CCW here would reject every front face in the world. The first run of this backend did
         // exactly that: both pipelines painted only their clouds, their rain and their GUI, and the
         // coverage check against the software rasteriser is what said so.
+        int depthClearVbo = GL15.glGenBuffers();
+        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, depthClearVbo);
+        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, new float[] {
+                -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, 1.0f,
+                -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f,
+        }, GL15.GL_STATIC_DRAW);
+        this.depthClearVao = GL30.glGenVertexArrays();
+        GL30.glBindVertexArray(this.depthClearVao);
+        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, depthClearVbo);
+        GL20.glEnableVertexAttribArray(0);
+        GL20.glVertexAttribPointer(0, 2, GL11.GL_FLOAT, false, 0, 0L);
+        this.depthClearProgram = link(
+                "#version 150 core\n"
+                        + "in vec2 aPos;\n"
+                        + "void main() { gl_Position = vec4(aPos, 1.0, 1.0); }\n",
+                "#version 150 core\n"
+                        + "out vec4 fragColor;\n"
+                        + "void main() { fragColor = vec4(0.0); }\n");
         GL11.glFrontFace(GL11.GL_CW);
         GL11.glCullFace(GL11.GL_BACK);
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
@@ -581,14 +615,18 @@ class GlRaster extends SoftRenderer {
         // the comparison it had been given and every fragment in the world failing anyway. Standard Z
         // costs nothing here: the two pipelines are compared with each other on the same driver, and
         // neither of them is served by the depth precision.
+        // Twice, not once. ViewProjection puts near at ndc z 1 and far at 0, and the window transform
+        // maps ndc [-1, 1] to window [0, 1], so z' = w - z would land the whole world in the top half of
+        // the depth buffer and throw away half of its 24 bits. z' = w - 2z maps near to -1 and far to +1,
+        // which is the range the driver was built for.
         float z0 = out[2];
         float z1 = out[6];
         float z2 = out[10];
         float z3 = out[14];
-        out[2] = out[3] - z0;
-        out[6] = out[7] - z1;
-        out[10] = out[11] - z2;
-        out[14] = out[15] - z3;
+        out[2] = out[3] - 2.0f * z0;
+        out[6] = out[7] - 2.0f * z1;
+        out[10] = out[11] - 2.0f * z2;
+        out[14] = out[15] - 2.0f * z3;
         this.matrixBuffer.clear();
         this.matrixBuffer.put(out);
         this.matrixBuffer.flip();
@@ -757,6 +795,19 @@ class GlRaster extends SoftRenderer {
         if (layer == OPAQUE) {
             this.opaqueProbeFirst = this.lastRangeFirst;
             this.opaqueProbeCount = this.lastRangeCount;
+            if (!this.probeCaptured && this.lastRangeCount > 0) {
+                // Read back the vertex the first range actually starts with, so the clip arithmetic is
+                // checked against a corner that is on screen rather than one that happens to be baked
+                // first. The buffer is already bound by the lines above.
+                FloatBuffer one = MemoryUtil.memAllocFloat(FLOATS_PER_VERTEX);
+                GL15.glGetBufferSubData(GL15.GL_ARRAY_BUFFER,
+                        (long) this.lastRangeFirst * FLOATS_PER_VERTEX * 4L, one);
+                this.probeVertex[0] = one.get(0);
+                this.probeVertex[1] = one.get(1);
+                this.probeVertex[2] = one.get(2);
+                MemoryUtil.memFree(one);
+                this.probeCaptured = true;
+            }
         }
         if (this.debugNoMultiDraw) {
             for (int i = 0; i < this.batchSize; i++) {
@@ -933,6 +984,8 @@ class GlRaster extends SoftRenderer {
         GL11.glDepthFunc(GL11.GL_LESS);
         GL11.glViewport(0, 0, this.width, this.height);
         GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+        clearDepthByQuad();
+        this.probeCaptured = false;
         // And again, explicitly. glClear with the depth bit was not clearing anything: the comparison
         // itself works -- GL_ALWAYS paints the whole scene and GL_NEVER paints only the GUI -- but
         // GL_LESS against a buffer cleared to 1.0 rejected every fragment in the world, and so did
@@ -972,11 +1025,16 @@ class GlRaster extends SoftRenderer {
         GL11.glReadPixels(this.width / 2, this.height / 2, 1, 1,
                 GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, pixel);
         float atQuarter = pixel.getFloat(0);
+        int readError = GL11.glGetError();
         MemoryUtil.memFree(pixel);
         GL11.glClearDepth(1.0);
+        // GL_FLOAT against a 24 bit depth buffer is not a legal glReadPixels pair, so the two reads above
+        // may be reporting an invalid operation and nothing else. The error is read after them, and the
+        // centre depth after the far plane quad says whether a depth write is visible at all.
         return String.format(java.util.Locale.ROOT,
-                "depthFunc=0x%x readAt1=%.4f readAt0.25=%.4f clearBufErr=0x%x",
-                GL11.glGetInteger(GL11.GL_DEPTH_FUNC), atOne, atQuarter, this.depthClearError);
+                "depthFunc=0x%x readAt1=%.4f readAt0.25=%.4f readErr=0x%x quadDepth=%.4f clearBufErr=0x%x",
+                GL11.glGetInteger(GL11.GL_DEPTH_FUNC), atOne, atQuarter, readError, centreDepth(),
+                this.depthClearError);
     }
 
     /** Submits the GUI quads collected during the frame as one draw. */
@@ -1097,7 +1155,14 @@ class GlRaster extends SoftRenderer {
                 cx, cy, cz, cw, cx / cw, cy / cw, cz / cw);
     }
 
-    /** The first vertex of the baked opaque terrain, in world space. */
+    /**
+     * The first vertex of the first range the opaque layer drew this frame, in world space.
+     *
+     * <p>It used to be the first vertex baked into the buffer, which belongs to whichever section was
+     * baked first and has no reason to be in front of the camera. It was behind it: the clip w it
+     * produced was -87.0, so the perspective divide mirrored it to an ndc that looked perfectly
+     * reasonable, and four runs were spent reading a matrix that was never wrong.
+     */
     float[] probeVertex() {
         return this.probeVertex;
     }
@@ -1116,6 +1181,36 @@ class GlRaster extends SoftRenderer {
         int count = painted(image, this.width, this.height, 0x78A7FF);
         MemoryUtil.memFree(image);
         return count;
+    }
+
+    /**
+     * Writes the far plane into every depth sample by drawing it, because this backend's depth buffer
+     * will not take a clear. The comparison is forced to always pass so what is already there cannot
+     * reject the write, colour writes are masked off so only depth changes, and the quad covers the
+     * whole viewport at clip z equal to clip w, which is the far plane.
+     */
+    private void clearDepthByQuad() {
+        GL11.glColorMask(false, false, false, false);
+        GL11.glDepthMask(true);
+        GL11.glDepthFunc(GL11.GL_ALWAYS);
+        GL11.glDisable(GL11.GL_CULL_FACE);
+        GL20.glUseProgram(this.depthClearProgram);
+        GL30.glBindVertexArray(this.depthClearVao);
+        GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 6);
+        GL11.glEnable(GL11.GL_CULL_FACE);
+        GL11.glColorMask(true, true, true, true);
+        GL11.glDepthFunc(GL11.GL_LESS);
+        GL30.glBindVertexArray(0);
+    }
+
+    /** The depth at the centre, so the parent test can say whether the far plane write landed. */
+    float centreDepth() {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            FloatBuffer depth = stack.mallocFloat(1);
+            GL11.glReadPixels(this.width / 2, this.height / 2, 1, 1, GL11.GL_DEPTH_COMPONENT,
+                    GL11.GL_FLOAT, depth);
+            return depth.get(0);
+        }
     }
 
     /** Reads the framebuffer back, which is how the report proves a picture was drawn and not skipped. */
