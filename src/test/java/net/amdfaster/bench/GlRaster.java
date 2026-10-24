@@ -401,6 +401,17 @@ class GlRaster extends SoftRenderer {
 
     // ---- atlas ----------------------------------------------------------------------------------
 
+    /**
+     * How many times each texture is repeated inside its atlas cell.
+     *
+     * <p>The mesher merges runs of coplanar faces into one quad and repeats the sprite across it, which
+     * needs the sprite to wrap. The software rasteriser wraps by masking the texel index. Here the atlas
+     * holds many sprites side by side, so wrapping the whole atlas would sample the neighbour; instead
+     * each sprite gets a cell sixteen of itself wide and tall, and a merged quad of up to sixteen tiles
+     * -- the width of a section, so the largest there is -- stays inside its own cell.
+     */
+    private static final int ATLAS_TILES = 16;
+
     /** Smallest power of two a shelf packer fits every texture into. */
     private static int atlasSide(Texture[] textures) {
         for (int side = 256; side <= 8192; side *= 2) {
@@ -417,16 +428,18 @@ class GlRaster extends SoftRenderer {
         int rowHeight = 0;
         for (int index : byHeight(textures)) {
             Texture texture = textures[index];
-            if (cursorX + texture.width > side) {
+            int cellW = texture.width * ATLAS_TILES;
+            int cellH = texture.height * ATLAS_TILES;
+            if (cursorX + cellW > side) {
                 cursorX = 0;
                 cursorY += rowHeight;
                 rowHeight = 0;
             }
-            if (cursorY + texture.height > side) {
+            if (cursorY + cellH > side) {
                 return false;
             }
-            cursorX += texture.width;
-            rowHeight = Math.max(rowHeight, texture.height);
+            cursorX += cellW;
+            rowHeight = Math.max(rowHeight, cellH);
         }
         return true;
     }
@@ -444,8 +457,8 @@ class GlRaster extends SoftRenderer {
             }
             origins[index * 2] = cursorX;
             origins[index * 2 + 1] = cursorY;
-            cursorX += texture.width;
-            rowHeight = Math.max(rowHeight, texture.height);
+            cursorX += texture.width * ATLAS_TILES;
+            rowHeight = Math.max(rowHeight, texture.height * ATLAS_TILES);
         }
     }
 
@@ -469,9 +482,17 @@ class GlRaster extends SoftRenderer {
             Texture texture = textures[index];
             int originX = origins[index * 2];
             int originY = origins[index * 2 + 1];
-            for (int y = 0; y < texture.height; y++) {
-                System.arraycopy(texture.argb, y * texture.width, pixels,
-                        (originY + y) * side + originX, texture.width);
+            // Tiled, not centred: the cell has to answer correctly for a merged quad that runs up to
+            // sixteen tiles in either direction.
+            for (int tileY = 0; tileY < ATLAS_TILES; tileY++) {
+                for (int y = 0; y < texture.height; y++) {
+                    for (int tileX = 0; tileX < ATLAS_TILES; tileX++) {
+                        System.arraycopy(texture.argb, y * texture.width, pixels,
+                                (originY + tileY * texture.height + y) * side
+                                        + originX + tileX * texture.width,
+                                texture.width);
+                    }
+                }
             }
         }
         ByteBuffer bytes = MemoryUtil.memAlloc(side * side * 4);

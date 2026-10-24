@@ -201,6 +201,10 @@ final class SectionMesher {
                         }
                         MeshBuilder target;
                         if (geometry.mode == SoftRenderer.OPAQUE) {
+                            if (mergeable(geometry, geometry.faces[face])) {
+                                // Left to the greedy pass below, which draws the whole run as one quad.
+                                continue;
+                            }
                             target = opaque[face];
                         } else if (geometry.mode == SoftRenderer.CUTOUT) {
                             target = cutout;
@@ -213,6 +217,8 @@ final class SectionMesher {
             }
         }
 
+        greedyFaces(world, assets, opaque, sx, sy, sz);
+
         for (int i = 0; i < 6; i++) {
             section.opaque[i] = opaque[i].build();
         }
@@ -222,19 +228,125 @@ final class SectionMesher {
         return section;
     }
 
+    /**
+     * Merges every run of coplanar, identically textured opaque faces into one quad, which is what
+     * Sodium's mesher does and what makes a flat plain cost two triangles instead of five hundred and
+     * twelve.
+     *
+     * <p>Per face direction and per slice along the normal, the exposed faces of the section become a
+     * 16x16 mask keyed by block, and rectangles are taken off it greedily. Only full cubes whose sprite
+     * covers the whole texture are eligible: anything else keeps its own quad, because a merged quad
+     * repeats its sprite and a partial one would repeat the wrong pixels. Both rasterisers already wrap
+     * at the sprite edge -- the software one masks the texel index, the GL one samples a cell that holds
+     * the texture tiled sixteen times -- so a merged quad is drawn identically to the faces it replaces.
+     */
+    private static void greedyFaces(VoxelWorld world, Assets assets, MeshBuilder[] opaque,
+            int sx, int sy, int sz) {
+        int x0 = sx * VoxelWorld.SECTION;
+        int y0 = sy * VoxelWorld.SECTION;
+        int z0 = sz * VoxelWorld.SECTION;
+        int side = VoxelWorld.SECTION;
+        int[] mask = new int[side * side];
+        for (int face = 0; face < 6; face++) {
+            for (int a = 0; a < side; a++) {
+                java.util.Arrays.fill(mask, 0);
+                for (int v = 0; v < side; v++) {
+                    for (int u = 0; u < side; u++) {
+                        int x = face < 2 ? x0 + u : face < 4 ? x0 + u : x0 + a;
+                        int y = face < 2 ? y0 + a : y0 + v;
+                        int z = face < 2 ? z0 + v : face < 4 ? z0 + a : z0 + u;
+                        int id = world.get(x, y, z);
+                        if (id == Assets.AIR) {
+                            continue;
+                        }
+                        Assets.BlockGeometry geometry = assets.blocks[id];
+                        if (!mergeable(geometry, geometry.faces[face])) {
+                            continue;
+                        }
+                        int neighbour = world.get(x + OFFSET_X[face], y + OFFSET_Y[face], z + OFFSET_Z[face]);
+                        if (world.hidesFace(neighbour, id, assets)) {
+                            continue;
+                        }
+                        // One past the block id, so that zero keeps meaning empty.
+                        mask[v * side + u] = id + 1;
+                    }
+                }
+                for (int v = 0; v < side; v++) {
+                    for (int u = 0; u < side; u++) {
+                        int key = mask[v * side + u];
+                        if (key == 0) {
+                            continue;
+                        }
+                        int w = 1;
+                        while (u + w < side && mask[v * side + u + w] == key) {
+                            w++;
+                        }
+                        int h = 1;
+                        while (v + h < side) {
+                            boolean whole = true;
+                            for (int k = 0; k < w; k++) {
+                                if (mask[(v + h) * side + u + k] != key) {
+                                    whole = false;
+                                    break;
+                                }
+                            }
+                            if (!whole) {
+                                break;
+                            }
+                            h++;
+                        }
+                        for (int dv = 0; dv < h; dv++) {
+                            for (int du = 0; du < w; du++) {
+                                mask[(v + dv) * side + u + du] = 0;
+                            }
+                        }
+                        emitMerged(opaque[face], face, assets.blocks[key - 1].faces[face],
+                                x0, y0, z0, a, u, v, w, h);
+                    }
+                }
+            }
+        }
+    }
+
+    /** A full cube whose sprite is the whole texture, so the merged quad can repeat it safely. */
+    private static boolean mergeable(Assets.BlockGeometry geometry, Assets.FaceDef def) {
+        return geometry.mode == SoftRenderer.OPAQUE
+                && geometry.fromX == 0.0f && geometry.fromY == 0.0f && geometry.fromZ == 0.0f
+                && geometry.toX == 16.0f && geometry.toY == 16.0f && geometry.toZ == 16.0f
+                && def.u0 == 0.0f && def.v0 == 0.0f && def.u1 == 1.0f && def.v1 == 1.0f;
+    }
+
+    /** One quad over a rectangle of the slice, with the sprite repeated across it. */
+    private static void emitMerged(MeshBuilder target, int face, Assets.FaceDef def,
+            int x0, int y0, int z0, int a, int u, int v, int w, int h) {
+        if (face < 2) {
+            emit(target, face, def, x0 + u, y0 + a, z0 + v, x0 + u + w, y0 + a + 1, z0 + v + h, w, h);
+        } else if (face < 4) {
+            emit(target, face, def, x0 + u, y0 + v, z0 + a, x0 + u + w, y0 + v + h, z0 + a + 1, w, h);
+        } else {
+            emit(target, face, def, x0 + a, y0 + v, z0 + u, x0 + a + 1, y0 + v + h, z0 + u + w, w, h);
+        }
+    }
+
     private static final int[] OFFSET_X = {0, 0, 0, 0, -1, 1};
     private static final int[] OFFSET_Y = {-1, 1, 0, 0, 0, 0};
     private static final int[] OFFSET_Z = {0, 0, -1, 1, 0, 0};
 
     private static void emit(MeshBuilder target, int face, Assets.FaceDef def,
             float x0, float y0, float z0, float x1, float y1, float z1) {
+        emit(target, face, def, x0, y0, z0, x1, y1, z1, 1.0f, 1.0f);
+    }
+
+    private static void emit(MeshBuilder target, int face, Assets.FaceDef def,
+            float x0, float y0, float z0, float x1, float y1, float z1, float repeatU, float repeatV) {
         float shade = Assets.FACE_SHADE[face];
         // Bottom-left, bottom-right, top-left, top-right, with v running down the texture the way the
-        // PNG rows do.
+        // PNG rows do. A merged quad runs its coordinates past the sprite and both rasterisers wrap, so
+        // repeating is just a wider span.
         float uLo = def.u0;
-        float uHi = def.u1;
+        float uHi = def.u0 + repeatU * (def.u1 - def.u0);
         float vLo = def.v0;
-        float vHi = def.v1;
+        float vHi = def.v0 + repeatV * (def.v1 - def.v0);
         switch (face) {
             case Assets.DOWN:
                 target.quad(x0, y0, z1, uLo, vHi, x1, y0, z1, uHi, vHi,
