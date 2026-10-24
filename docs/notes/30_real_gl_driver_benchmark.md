@@ -217,3 +217,38 @@ llvmpipe の 1 ドローコストは AMD の OpenGL ドライバよりずっと�
   - `glBufferData(target, (FloatBuffer) null, usage)` は **null を参照して NPE**。サイズを渡す。
 - ワークフローは build.log を grep して**先頭 15 行**しか annotation 化しないので、
   報告は**必ず 1 行**にまとめる。複数行の失敗メッセージは 2 行目以降が消える。
+
+## 2026-10-24 — the depth buffer, the fill, and a baseline that was not Sodium
+
+**The depth buffer is solved.** It was never a clear that failed to land: `glClear(GL_DEPTH_BUFFER_BIT)`
+genuinely does not write this driver's depth buffer (`readAt0.25=1.0000` after a clear to 0.25,
+`readErr=0x0`), and neither does `glClearBufferfv`. It is now written by drawing the far plane over it
+with the comparison forced to pass and colour writes masked off. `d(all)` went from 27,379 to 474,425,
+which equals `d(noDepth)` and `d(ALWAYS)`, and coverage against the software rasteriser is 85–88 %.
+
+Two other things were wrong underneath it. The depth row flip was `z' = w - z`, which lands the world in
+the top half of a 24 bit buffer; GL's window transform wants `z' = w - 2z`. And the probed vertex was the
+first one *baked*, which belongs to whichever section was baked first — it was behind the camera, its
+clip w was -87.0, and the perspective divide mirrored it to an ndc that looked perfectly reasonable. Four
+runs were spent checking a matrix that was never wrong.
+
+**The fill was measured, not argued.** The same pipelines run again with rasterisation clipped to one
+pixel: every draw, vertex and state change still happens. Fill is **81 % of the baseline frame** on this
+driver. Two pipelines that paint the same pixels cannot differ by 3× while that is true.
+
+**Greedy meshing was missing, and adding it made every number worse.** The mesher emitted one quad per
+exposed face, so a flat plain cost 512 triangles per section top. Sodium merges coplanar runs. Adding it
+cut base triangles 37,494 → 16,203 and fast 15,202 → 7,851, held pixel retention at 96.1 %, and dropped
+the fill-bound ratio 1.43× → 1.38× and the GL driver+cpu ratio 1.96× → 1.11×. **The earlier numbers were
+inflated by a baseline that was not the baseline it claimed to be.**
+
+**Where AMD-Faster's frame actually goes**, measured per stage in microseconds on scene A:
+`terrain 793, occlusion 72, entities 38, particles 41, clouds 20, gui 49`. The baseline's *entire* frame
+is 815 µs. So the terrain stage alone costs more than the whole baseline, and it is not the Hi-Z
+completion (72 µs) — it is the occluder rasterisation, which happens during submission and runs at
+framebuffer resolution. A hierarchical Z does not need that; 1/8 per axis is what the mips are for.
+
+Also fixed: the report read `renderer.glDraws` at the bottom of `run()`, after the clipped runs and the
+seven diagnostic frames had all added to the same counters. It reported nine passes as one pipeline's
+frame, which is what made AMD-Faster look like it issued three times the baseline's draws. Corrected, it
+issues 2.8–3.3× fewer.
