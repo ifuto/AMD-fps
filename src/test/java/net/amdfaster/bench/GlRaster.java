@@ -1205,12 +1205,14 @@ class GlRaster extends SoftRenderer {
 
     /** The depth at the centre, so the parent test can say whether the far plane write landed. */
     float centreDepth() {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            FloatBuffer depth = stack.mallocFloat(1);
-            GL11.glReadPixels(this.width / 2, this.height / 2, 1, 1, GL11.GL_DEPTH_COMPONENT,
-                    GL11.GL_FLOAT, depth);
-            return depth.get(0);
-        }
+        // Allocated with MemoryUtil like every other buffer here rather than with a MemoryStack, which
+        // this class does not import.
+        FloatBuffer depth = MemoryUtil.memAllocFloat(1);
+        GL11.glReadPixels(this.width / 2, this.height / 2, 1, 1, GL11.GL_DEPTH_COMPONENT,
+                GL11.GL_FLOAT, depth);
+        float value = depth.get(0);
+        MemoryUtil.memFree(depth);
+        return value;
     }
 
     /** Reads the framebuffer back, which is how the report proves a picture was drawn and not skipped. */
