@@ -113,6 +113,7 @@ class CpuRenderBenchmark {
         Result fastFill = measure(AmdFasterPipeline::new, scene, renderer, aspect, true);
         Result baseCpu = measure(BaselinePipeline::new, scene, renderer, aspect, false);
         Result fastCpu = measure(AmdFasterPipeline::new, scene, renderer, aspect, false);
+        AmdFasterPipeline timedFast = (AmdFasterPipeline) lastPipeline;
 
         double fillRatio = fastFill.fps / baseFill.fps;
         double cpuRatio = fastCpu.fps / baseCpu.fps;
@@ -131,9 +132,13 @@ class CpuRenderBenchmark {
                         + report);
     }
 
+    /** The pipeline the last {@link #measure} ran, so its stage timings can be reported. */
+    private static Pipeline lastPipeline;
+
     private static Result measure(java.util.function.Supplier<Pipeline> factory, Scene scene,
             SoftRenderer renderer, float aspect, boolean fill) {
         Pipeline pipeline = factory.get();
+        lastPipeline = pipeline;
         renderer.setFillEnabled(fill);
         pipeline.prepare(scene, assets);
         Scene.View view = new Scene.View();
@@ -189,7 +194,9 @@ class CpuRenderBenchmark {
                         + " (coarse %d, occluded %d) | shadows %d->%d | particles %d->%d"
                         + " | block entities animated %d skipped %d | hud rebuilds %d (%d elements)"
                         + " | gui batches %d | rain rebuilds %d->%d, drops %d->%d | texture uploads %d->%d"
-                        + " | world %d blocks, %d textures, %d texels",
+                        + " | world %d blocks, %d textures, %d texels%n"
+                        + "AMD-Faster microseconds per frame by stage: terrain %.0f occlusion %.0f"
+                        + " entities %.0f particles %.0f clouds %.0f gui %.0f",
                 scene.name, WIDTH, HEIGHT,
                 base.fps, fast.fps, fillRatio, baseCpu.fps, fastCpu.fps, cpuRatio, retention * 100.0,
                 base.trianglesPerFrame, base.pixelsPerFrame, base.drawsPerFrame,
@@ -204,7 +211,13 @@ class CpuRenderBenchmark {
                 detail.baseRainRebuilds, detail.fastRainRebuilds,
                 detail.baseRainDrops, detail.fastRainDrops,
                 detail.baseTextureUpdates, detail.fastTextureUploads,
-                scene.worldBlocks(), assets.textureCount(), assets.texelCount());
+                scene.worldBlocks(), assets.textureCount(), assets.texelCount(),
+                timedFast.nsTerrain / 1000.0 / fastCpu.frames,
+                timedFast.nsOcclusion / 1000.0 / fastCpu.frames,
+                timedFast.nsEntities / 1000.0 / fastCpu.frames,
+                timedFast.nsParticles / 1000.0 / fastCpu.frames,
+                timedFast.nsClouds / 1000.0 / fastCpu.frames,
+                timedFast.nsGui / 1000.0 / fastCpu.frames);
     }
 
     /** One untimed frame per pipeline, for the counters the report quotes. */

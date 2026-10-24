@@ -203,18 +203,55 @@ final class AmdFasterPipeline implements Pipeline {
         }
         this.occlusion.beginFrame();
 
+        long at = System.nanoTime();
         terrain(scene, renderer, view);
+        long now = System.nanoTime();
+        this.nsTerrain += now - at;
+        at = now;
         this.occlusion.complete();
+        now = System.nanoTime();
+        this.nsOcclusion += now - at;
+        at = now;
         entities(scene, renderer, view, frame);
+        now = System.nanoTime();
+        this.nsEntities += now - at;
+        at = now;
         blockEntities(scene, renderer, frame);
         particles(scene, renderer, view, frame);
+        now = System.nanoTime();
+        this.nsParticles += now - at;
+        at = now;
         clouds(renderer, frame);
         if (scene.raining) {
             rain(scene, renderer, view, frame);
         }
+        now = System.nanoTime();
+        this.nsClouds += now - at;
+        at = now;
         animateTextures(assets, frame);
         gui(renderer, assets, frame);
+        this.nsGui += System.nanoTime() - at;
     }
+
+    /**
+     * Nanoseconds per stage, accumulated over the run.
+     *
+     * <p>Greedy meshing made the geometry cheap enough that this pipeline became slower than the
+     * baseline on the CPU-bound path -- 0.75x -- which means the work it does to avoid drawing is
+     * costing more than the drawing it avoids. These say which stage does it, rather than leaving it
+     * to be inferred from the section counts.
+     */
+    long nsTerrain;
+
+    long nsOcclusion;
+
+    long nsEntities;
+
+    long nsParticles;
+
+    long nsClouds;
+
+    long nsGui;
 
     private void terrain(Scene scene, SoftRenderer renderer, Scene.View view) {
         int cameraMask = MeshletFaceMaskCuller.visibleMask(facing(view), vertical(view));
