@@ -5,7 +5,6 @@ import java.util.Locale;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryUtil;
 
 /**
@@ -54,7 +53,16 @@ final class GlBenchmarkMain {
         GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 3);
         GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 3);
         GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE, GLFW.GLFW_OPENGL_CORE_PROFILE);
-        long window = GLFW.glfwCreateWindow(64, 64, "amd-faster-bench", 0L, 0L);
+        // The window is the framebuffer. It is created at the render size rather than 64x64 because
+        // nothing is presented to it; it exists to own a colour and a depth buffer.
+        GLFW.glfwWindowHint(GLFW.GLFW_RED_BITS, 8);
+        GLFW.glfwWindowHint(GLFW.GLFW_GREEN_BITS, 8);
+        GLFW.glfwWindowHint(GLFW.GLFW_BLUE_BITS, 8);
+        GLFW.glfwWindowHint(GLFW.GLFW_ALPHA_BITS, 8);
+        GLFW.glfwWindowHint(GLFW.GLFW_DEPTH_BITS, 24);
+        GLFW.glfwWindowHint(GLFW.GLFW_STENCIL_BITS, 0);
+        GLFW.glfwWindowHint(GLFW.GLFW_DOUBLEBUFFER, GLFW.GLFW_TRUE);
+        long window = GLFW.glfwCreateWindow(WIDTH, HEIGHT, "amd-faster-bench", 0L, 0L);
         if (window == 0L) {
             System.out.println("GLBENCH error=no window");
             return;
@@ -63,7 +71,11 @@ final class GlBenchmarkMain {
         GL.createCapabilities();
         System.out.println("GLBENCH gl=" + GL11.glGetString(GL11.GL_VERSION)
                 + " renderer=" + GL11.glGetString(GL11.GL_RENDERER));
-        attachFramebuffer();
+        // Draw to and read from the back buffer, so the frame is complete without swapping and the
+        // readback sees what was just drawn.
+        GL11.glDrawBuffer(GL11.GL_BACK);
+        GL11.glReadBuffer(GL11.GL_BACK);
+        reportSurface();
 
         Assets assets = Assets.load();
         ByteBuffer baseImage = MemoryUtil.memAlloc(WIDTH * HEIGHT * 4);
@@ -78,62 +90,21 @@ final class GlBenchmarkMain {
         System.out.flush();
     }
 
-    private static void attachFramebuffer() {
-        int framebuffer = GL30.glGenFramebuffers();
-        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, framebuffer);
-        int colour = GL11.glGenTextures();
-        GL11.glBindTexture(GL11.GL_TEXTURE_2D, colour);
-        GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, WIDTH, HEIGHT, 0,
-                GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, (ByteBuffer) null);
-        GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
-                GL11.GL_TEXTURE_2D, colour, 0);
-        int depth = GL30.glGenRenderbuffers();
-        GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, depth);
-        // 0x81A6 is GL_DEPTH_COMPONENT24, which is a GL 1.4 constant rather than a GL 1.1 one.
-        GL30.glRenderbufferStorage(GL30.GL_RENDERBUFFER, 0x81A6, WIDTH, HEIGHT);
-        int errAfterStorage = GL11.glGetError();
-        GL30.glFramebufferRenderbuffer(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT,
-                GL30.GL_RENDERBUFFER, depth);
-        int errAfterAttach = GL11.glGetError();
-        int status = GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER);
-        // "Complete" does not mean "has a depth buffer". A framebuffer with a colour attachment and
-        // nothing else is complete too, so this check on its own proved nothing for five runs while every
-        // fragment in the world failed a depth test against a buffer that was never cleared -- and a read
-        // of that buffer returned the same two values in two different scenes, which is what uninitialised
-        // memory looks like rather than what a depth buffer looks like.
-        int depthType = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_FRAMEBUFFER,
-                GL30.GL_DEPTH_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
-        // Unconditional, not a fallback. The renderbuffer reports itself attached, with no error from
-        // either call that created it, on a framebuffer that reports itself complete -- and neither
-        // glClear nor glClearBufferfv will put a value into it. That is the last thing in this backend
-        // that does not do what it says, so the other kind of depth buffer gets tried before the
-        // measurement is reported without hidden surface rejection.
-        if (true) {
-            // No depth buffer, so fall back to a depth texture. A renderbuffer that did not take is not
-            // worth another round trip to find out about, and the report says which of the two is in use.
-            int depthTexture = GL11.glGenTextures();
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, depthTexture);
-            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, 0x81A6, WIDTH, HEIGHT, 0,
-                    GL11.GL_DEPTH_COMPONENT, GL11.GL_UNSIGNED_INT, (ByteBuffer) null);
-            errAfterAttach = GL11.glGetError();
-            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
-            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
-            GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT,
-                    GL11.GL_TEXTURE_2D, depthTexture, 0);
-            depthType = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_FRAMEBUFFER,
-                    GL30.GL_DEPTH_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
-        }
-        int depthName = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_FRAMEBUFFER,
-                GL30.GL_DEPTH_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
-        System.out.println("GLBENCHFBO status=0x" + Integer.toHexString(status)
-                + " errAfterStorage=0x" + Integer.toHexString(errAfterStorage)
-                + " errAfterAttach=0x" + Integer.toHexString(errAfterAttach)
-                + " depthType=0x" + Integer.toHexString(depthType)
-                + " depthName=" + depthName);
-        if (status != GL30.GL_FRAMEBUFFER_COMPLETE) {
-            throw new IllegalStateException("framebuffer incomplete: 0x" + Integer.toHexString(status));
-        }
-        GL11.glViewport(0, 0, WIDTH, HEIGHT);
+    /**
+     * Says what the default framebuffer offers, and whether clearing its depth buffer takes.
+     *
+     * <p>This replaces a framebuffer object of my own, which reported itself complete with a depth
+     * attachment of either kind and no error from any call that built it -- and would not be cleared by
+     * glClear or by glClearBufferfv. Every fragment in the world then failed a depth test against a buffer
+     * holding what the frame before it had left there. The window's buffer is allocated by the driver
+     * through the window system rather than attached by me, so it is a different allocation and a
+     * different clear path, and the readback here says whether the value survives.
+     */
+    private static void reportSurface() {
+        System.out.println("GLBENCHFBO surface=default depthBits="
+                + GL11.glGetInteger(GL11.GL_DEPTH_BITS)
+                + " colorBits=" + GL11.glGetInteger(GL11.GL_RED_BITS)
+                + " err=0x" + Integer.toHexString(GL11.glGetError()));
     }
 
     private static void run(int kind, Assets assets, ByteBuffer baseImage, ByteBuffer fastImage) {

@@ -24,7 +24,9 @@ final class VirtualDisplay {
     static Process startXvfb() {
         for (String binary : new String[] {"/usr/bin/Xvfb", "Xvfb"}) {
             try {
-                Process process = new ProcessBuilder(binary, DISPLAY, "-screen", "0", "1280x720x24",
+                // Larger than the render target: the window is the framebuffer now, and a window that
+                // does not fit the screen is a window that may not get one.
+                Process process = new ProcessBuilder(binary, DISPLAY, "-screen", "0", "1600x900x24",
                         "-nolisten", "tcp")
                         .redirectErrorStream(true)
                         .redirectOutput(new File(System.getProperty("java.io.tmpdir"), "xvfb.log"))
