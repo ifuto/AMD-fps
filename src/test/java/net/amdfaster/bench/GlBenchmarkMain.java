@@ -121,6 +121,15 @@ final class GlBenchmarkMain {
         renderer.resetGlCounters();
 
         double fastFps = measure(new AmdFasterPipeline(), scene, assets, renderer, aspect, view);
+        // Read here and not at the bottom of this method. Everything after this point -- the two
+        // clipped runs and the seven diagnostic frames -- draws through the same renderer and adds to
+        // the same counters, and a report that reads them last reports the sum of all of it as one
+        // pipeline's frame. That is what made AMD-Faster look like it issued three times the
+        // baseline's draws.
+        long fastDraws = renderer.glDraws;
+        long fastMulti = renderer.glMultiDraws;
+        long fastRanges = renderer.glRanges;
+        long fastTriangles = renderer.glTriangles;
         renderer.readBack(fastImage);
 
         // The same two pipelines again with rasterisation clipped to one pixel. Every draw call, every
@@ -128,8 +137,14 @@ final class GlBenchmarkMain {
         // between these numbers and the ones above is the fill, measured on this driver rather than
         // assumed, and the ratio between them is what a client sees when its GPU does the fill for free.
         renderer.debugScissorTo1x1 = true;
+        renderer.resetGlCounters();
         double baseNoFill = measure(new BaselinePipeline(), scene, assets, renderer, aspect, view);
+        long baseNoFillDraws = renderer.glDraws;
+        long baseNoFillRanges = renderer.glRanges;
+        renderer.resetGlCounters();
         double fastNoFill = measure(new AmdFasterPipeline(), scene, assets, renderer, aspect, view);
+        long fastNoFillDraws = renderer.glDraws;
+        long fastNoFillRanges = renderer.glRanges;
         renderer.debugScissorTo1x1 = false;
 
         int sky = 0xFF78A7FF & 0xFFFFFF;
@@ -149,8 +164,8 @@ final class GlBenchmarkMain {
                         + " baseDraws=%d fastDraws=%d baseMulti=%d fastMulti=%d"
                         + " baseRanges=%d fastRanges=%d baseTris=%d fastTris=%d uploads=%d",
                 kind, baseFps, fastFps, fastFps / Math.max(1e-9, baseFps),
-                baseDraws, renderer.glDraws, baseMulti, renderer.glMultiDraws,
-                baseRanges, renderer.glRanges, baseTriangles, renderer.glTriangles, renderer.glUploads));
+                baseDraws, fastDraws, baseMulti, fastMulti,
+                baseRanges, fastRanges, baseTriangles, fastTriangles, renderer.glUploads));
         // Frame zero four ways. Culling, the depth test and the multi-draw have each been suspected and
         // each cleared in isolation, but never against each other with correct ranges: every earlier
         // combination was measured while the ranges were still counted in floats. Coverage is compared
@@ -185,11 +200,12 @@ final class GlBenchmarkMain {
                 allOn, noDepth, bare, always, never, lequal, gequal, renderer.debugDepthState()));
         System.out.println(String.format(Locale.ROOT,
                 "GLBENCHFILL scene=%d fullBase=%.1f fullFast=%.1f full=%.2fx"
-                        + " noFillBase=%.1f noFillFast=%.1f noFill=%.2fx fillShareBase=%.0f%% fillShareFast=%.0f%%",
+                        + " noFillBase=%.1f noFillFast=%.1f noFill=%.2fx fillShareBase=%.0f%%"
+                        + " clippedDraws %d->%d clippedRanges %d->%d",
                 kind, baseFps, fastFps, fastFps / Math.max(1e-9, baseFps),
                 baseNoFill, fastNoFill, fastNoFill / Math.max(1e-9, baseNoFill),
                 100.0 * (baseNoFill - baseFps) / Math.max(1e-9, baseNoFill),
-                100.0 * (fastNoFill - fastFps) / Math.max(1e-9, fastNoFill)));
+                baseNoFillDraws, fastNoFillDraws, baseNoFillRanges, fastNoFillRanges));
         float[] probe = renderer.probeVertex();
         System.out.println("GLBENCHMATRIX scene=" + kind
                 + " vertex=" + probe[0] + "," + probe[1] + "," + probe[2]
