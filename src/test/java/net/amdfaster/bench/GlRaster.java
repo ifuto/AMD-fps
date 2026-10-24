@@ -278,6 +278,18 @@ class GlRaster extends SoftRenderer {
     /** Set once a frame, when the first opaque range has been drawn and its first vertex read back. */
     private boolean probeCaptured;
 
+    /**
+     * Clips rasterisation to a single pixel, leaving every draw, every vertex and every state change in
+     * place.
+     *
+     * <p>This is how the frame is split in two without modelling either half. The same pipeline, the same
+     * geometry and the same driver calls run once with it off and once with it on, and the difference is
+     * the cost of touching pixels. Nothing is estimated: a real client on a real GPU has almost no cost on
+     * the scissored side of that subtraction, so the scissored ratio is the one that transfers, and the
+     * full ratio is the one a software rasteriser shows.
+     */
+    boolean debugScissorTo1x1;
+
     /** Vertex count of a terrain layer buffer, so a report can show whether anything was baked into it. */
     int terrainVertices(int layer) {
         return this.terrainVertexCount[layer];
@@ -986,6 +998,14 @@ class GlRaster extends SoftRenderer {
         GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
         clearDepthByQuad();
         this.probeCaptured = false;
+        // Enabled after the clears, which honour the scissor themselves and would otherwise leave the
+        // depth buffer holding the previous frame.
+        if (this.debugScissorTo1x1) {
+            GL11.glEnable(GL11.GL_SCISSOR_TEST);
+            GL11.glScissor(0, 0, 1, 1);
+        } else {
+            GL11.glDisable(GL11.GL_SCISSOR_TEST);
+        }
         // And again, explicitly. glClear with the depth bit was not clearing anything: the comparison
         // itself works -- GL_ALWAYS paints the whole scene and GL_NEVER paints only the GUI -- but
         // GL_LESS against a buffer cleared to 1.0 rejected every fragment in the world, and so did

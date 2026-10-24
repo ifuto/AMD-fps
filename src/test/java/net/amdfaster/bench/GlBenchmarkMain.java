@@ -123,6 +123,15 @@ final class GlBenchmarkMain {
         double fastFps = measure(new AmdFasterPipeline(), scene, assets, renderer, aspect, view);
         renderer.readBack(fastImage);
 
+        // The same two pipelines again with rasterisation clipped to one pixel. Every draw call, every
+        // vertex and every state change still happens; only the touching of pixels is gone. The gap
+        // between these numbers and the ones above is the fill, measured on this driver rather than
+        // assumed, and the ratio between them is what a client sees when its GPU does the fill for free.
+        renderer.debugScissorTo1x1 = true;
+        double baseNoFill = measure(new BaselinePipeline(), scene, assets, renderer, aspect, view);
+        double fastNoFill = measure(new AmdFasterPipeline(), scene, assets, renderer, aspect, view);
+        renderer.debugScissorTo1x1 = false;
+
         int sky = 0xFF78A7FF & 0xFFFFFF;
         int basePainted = GlRaster.painted(baseImage, WIDTH, HEIGHT, sky);
         int fastPainted = GlRaster.painted(fastImage, WIDTH, HEIGHT, sky);
@@ -174,6 +183,13 @@ final class GlBenchmarkMain {
                 renderer.terrainVertices(0), renderer.lastBatchSize,
                 renderer.lastRangeFirst, renderer.lastRangeCount,
                 allOn, noDepth, bare, always, never, lequal, gequal, renderer.debugDepthState()));
+        System.out.println(String.format(Locale.ROOT,
+                "GLBENCHFILL scene=%d fullBase=%.1f fullFast=%.1f full=%.2fx"
+                        + " noFillBase=%.1f noFillFast=%.1f noFill=%.2fx fillShareBase=%.0f%% fillShareFast=%.0f%%",
+                kind, baseFps, fastFps, fastFps / Math.max(1e-9, baseFps),
+                baseNoFill, fastNoFill, fastNoFill / Math.max(1e-9, baseNoFill),
+                100.0 * (baseNoFill - baseFps) / Math.max(1e-9, baseNoFill),
+                100.0 * (fastNoFill - fastFps) / Math.max(1e-9, fastNoFill)));
         float[] probe = renderer.probeVertex();
         System.out.println("GLBENCHMATRIX scene=" + kind
                 + " vertex=" + probe[0] + "," + probe[1] + "," + probe[2]
