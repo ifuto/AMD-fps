@@ -199,12 +199,12 @@ final class SectionMesher {
                         if (world.hidesFace(neighbour, id, assets)) {
                             continue;
                         }
+                        if (mergeable(geometry, geometry.faces[face])) {
+                            // Left to the greedy pass below, which draws the whole run as one quad.
+                            continue;
+                        }
                         MeshBuilder target;
                         if (geometry.mode == SoftRenderer.OPAQUE) {
-                            if (mergeable(geometry, geometry.faces[face])) {
-                                // Left to the greedy pass below, which draws the whole run as one quad.
-                                continue;
-                            }
                             target = opaque[face];
                         } else if (geometry.mode == SoftRenderer.CUTOUT) {
                             target = cutout;
@@ -217,7 +217,7 @@ final class SectionMesher {
             }
         }
 
-        greedyFaces(world, assets, opaque, sx, sy, sz);
+        greedyFaces(world, assets, opaque, cutout, sx, sy, sz);
 
         for (int i = 0; i < 6; i++) {
             section.opaque[i] = opaque[i].build();
@@ -241,7 +241,7 @@ final class SectionMesher {
      * the texture tiled sixteen times -- so a merged quad is drawn identically to the faces it replaces.
      */
     private static void greedyFaces(VoxelWorld world, Assets assets, MeshBuilder[] opaque,
-            int sx, int sy, int sz) {
+            MeshBuilder cutout, int sx, int sy, int sz) {
         int x0 = sx * VoxelWorld.SECTION;
         int y0 = sy * VoxelWorld.SECTION;
         int z0 = sz * VoxelWorld.SECTION;
@@ -300,17 +300,27 @@ final class SectionMesher {
                                 mask[(v + dv) * side + u + du] = 0;
                             }
                         }
-                        emitMerged(opaque[face], face, assets.blocks[key - 1].faces[face],
-                                x0, y0, z0, a, u, v, w, h);
+                        Assets.BlockGeometry merged = assets.blocks[key - 1];
+                        MeshBuilder target = merged.mode == SoftRenderer.OPAQUE
+                                ? opaque[face] : cutout;
+                        emitMerged(target, face, merged.faces[face], x0, y0, z0, a, u, v, w, h);
                     }
                 }
             }
         }
     }
 
-    /** A full cube whose sprite is the whole texture, so the merged quad can repeat it safely. */
+    /**
+     * A full cube whose sprite is the whole texture, so the merged quad can repeat it safely.
+     *
+     * <p>Cutout counts as well as opaque. A leaf block is a full cube with holes in its texture, and the
+     * holes travel with the sprite when it repeats, so a merged run of leaves is drawn exactly as the
+     * faces it replaced -- it is just one quad instead of two hundred. Translucent is deliberately not
+     * here: those quads blend, and while merging coplanar ones would not overlap them, the ones at
+     * different depths would be reordered into a single draw and blend in the wrong order.
+     */
     private static boolean mergeable(Assets.BlockGeometry geometry, Assets.FaceDef def) {
-        return geometry.mode == SoftRenderer.OPAQUE
+        return (geometry.mode == SoftRenderer.OPAQUE || geometry.mode == SoftRenderer.CUTOUT)
                 && geometry.fromX == 0.0f && geometry.fromY == 0.0f && geometry.fromZ == 0.0f
                 && geometry.toX == 16.0f && geometry.toY == 16.0f && geometry.toZ == 16.0f
                 && def.u0 == 0.0f && def.v0 == 0.0f && def.u1 == 1.0f && def.v1 == 1.0f;
