@@ -175,18 +175,6 @@ class GlRaster extends SoftRenderer {
     /** Byte offsets into the element buffer, which is what the multi-draw wants, not index numbers. */
     private final PointerBuffer indexedOffsetBuffer = MemoryUtil.memAllocPointer(8192);
     private int indexedBatchSize;
-    /**
-     * Triangles the indexed multi-draw submitted, per layer, and the vertex range it addressed.
-     *
-     * <p>Because the indexed frame came back painting 142,190 pixels against the software rasteriser's
-     * 541,499 for the same scene, with the quad array's 330,425 from the commit before. The bake is
-     * not the suspect -- it reported 106,368 quad vertices deduplicated to 70,904, exactly the 1.5 a
-     * two-triangle quad should give -- so the loss is in the draw, and this says which of the three
-     * layers loses it instead of leaving that to be guessed.
-     */
-    final long[] indexedTriangles = new long[3];
-    final int[] indexedMinVertex = new int[3];
-    final int[] indexedMaxVertex = new int[3];
 
     private final IntBuffer firstBuffer = MemoryUtil.memAllocInt(8192);
     private final IntBuffer countBuffer = MemoryUtil.memAllocInt(8192);
@@ -879,17 +867,6 @@ class GlRaster extends SoftRenderer {
         return this.indexedVertexCount[0];
     }
 
-    long indexedTrianglesSubmitted() {
-        return this.indexedTriangles[0] + this.indexedTriangles[1] + this.indexedTriangles[2];
-    }
-
-    /** Per-layer indexed triangle totals, so a layer drawing nothing can be named. */
-    String indexedTrianglesByLayer() {
-        return this.indexedTriangles[0] + "/" + this.indexedTriangles[1] + "/" + this.indexedTriangles[2]
-                + " of " + (this.indexedVertexCount[0] + this.indexedVertexCount[1]
-                        + this.indexedVertexCount[2]) + " verts";
-    }
-
     /** Every baked float has to match for two corners to be one vertex, so all six go into the hash. */
     private static long hashVertex(float x, float y, float z, float u, float v, float shade) {
         long h = Float.floatToIntBits(x) & 0xFFFFFFFFL;
@@ -1097,9 +1074,6 @@ class GlRaster extends SoftRenderer {
                     GL11.GL_UNSIGNED_INT, this.indexedOffsetBuffer);
             this.glMultiDraws++;
             this.glDraws++;
-            for (int i = 0; i < this.indexedBatchSize; i++) {
-                this.indexedTriangles[layer] += this.indexedCountBuffer.get(i) / 3;
-            }
         }
         if (this.batchSize > 0) {
             this.firstBuffer.limit(this.batchSize);
