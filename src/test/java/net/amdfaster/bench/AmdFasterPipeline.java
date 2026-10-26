@@ -9,6 +9,7 @@ import net.amdfaster.cull.HierarchicalFrustumCuller;
 import net.amdfaster.cull.MeshletFaceMaskCuller;
 import net.amdfaster.cull.NormalConeCuller;
 import net.amdfaster.cull.SoftwareRasterizer;
+import net.amdfaster.cull.SoaFrustumCuller;
 import net.amdfaster.cull.SortKey;
 import net.amdfaster.cull.TileDepthBuffer;
 import net.amdfaster.draw.SortKeyRadixSort;
@@ -49,6 +50,20 @@ final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sin
     private static final double LID_EPSILON = 1e-9;
 
     private final HierarchicalFrustumCuller hierarchical = new HierarchicalFrustumCuller();
+    /**
+     * The flat alternative, and the state the choice between them is made from.
+     *
+     * <p>The walk prunes whole subtrees, which only pays when the grid it is walking is close to the
+     * cube it rounds itself up to. An 11x4x11 slab becomes a 16x16x16 tree: eight times the nodes for
+     * the sections that are actually there, and most of them are empty space above and below the
+     * world that still has to be visited to be found out. Measured on that shape, 941 node tests per
+     * frame to reach 484 sections. A flat pass over 484 boxes is fewer tests and no indirection, so
+     * for a slab it wins, and for a grid that fills its envelope the tree does.
+     */
+    private final SoaFrustumCuller.Planes soaPlanes = new SoaFrustumCuller.Planes();
+    private SoaFrustumCuller.Boxes soaBoxes;
+    private boolean[] soaVisible = new boolean[0];
+    private boolean soaPath;
     private final MeshletFaceMaskCuller faceMask = new MeshletFaceMaskCuller();
     private final NormalConeCuller cone = new NormalConeCuller();
     private final Frustum frustum = new Frustum(new float[16]);
@@ -227,6 +242,40 @@ final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sin
         this.sortPayload = new int[scene.sections.length];
         this.translucentOrder = new int[scene.sections.length];
         this.coarseLastFrame = new boolean[scene.entityCount];
+
+        // Section bounds never move, so the SoA layout is filled once here rather than per frame.
+        int sectionCount = scene.sections.length;
+        this.soaBoxes = new SoaFrustumCuller.Boxes(sectionCount);
+        this.soaVisible = new boolean[sectionCount];
+        for (int i = 0; i < sectionCount; i++) {
+            SectionMeshes section = scene.sections[i];
+            this.soaBoxes.put(i, section.minX, section.minY, section.minZ,
+                    section.maxX, section.maxY, section.maxZ);
+        }
+        this.soaPath = prefersFlatGrid(scene.sectionsX, scene.sectionsY, scene.sectionsZ);
+    }
+
+    /**
+     * Whether a flat pass over every section beats walking the tree.
+     *
+     * <p>Two conditions, both about the same waste. The grid has to fill at least half of the envelope
+     * the walk rounds it up to, or most of the tree is nodes describing nothing; and it has to be big
+     * enough that pruning a subtree saves more than visiting its leaves would have, which below a few
+     * hundred sections it does not.
+     */
+    static boolean prefersFlatGrid(int sectionsX, int sectionsY, int sectionsZ) {
+        int actual = sectionsX * sectionsY * sectionsZ;
+        int envelope = nextPowerOfTwo(sectionsX) * nextPowerOfTwo(sectionsY)
+                * nextPowerOfTwo(sectionsZ);
+        return actual < 512 || actual * 2 < envelope;
+    }
+
+    private static int nextPowerOfTwo(int value) {
+        int result = 1;
+        while (result < value) {
+            result <<= 1;
+        }
+        return result;
     }
 
     @Override
@@ -324,6 +373,29 @@ final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sin
         this.survivors[this.survivorCount++] = this.cullScene.sectionIndex(sectionX, sectionY, sectionZ);
     }
 
+    /**
+     * One pass over every section, SoA so the six plane tests read one array per axis.
+     *
+     * <p>Returns the survivor count and fills {@link #survivors} in section order, which is the same
+     * order the walk would have produced, so the sort that follows sees an identical list whichever
+     * path ran.
+     */
+    private int flatCull(Scene scene) {
+        for (int plane = 0; plane < Frustum.PLANE_COUNT; plane++) {
+            this.soaPlanes.set(plane, this.frustum.normalX(plane), this.frustum.normalY(plane),
+                    this.frustum.normalZ(plane), this.frustum.distance(plane));
+        }
+        int count = scene.sections.length;
+        SoaFrustumCuller.cull(this.soaPlanes, this.soaBoxes, count, this.soaVisible);
+        int kept = 0;
+        for (int i = 0; i < count; i++) {
+            if (this.soaVisible[i]) {
+                this.survivors[kept++] = i;
+            }
+        }
+        return kept;
+    }
+
     private static int inwardLo(float pixel) {
         return Math.max(0, (int) Math.ceil(pixel / OCCLUSION_SCALE));
     }
@@ -363,10 +435,17 @@ final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sin
         // per surviving section through an interface -- so the frame pays an allocation and an
         // indirection for something that could be a method it already has.
         this.cullScene = scene;
-        this.hierarchical.cull(this.frustum, 0, 0, 0,
-                scene.sectionsX, scene.sectionsY, scene.sectionsZ, this);
-        this.frustumTests = this.hierarchical.tests();
-        this.frustumLeaves = this.hierarchical.leavesReached();
+        if (this.soaPath) {
+            this.survivorCount = flatCull(scene);
+            // Every box is a leaf when nothing is being pruned above it.
+            this.frustumTests = scene.sections.length;
+            this.frustumLeaves = scene.sections.length;
+        } else {
+            this.hierarchical.cull(this.frustum, 0, 0, 0,
+                    scene.sectionsX, scene.sectionsY, scene.sectionsZ, this);
+            this.frustumTests = this.hierarchical.tests();
+            this.frustumLeaves = this.hierarchical.leavesReached();
+        }
         this.sectionsSubmitted += this.survivorCount;
 
         // Front to back under reversed Z, which is what SortKey encodes so the caller cannot invert it.
