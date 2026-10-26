@@ -260,8 +260,8 @@ class SoftRenderer {
      * misses every time, so each frame allocates a buffer, uploads it, and evicts the last one. The
      * software rasteriser has nothing to cache and does the same thing either way.
      */
-    void drawDynamicMesh(Mesh mesh, int mode, Texture[] textures) {
-        drawMesh(mesh, mode, textures);
+    void drawDynamicMesh(Mesh mesh, int mode, Texture[] textures, float[] modelView) {
+        drawMeshWith(mesh, mode, textures, modelView);
     }
 
     /**

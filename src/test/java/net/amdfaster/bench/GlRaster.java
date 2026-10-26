@@ -928,7 +928,7 @@ class GlRaster extends SoftRenderer {
      * the contents are about to be replaced.
      */
     @Override
-    void drawDynamicMesh(Mesh mesh, int mode, Texture[] textures) {
+    void drawDynamicMesh(Mesh mesh, int mode, Texture[] textures, float[] modelView) {
         if (mesh.triangleCount == 0) {
             return;
         }
@@ -940,7 +940,7 @@ class GlRaster extends SoftRenderer {
         buffer.flip();
         applyState(mode);
         GL20.glUseProgram(this.program);
-        GL20.glUniformMatrix4fv(this.uniformMvp, false, composeToBuffer(null));
+        GL20.glUniformMatrix4fv(this.uniformMvp, false, composeToBuffer(modelView));
         GL20.glUniform1f(this.uniformCut, mode == CUTOUT ? 0.5f : 0.0f);
         GL30.glBindVertexArray(this.dynamicVao);
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.dynamicVbo);

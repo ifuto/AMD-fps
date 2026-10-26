@@ -244,7 +244,7 @@ final class BaselinePipeline implements Pipeline {
         this.rainDrops += Passes.RAIN_QUADS;
         Mat.translate(view.x, view.y - 8.0f, view.z, this.model);
         Mat.multiply(viewMatrix, this.model, this.modelView);
-        renderer.drawMeshWith(this.rainMesh, SoftRenderer.BLEND, this.textures, this.modelView);
+        renderer.drawDynamicMesh(this.rainMesh, SoftRenderer.BLEND, this.textures, this.modelView);
     }
 
     private void animateTextures(Assets assets, int frame) {
