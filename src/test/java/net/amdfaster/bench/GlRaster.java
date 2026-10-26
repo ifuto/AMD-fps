@@ -112,6 +112,11 @@ class GlRaster extends SoftRenderer {
     private final int screenVao;
     private final int screenVbo;
 
+    /** One buffer for geometry that is rebuilt every frame. See {@link #drawDynamicMesh}. */
+    private final int dynamicVbo;
+
+    private final int dynamicVao;
+
     /**
      * A full-screen quad at the far plane, and the program that puts it there.
      *
@@ -373,6 +378,16 @@ class GlRaster extends SoftRenderer {
         // GL_CCW here would reject every front face in the world. The first run of this backend did
         // exactly that: both pipelines painted only their clouds, their rain and their GUI, and the
         // coverage check against the software rasteriser is what said so.
+        this.dynamicVbo = GL15.glGenBuffers();
+        this.dynamicVao = GL30.glGenVertexArrays();
+        GL30.glBindVertexArray(this.dynamicVao);
+        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.dynamicVbo);
+        // Sized rather than left unallocated: glBufferData with a null buffer dereferences it. The first
+        // real submission re-specifies the store at whatever size the frame needs.
+        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, (long) FLOATS_PER_VERTEX * 4 * 6 * 4096,
+                GL15.GL_STREAM_DRAW);
+        bindAttributes(this.program);
+
         int depthClearVbo = GL15.glGenBuffers();
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, depthClearVbo);
         GL15.glBufferData(GL15.GL_ARRAY_BUFFER, new float[] {
@@ -904,6 +919,41 @@ class GlRaster extends SoftRenderer {
     }
 
     /** The buffer and vertex array a mesh lives in, uploaded the first time it is drawn. */
+    /**
+     * Draws per-frame geometry through one buffer that is re-specified rather than reallocated.
+     *
+     * <p>Batching the particles into one mesh removed twenty-three draw calls and added a vertex buffer
+     * object a frame, because the resident cache is keyed on the mesh and a batch is a new mesh every
+     * time. This is the path the screen already uses: one buffer, GL_STREAM_DRAW, and the driver is told
+     * the contents are about to be replaced.
+     */
+    @Override
+    void drawDynamicMesh(Mesh mesh, int mode, Texture[] textures) {
+        if (mesh.triangleCount == 0) {
+            return;
+        }
+        int vertices = mesh.vertexCount();
+        float[] data = new float[vertices * FLOATS_PER_VERTEX];
+        append(data, 0, mesh, null);
+        FloatBuffer buffer = MemoryUtil.memAllocFloat(data.length);
+        buffer.put(data);
+        buffer.flip();
+        applyState(mode);
+        GL20.glUseProgram(this.program);
+        GL20.glUniformMatrix4fv(this.uniformMvp, false, composeToBuffer(null));
+        GL20.glUniform1f(this.uniformCut, mode == CUTOUT ? 0.5f : 0.0f);
+        GL30.glBindVertexArray(this.dynamicVao);
+        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.dynamicVbo);
+        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, buffer, GL15.GL_STREAM_DRAW);
+        bindAttributes(this.program);
+        GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, vertices);
+        MemoryUtil.memFree(buffer);
+        GL30.glBindVertexArray(0);
+        this.glDraws++;
+        this.glUploads++;
+        this.glTriangles += vertices / 3;
+    }
+
     private int[] resident(Mesh mesh) {
         int[] cached = this.meshCache.get(mesh);
         if (cached != null) {

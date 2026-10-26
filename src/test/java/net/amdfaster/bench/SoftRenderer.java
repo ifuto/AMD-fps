@@ -252,6 +252,19 @@ class SoftRenderer {
     }
 
     /**
+     * Draws a mesh that was built this frame and will be thrown away at the end of it.
+     *
+     * <p>Separated from {@link #drawMesh} because a backend that caches uploaded geometry has to treat
+     * the two differently. Keying a cache on the mesh object is right for a section, which is built once
+     * and drawn for minutes, and wrong for a particle batch, which is a new object every frame: the cache
+     * misses every time, so each frame allocates a buffer, uploads it, and evicts the last one. The
+     * software rasteriser has nothing to cache and does the same thing either way.
+     */
+    void drawDynamicMesh(Mesh mesh, int mode, Texture[] textures) {
+        drawMesh(mesh, mode, textures);
+    }
+
+    /**
      * Draws a baked mesh through a model-view matrix, which is how anything that moves is drawn.
      *
      * @param modelView twelve floats, row-major, mapping model space to view space; null draws the

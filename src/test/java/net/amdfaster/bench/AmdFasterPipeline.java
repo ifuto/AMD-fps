@@ -665,7 +665,7 @@ final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sin
         }
         if (any) {
             this.particleBatch.endFrame();
-            renderer.drawMesh(batch.build(), SoftRenderer.BLEND, this.textures);
+            renderer.drawDynamicMesh(batch.build(), SoftRenderer.BLEND, this.textures);
         }
     }
 
@@ -724,7 +724,7 @@ final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sin
         this.rainBatch.endFrame();
         // The batcher counts submissions for the whole run, so this is read rather than accumulated.
         this.rainBatches = this.rainBatch.calls();
-        renderer.drawMesh(batch.build(), SoftRenderer.BLEND, this.textures);
+        renderer.drawDynamicMesh(batch.build(), SoftRenderer.BLEND, this.textures);
     }
 
     private void animateTextures(Assets assets, int frame) {
