@@ -116,3 +116,4 @@ jar-in-jar されている」を **assert** し、1 つでも外せばビルド�
 | 23 | [23_intel_native_and_compute.md](23_intel_native_and_compute.md) | Intel ネイティブ（Xe-HPG/Xe2、Thread Director）、XeSS 2/XeLL、計算系（ワールド生成・ノイズ・エンティティ AI・衝突）の軽量化、拡大したベースライン |
 | 24 | インスタンス化エンティティ描画（Rentities 方式）と AMD での勝ち筋 | `24_instanced_entity_rendering.md` | Rentities 実在確認、**1.21.11 は OpenGL（訂正）**、ボーン行列を頂点ごとでなく体ごとに評価 |
 | 29 | [29_cpu_render_benchmark.md](29_cpu_render_benchmark.md) | **実描画ベンチ**。実PNG・実モデルJSON・実ラスタライザでFPSを実測。**実測 1.1〜1.5 倍で 3 倍には未達**。ドロー −77〜86 %、三角形 −48〜60 %、ピクセル保持率 96〜99 %。射影が前三角形のクリップ結果を読む本物のバグを発見 |
+| 30 | [30_real_gl_driver_benchmark.md](30_real_gl_driver_benchmark.md) | **実 GL ドライバベンチ**（CI の llvmpipe / Mesa 25.2.8 で実測）。深度バッファは `glClear` が書かないので遠平面を描いて消す、reversed-Z の `z' = w − 2z` 変換、1×1 scissor による fill 分解、`GLBENCH*` 計測行の設計と読み方。**fill は 1.35× が物理上限、driver+cpu は 1.65〜3.02×** |
