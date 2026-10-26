@@ -28,6 +28,18 @@ final class Mesh {
     float[] verts = new float[0];
     int[] triTex = new int[0];
     float[] triShade = new float[0];
+    /**
+     * Which of the six face directions each triangle was emitted for, 0 to 5, or -1 for geometry that
+     * has no face -- particles, rain, HUD, clouds.
+     *
+     * <p>Carried because the GL backend has to repair a triangle's winding against the outward normal
+     * of the face it belongs to, and cutout and translucent geometry is merged across all six faces
+     * into one mesh, so the direction cannot be recovered from the mesh afterwards. Without it those
+     * two layers reached GL_CULL_FACE in whatever order the mesher happened to emit and roughly half
+     * of them were discarded as back facing: one scene painted 330,118 pixels through the GL backend
+     * against 541,894 through the software rasteriser, and rose to 522,561 with culling switched off.
+     */
+    int[] triFace = new int[0];
     int triangleCount;
 
     float minX = Float.POSITIVE_INFINITY;
@@ -66,7 +78,9 @@ final class MeshBuilder {
     private float[] verts = new float[INITIAL_TRIANGLES * 3 * Mesh.FLOATS_PER_VERTEX];
     private int[] triTex = new int[INITIAL_TRIANGLES];
     private float[] triShade = new float[INITIAL_TRIANGLES];
+    private int[] triFace = new int[INITIAL_TRIANGLES];
     private int triangles;
+    private int face = -1;
 
     private float minX = Float.POSITIVE_INFINITY;
     private float minY = Float.POSITIVE_INFINITY;
@@ -77,6 +91,18 @@ final class MeshBuilder {
 
     int triangles() {
         return this.triangles;
+    }
+
+    /**
+     * Sets the face direction the quads appended from here on were emitted for.
+     *
+     * <p>A setter rather than another argument on {@link #triangle} because the callers that have a
+     * face are the mesher's, and the callers that do not -- particles, rain, the HUD -- would have to
+     * pass a placeholder on every one of thousands of calls.
+     */
+    MeshBuilder face(int face) {
+        this.face = face;
+        return this;
     }
 
     /**
@@ -138,6 +164,7 @@ final class MeshBuilder {
         v[base + 14] = v2;
         this.triTex[this.triangles] = texture;
         this.triShade[this.triangles] = shade;
+        this.triFace[this.triangles] = this.face;
         this.triangles++;
 
         if (x0 < this.minX) {
@@ -207,6 +234,9 @@ final class MeshBuilder {
         float[] newShade = new float[next];
         System.arraycopy(this.triShade, 0, newShade, 0, this.triangles);
         this.triShade = newShade;
+        int[] newFace = new int[next];
+        System.arraycopy(this.triFace, 0, newFace, 0, this.triangles);
+        this.triFace = newFace;
     }
 
     Mesh build() {
@@ -221,6 +251,8 @@ final class MeshBuilder {
         System.arraycopy(this.triTex, 0, mesh.triTex, 0, this.triangles);
         mesh.triShade = new float[this.triangles];
         System.arraycopy(this.triShade, 0, mesh.triShade, 0, this.triangles);
+        mesh.triFace = new int[this.triangles];
+        System.arraycopy(this.triFace, 0, mesh.triFace, 0, this.triangles);
         mesh.triangleCount = this.triangles;
         mesh.minX = this.minX;
         mesh.minY = this.minY;

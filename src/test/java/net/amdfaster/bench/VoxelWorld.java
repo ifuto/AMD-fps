@@ -350,6 +350,10 @@ final class SectionMesher {
     private static void emit(MeshBuilder target, int face, Assets.FaceDef def,
             float x0, float y0, float z0, float x1, float y1, float z1, float repeatU, float repeatV) {
         float shade = Assets.FACE_SHADE[face];
+        // Recorded per triangle because cutout and translucent geometry is merged across all six faces
+        // into one mesh, and the GL backend needs the outward normal of the face a triangle came from
+        // to settle its winding. It cannot be recovered from the merged mesh afterwards.
+        target.face(face);
         // Bottom-left, bottom-right, top-left, top-right, with v running down the texture the way the
         // PNG rows do. A merged quad runs its coordinates past the sprite and both rasterisers wrap, so
         // repeating is just a wider span.
