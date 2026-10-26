@@ -109,11 +109,11 @@ class CpuRenderBenchmark {
         // fill off leaves the CPU-side pipeline -- culling, sorting, batching, transforms, draw calls --
         // which is what the frame rate of a CPU-bound client is actually made of. The truth for a real
         // client sits between them, and at this resolution it sits near the top.
-        Result baseFill = measure(BaselinePipeline::new, scene, renderer, aspect, true);
-        Result fastFill = measure(AmdFasterPipeline::new, scene, renderer, aspect, true);
-        Result baseCpu = measure(BaselinePipeline::new, scene, renderer, aspect, false);
+        Result baseFill = measureBest(BaselinePipeline::new, scene, renderer, aspect, true);
+        Result fastFill = measureBest(AmdFasterPipeline::new, scene, renderer, aspect, true);
+        Result baseCpu = measureBest(BaselinePipeline::new, scene, renderer, aspect, false);
         lastBaseline = (BaselinePipeline) lastPipeline;
-        Result fastCpu = measure(AmdFasterPipeline::new, scene, renderer, aspect, false);
+        Result fastCpu = measureBest(AmdFasterPipeline::new, scene, renderer, aspect, false);
 
         double fillRatio = fastFill.fps / baseFill.fps;
         double cpuRatio = fastCpu.fps / baseCpu.fps;
@@ -130,6 +130,30 @@ class CpuRenderBenchmark {
                 "cpu-bound " + String.format(Locale.ROOT, "%.2f", cpuRatio) + "x, fill-bound "
                         + String.format(Locale.ROOT, "%.2f", fillRatio) + "x, target is " + TARGET + "x\n"
                         + report);
+    }
+
+    /**
+     * How many times each pipeline is timed, keeping the fastest.
+     *
+     * <p>The runner has four cores and other things on them. Two runs of the same commit put the
+     * baseline's cpu-bound frame at 881 and 603 microseconds, which is a swing of forty-six percent --
+     * wider than anything the last several changes were worth, so a single timing cannot tell an
+     * improvement from a quieter moment. Contention only ever makes a run slower, so the fastest of
+     * several is the one closest to the machine actually doing the work, and taking it for both
+     * pipelines keeps the comparison honest.
+     */
+    static final int REPEATS = 3;
+
+    private static Result measureBest(java.util.function.Supplier<Pipeline> factory, Scene scene,
+            SoftRenderer renderer, float aspect, boolean fill) {
+        Result best = null;
+        for (int attempt = 0; attempt < REPEATS; attempt++) {
+            Result result = measure(factory, scene, renderer, aspect, fill);
+            if (best == null || result.fps > best.fps) {
+                best = result;
+            }
+        }
+        return best;
     }
 
     /** The pipeline the last {@link #measure} ran, so its stage timings can be reported. */
