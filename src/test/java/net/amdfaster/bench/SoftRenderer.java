@@ -641,14 +641,21 @@ class SoftRenderer {
             int py0 = Math.max(0, y0);
             int px1 = Math.min(this.width - 1, x1);
             int py1 = Math.min(this.height - 1, y1);
+            if (px0 > px1 || py0 > py1) {
+                continue;
+            }
+            if (!this.fillEnabled) {
+                // Counted, not walked, which is what the triangle and screen-quad paths both do. Walking
+                // the whole batch to increment a counter cost the HUD 606 quads' worth of scanlines a
+                // frame and made the batched HUD measure slower than the 606 separate ones it replaced.
+                this.pixelsTested += (long) (px1 - px0 + 1) * (py1 - py0 + 1);
+                continue;
+            }
             for (int py = py0; py <= py1; py++) {
                 int ty = ((int) Math.floor(v0 + (py - y0) * dv)) & (texH - 1);
                 int rowBase = py * this.width;
                 for (int px = px0; px <= px1; px++) {
                     this.pixelsTested++;
-                    if (!this.fillEnabled) {
-                        continue;
-                    }
                     int tx = ((int) Math.floor(u0 + (px - x0) * du)) & (texW - 1);
                     int texel = texels[ty * texW + tx];
                     int alpha = texel >>> 24;
