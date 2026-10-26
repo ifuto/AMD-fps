@@ -217,13 +217,15 @@ final class GlBenchmarkMain {
         long stageFrames = Math.max(1, lastFrames);
         System.out.println(String.format(Locale.ROOT,
                 "GLBENCHSTAGE scene=%d frames=%d terrain=%.0f of which cull+sort=%.0f"
-                        + " occluder=%.0f submit=%.0f translucent=%.0f | entities=%.0f particles=%.0f"
-                        + " clouds=%.0f gui=%.0f",
+                        + " occluder=%.0f submit=%.0f (setup=%.0f draw=%.0f) translucent=%.0f"
+                        + " | entities=%.0f particles=%.0f clouds=%.0f gui=%.0f",
                 kind, lastFrames,
                 clippedFast.nsTerrain / 1000.0 / stageFrames,
                 clippedFast.nsCullSort / 1000.0 / stageFrames,
                 clippedFast.nsOccluder / 1000.0 / stageFrames,
                 clippedFast.nsSubmit / 1000.0 / stageFrames,
+                renderer.nsTerrainSetup / 1000.0 / stageFrames,
+                renderer.nsTerrainDraw / 1000.0 / stageFrames,
                 clippedFast.nsTranslucent / 1000.0 / stageFrames,
                 clippedFast.nsEntities / 1000.0 / stageFrames,
                 clippedFast.nsParticles / 1000.0 / stageFrames,

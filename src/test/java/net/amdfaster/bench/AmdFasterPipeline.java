@@ -112,7 +112,7 @@ final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sin
      * stops being drawn, and a candidate's rounds outward, because asking about less than its whole
      * footprint is the same mistake from the other side.
      */
-    static final int OCCLUSION_SCALE = 8;
+    static final int OCCLUSION_SCALE = 16;
 
     private int occlusionWidth;
 

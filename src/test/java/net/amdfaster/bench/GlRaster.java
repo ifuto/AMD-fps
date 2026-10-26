@@ -309,6 +309,17 @@ class GlRaster extends SoftRenderer {
     long glDraws;
     long glMultiDraws;
     long glRanges;
+    /**
+     * Nanoseconds the batched terrain path spends on per-frame state versus on the draw itself.
+     *
+     * <p>The submit stage came back at 53 nanoseconds a triangle against 39 for a baseline drawing
+     * twice the geometry through the same shader, and nothing in the range counts explains it -- the
+     * batched path already issues under two draws a frame. So the stage is split in two here rather
+     * than guessed at: the program, matrix, vertex array and attribute redeclaration on one side,
+     * the multi-draw the driver actually has to shade on the other.
+     */
+    long nsTerrainSetup;
+    long nsTerrainDraw;
     long glUploads;
     long glTriangles;
     long evictions;
@@ -822,6 +833,7 @@ class GlRaster extends SoftRenderer {
         if (layer < 0 || this.batchSize == 0) {
             return;
         }
+        long setupAt = System.nanoTime();
         applyState(this.batchState);
         // Recomposed rather than reused: terrain vertices are in world space, so the model is the
         // identity, and whatever the last entity draw left in this buffer is not that.
@@ -857,11 +869,14 @@ class GlRaster extends SoftRenderer {
                 this.probeCaptured = true;
             }
         }
+        this.nsTerrainSetup += System.nanoTime() - setupAt;
+        long drawAt = System.nanoTime();
         if (this.debugNoMultiDraw) {
             for (int i = 0; i < this.batchSize; i++) {
                 GL11.glDrawArrays(GL11.GL_TRIANGLES, this.firstBuffer.get(i), this.countBuffer.get(i));
             }
             this.glDraws += this.batchSize;
+            this.nsTerrainDraw += System.nanoTime() - drawAt;
             return;
         }
         this.firstBuffer.limit(this.batchSize);
@@ -869,6 +884,7 @@ class GlRaster extends SoftRenderer {
         GL14.glMultiDrawArrays(GL11.GL_TRIANGLES, this.firstBuffer, this.countBuffer);
         this.glMultiDraws++;
         this.glDraws++;
+        this.nsTerrainDraw += System.nanoTime() - drawAt;
     }
 
     @Override
@@ -1347,6 +1363,8 @@ class GlRaster extends SoftRenderer {
         this.glRanges = 0;
         this.glUploads = 0;
         this.glTriangles = 0;
+        this.nsTerrainSetup = 0;
+        this.nsTerrainDraw = 0;
     }
 
     void close() {
