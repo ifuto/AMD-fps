@@ -286,6 +286,20 @@ final class AmdFasterPipeline implements Pipeline {
     /** Inside {@code terrain}: the translucent pass and its sort. */
     long nsTranslucent;
 
+    /**
+     * Triangles each part of the frame submits, accumulated over the run.
+     *
+     * <p>On the driver path the frame is vertex bound: 434 of 673 microseconds is handing geometry over,
+     * and the whole ratio between the two pipelines is close to the ratio of their triangles. Which part
+     * of the frame those triangles belong to decides what is worth cutting, and so far that has been
+     * guessed at from the element counts.
+     */
+    long terrainTriangles;
+
+    long cloudTriangles;
+
+    long particleTriangles;
+
     private static int inwardLo(float pixel) {
         return Math.max(0, (int) Math.ceil(pixel / OCCLUSION_SCALE));
     }
@@ -417,8 +431,10 @@ final class AmdFasterPipeline implements Pipeline {
                 // section is tested against the ones already accepted -- so the decisions cannot move,
                 // but the submission can, and batching it is what a real renderer does with the list.
                 this.faceQueue[this.faceQueueCount++] = this.sortPayload[i] * 8 + face;
+                this.terrainTriangles += mesh.triangleCount;
             }
             this.cutoutQueue[this.cutoutQueueCount++] = this.sortPayload[i];
+            this.terrainTriangles += section.cutout.triangleCount;
 
             if (ox0 <= ox1 && oy0 <= oy1) {
                 this.occlusion.addOccluder(ox0, oy0, ox1, oy1, nearDepth);
@@ -629,6 +645,7 @@ final class AmdFasterPipeline implements Pipeline {
             }
             any = true;
             this.particlesDrawn++;
+            this.particleTriangles += quad.triangleCount;
         }
         if (any) {
             this.particleBatch.endFrame();
@@ -646,6 +663,7 @@ final class AmdFasterPipeline implements Pipeline {
                 this.cloudMesh.maxX, this.cloudMesh.maxY, this.cloudMesh.maxZ)) {
             return;
         }
+        this.cloudTriangles += this.cloudMesh.triangleCount;
         renderer.drawMesh(this.cloudMesh, SoftRenderer.BLEND, this.textures);
     }
 
