@@ -139,17 +139,18 @@ final class GlBenchmarkMain {
         renderer.debugScissorTo1x1 = true;
         renderer.resetGlCounters();
         double baseNoFill = measureBest(new BaselinePipeline(), scene, assets, renderer, aspect, view);
-        long baseNoFillDraws = renderer.glDraws;
-        long baseNoFillRanges = renderer.glRanges;
+        long baseNoFillDraws = renderer.glDraws / REPEATS;
+        long baseNoFillRanges = renderer.glRanges / REPEATS;
         renderer.resetGlCounters();
         // Held on to rather than thrown away inside measure(), so what its CPU side costs on the driver
         // path can be reported next to what the driver costs. On the software rasteriser the two are the
         // same number; here they are not, and the difference is the part a GPU would take off the frame.
         AmdFasterPipeline clippedFast = new AmdFasterPipeline();
         clippedFast.prepare(scene, assets);
+        lastFrames = 0;
         double fastNoFill = measureBest(clippedFast, scene, assets, renderer, aspect, view);
-        long fastNoFillDraws = renderer.glDraws;
-        long fastNoFillRanges = renderer.glRanges;
+        long fastNoFillDraws = renderer.glDraws / REPEATS;
+        long fastNoFillRanges = renderer.glRanges / REPEATS;
         renderer.debugScissorTo1x1 = false;
 
         int sky = 0xFF78A7FF & 0xFFFFFF;
@@ -211,9 +212,9 @@ final class GlBenchmarkMain {
                 baseNoFill, fastNoFill, fastNoFill / Math.max(1e-9, baseNoFill),
                 100.0 * (baseNoFill - baseFps) / Math.max(1e-9, baseNoFill),
                 baseNoFillDraws, fastNoFillDraws, baseNoFillRanges, fastNoFillRanges));
-        // The stage timers run through the warmup frames as well, so they are divided by every frame
-        // this pipeline rendered and not only the timed ones.
-        long stageFrames = lastFrames + WARMUP_FRAMES;
+        // The stage timers run through the warmup frames and through every repeat as well, so they are
+        // divided by every frame this pipeline rendered and not only the timed ones of the last repeat.
+        long stageFrames = Math.max(1, lastFrames);
         System.out.println(String.format(Locale.ROOT,
                 "GLBENCHSTAGE scene=%d frames=%d terrain=%.0f of which cull+sort=%.0f"
                         + " occluder=%.0f submit=%.0f translucent=%.0f | entities=%.0f particles=%.0f"
@@ -286,7 +287,10 @@ final class GlBenchmarkMain {
             frames++;
         } while (System.nanoTime() - start < BUDGET_NANOS && frames < MAX_FRAMES);
         long elapsed = System.nanoTime() - start;
-        lastFrames = frames;
+        // Accumulated, not overwritten. A pipeline is timed REPEATS times and its stage timers keep
+        // running through all of them, warmup included, so the divisor has to cover all of them too.
+        // Overwriting it here made the stage line read almost twice what a frame actually cost.
+        lastFrames += frames + WARMUP_FRAMES;
         return frames * 1_000_000_000.0 / elapsed;
     }
 
