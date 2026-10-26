@@ -252,3 +252,38 @@ Also fixed: the report read `renderer.glDraws` at the bottom of `run()`, after t
 seven diagnostic frames had all added to the same counters. It reported nine passes as one pipeline's
 frame, which is what made AMD-Faster look like it issued three times the baseline's draws. Corrected, it
 issues 2.8–3.3× fewer.
+
+## 2026-10-26: GL バックエンドと software バックエンドが一致していない（未解決・重要）
+
+インデックス付きジオメトリを実装した際に発覚。**GL の比率をそのまま信じてはいけない。**
+
+`GLBENCHPAINT`（同一シーン・同一カメラで1フレーム描いた塗像素数）:
+
+| | glBase | softBase | 一致 | glFast | softFast | 食い違い |
+|---|---|---|---|---|---|---|
+| scene 0 | 559,784 | 552,428 | **1.3 %** | **330,425** | 541,683 | **1.64×** |
+| scene 1 | 575,443 | 610,944 | 6 % | 203,994 | 601,862 | **2.95×** |
+| scene 2 | 563,383 | 582,711 | 3 % | 284,605 | 574,902 | **2.02×** |
+
+**baseline は GL と software がほぼ一致するのに、AMD-Faster 側だけが GL で大きく少ない。**
+つまり GL バックエンドは AMD-Faster の経路で何かを描き落としている。`diffPercent` も
+75 % 前後で、これは最初の記録から一貫してそう。
+
+候補（未検証）:
+- **CUTOUT / BLEND レイヤの winding 未補正。** `buildTerrain` は layer 0 にだけ
+  `FACE_NORMALS[face]` を渡して巻き順を補正し、layer 1 と 2 は `append(data, at, mesh, null)`
+  で補正なし。`GL_CULL_FACE`/`GL_BACK`/`GL_CW` が有効なので、裏向きと判定された分が捨てられる。
+  software 側は screen-space の `area > 0` で個別に判定するので影響が違う。
+- CUTOUT の `uniformCut = 0.5` による discard とアトラス UV の相性。
+
+**これが直るまで、`GL driver+cpu` と `720p full` の比率は上振れしている。**
+software 側（`CpuRenderBenchmark` の fill-bound / cpu-bound）は両パスが同じ
+`SoftRenderer` を通るので、この問題の影響を受けない。**信頼できるのはそちら。**
+
+### インデックス付きジオメトリ（実装したが revert した: `fa20cb5`）
+- **dedup 自体は成功:** `quadVerts=106,368 → indexedVerts=70,904` = **1.50×**、
+  予測（2三角形の quad で 6 スロット → 4 一意頂点）と完全一致。
+- **しかし塗像素数が 330,425 → 142,346 に低下**し、レイヤ別計測で
+  `idxTris = 2,624,360 / 3,919,238 / 0`。**CUTOUT レイヤが OPAQUE の 1.5 倍の三角形を
+  送出していた。** 上記の winding 問題と無関係ではないはず。
+- 上記のカバレッジ不一致を先に直してから再挑戦すること。dedup のコード自体は正しい。
