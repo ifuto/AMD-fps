@@ -333,3 +333,34 @@ occlusion culling 後の cutout キュー）。
 
 **これが直るまで GL 系の比率（driver+cpu / 720p full）は上振れしている。
 software 系（fill-bound / cpu-bound）は両パイプラインが同じ `SoftRenderer` を通るので影響なし。**
+
+### 本当の原因: 別々のフレームを比較していた（`GLBENCHPAINT` のバグ）
+
+上に「未解決の問題」として残した GL と software の食い違いは、**描画のバグではなかった。
+比較のバグだった。**
+
+`softwareCoverage` は明示的に **frame 0** を描く:
+
+    scene.view(0, aspect, view);
+    pipeline.renderFrame(scene, assets, renderer, view, 0);
+
+一方 `readBack(fastImage)` は `measureBest(...)` の**直後**に呼ばれていて、そのループは
+`REPEATS × (WARMUP_FRAMES + 最大 MAX_FRAMES)` ≒ **800 フレーム**を回している。
+カメラは 1 フレーム 1.5° 回るので、**GL 側は約 1,200° 回転した後のフレーム**だった。
+
+**つまり frame 0 の software 画像と、約 800 フレーム目の GL 画像を並べて
+「一致しない」と言っていた。** これで以下が全部説明できる:
+
+- `diffPercent` が最初から一貫して 75 % 前後だった（別アングルなので当然）
+- `glFast` が実行ごとに 577,026 / 570,474 / 440,983 と揺れた（ループが止まる帧が違う）
+- baseline は「一致して見えた」（たまたま似通ったアングルだった）
+- 裏面除去を切った値が 522,561 / 335,283 / 620,764 と全く再現しなかった
+
+**修正:** `glCoverage(...)` を追加し、GL 側も frame 0 を描いてから読み出すようにした。
+`basePainted` / `fastPainted` / `diffPercent` はこれで同一フレーム同士の比較になる。
+
+**撤回:** 「GL 系の比率は上振れしている」という記述は**根拠がなかった**。
+壊れた比較から推論したもの。GL の比率を疑う理由は今のところ無い。
+
+`glFastNoCull` の計測は削除した。`applyState` が `currentState` をキャッシュするため
+トグルを途中で切り替えても反映される保証がなく、そもそも調べたかった仮説が誤りだった。

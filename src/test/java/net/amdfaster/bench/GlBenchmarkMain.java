@@ -131,19 +131,6 @@ final class GlBenchmarkMain {
         long fastRanges = renderer.glRanges;
         long fastTriangles = renderer.glTriangles;
         renderer.readBack(fastImage);
-        // The same frame again with back-face culling off. buildTerrain repairs the winding of the
-        // opaque layer against each face's outward normal and passes null for cutout and blend, so
-        // those two layers reach GL_CULL_FACE with whatever order the mesher happened to emit. If the
-        // count below jumps to meet the software rasteriser's, the pixels are being culled rather than
-        // never submitted, and that -- not the culling, the batching or the atlas -- is what has been
-        // making the GL numbers read higher than the picture.
-        ByteBuffer noCullImage = MemoryUtil.memAlloc(WIDTH * HEIGHT * 4);
-        renderer.debugNoCull = true;
-        measure(new AmdFasterPipeline(), scene, assets, renderer, aspect, view);
-        renderer.readBack(noCullImage);
-        renderer.debugNoCull = false;
-        int fastNoCull = GlRaster.painted(noCullImage, WIDTH, HEIGHT, 0xFF78A7FF & 0xFFFFFF);
-        MemoryUtil.memFree(noCullImage);
 
         // The same two pipelines again with rasterisation clipped to one pixel. Every draw call, every
         // vertex and every state change still happens; only the touching of pixels is gone. The gap
@@ -167,8 +154,11 @@ final class GlBenchmarkMain {
         renderer.debugScissorTo1x1 = false;
 
         int sky = 0xFF78A7FF & 0xFFFFFF;
-        int basePainted = GlRaster.painted(baseImage, WIDTH, HEIGHT, sky);
-        int fastPainted = GlRaster.painted(fastImage, WIDTH, HEIGHT, sky);
+        // Re-rendered at frame zero rather than read out of the buffers the timing loop left behind.
+        int basePainted = glCoverage(new BaselinePipeline(), scene, assets, renderer, aspect, view,
+                baseImage, sky);
+        int fastPainted = glCoverage(new AmdFasterPipeline(), scene, assets, renderer, aspect, view,
+                fastImage, sky);
         double diff = GlRaster.differencePercent(baseImage, fastImage, WIDTH, HEIGHT);
 
         // The same frame on the CPU rasteriser, once, so a GL frame that came out blank or upside down
@@ -208,12 +198,11 @@ final class GlBenchmarkMain {
         MemoryUtil.memFree(diagImage);
 
         System.out.println(String.format(Locale.ROOT,
-                "GLBENCHPAINT scene=%d glBase=%d glFast=%d glFastNoCull=%d softBase=%d softFast=%d"
-                        + " diffPercent=%.1f"
+                "GLBENCHPAINT scene=%d glBase=%d glFast=%d softBase=%d softFast=%d diffPercent=%.1f"
                         + " diag=%d mvpLoc=%d err=0x%x tv0=%d batch=%d range0=%d,%d"
                         + " d(all)=%d d(noDepth)=%d d(bare)=%d d(ALWAYS)=%d d(NEVER)=%d"
                         + " d(LEQUAL)=%d d(GEQUAL)=%d %s",
-                kind, basePainted, fastPainted, fastNoCull, softBase, softFast, diff,
+                kind, basePainted, fastPainted, softBase, softFast, diff,
                 lastDiag, renderer.mvpLocation(), GL11.glGetError(),
                 renderer.terrainVertices(0), renderer.lastBatchSize,
                 renderer.lastRangeFirst, renderer.lastRangeCount,
@@ -308,6 +297,34 @@ final class GlBenchmarkMain {
         // Overwriting it here made the stage line read almost twice what a frame actually cost.
         lastFrames += frames + WARMUP_FRAMES;
         return frames * 1_000_000_000.0 / elapsed;
+    }
+
+    /**
+     * Painted pixels for one pipeline on the GL backend, at frame zero.
+     *
+     * <p>Frame zero because that is the frame {@link #softwareCoverage} renders, and the two numbers
+     * are only a comparison if they are the same picture. Reading the framebuffer back after the
+     * timing loop instead -- which is what this did -- compares whatever frame the loop happened to
+     * stop on, eight hundred frames and twelve hundred degrees of camera turn later, against the
+     * software rasteriser's first frame. That produced a seventy-five percent difference and made
+     * AMD-Faster look like it was dropping a third of the scene, when all it was doing was looking
+     * somewhere else.
+     */
+    private static int glCoverage(Pipeline pipeline, Scene scene, Assets assets, GlRaster renderer,
+            float aspect, Scene.View view, ByteBuffer out, int sky) {
+        pipeline.prepare(scene, assets);
+        scene.view(0, aspect, view);
+        renderer.setCamera(view.x, view.y, view.z,
+                view.rightX, view.rightY, view.rightZ,
+                view.upX, view.upY, view.upZ,
+                view.fwdX, view.fwdY, view.fwdZ,
+                view.nearHalfWidth, view.nearHalfHeight, view.near);
+        renderer.setViewProjection(view.viewProjection);
+        renderer.setProjection(view.near, view.nearHalfWidth, view.nearHalfHeight, view.far);
+        pipeline.renderFrame(scene, assets, renderer, view, 0);
+        renderer.endFrame();
+        renderer.readBack(out);
+        return GlRaster.painted(out, WIDTH, HEIGHT, sky);
     }
 
     private static int softwareCoverage(Pipeline pipeline, Scene scene, Assets assets,
