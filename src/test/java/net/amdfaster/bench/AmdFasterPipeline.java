@@ -123,6 +123,16 @@ final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sin
     private int faceQueueCount;
     private int[] cutoutQueue = new int[0];
     private int cutoutQueueCount;
+    /** Blend-order scratch. Grown, never shrunk: the section count that needs it only goes up. */
+    private long[] blendKeys = new long[64];
+    private int[] blendPayload = new int[64];
+    private int[] blendSorted = new int[64];
+
+    /** Rebuilt every frame from geometry that moves, so the arrays are kept and the counts reset. */
+    private final MeshBuilder particleMesh = new MeshBuilder();
+    private final MeshBuilder rainMesh = new MeshBuilder();
+    private final MeshBuilder shadowMesh = new MeshBuilder();
+
     private long[] sortKeys = new long[0];
     private int[] sortPayload = new int[0];
     private int[] translucentOrder = new int[0];
@@ -200,7 +210,8 @@ final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sin
         this.baker.bake("minecraft:chest", staticParts, animatedParts);
         this.chestBaked = this.baker.isBaked("minecraft:chest");
 
-        MeshBuilder shadow = new MeshBuilder();
+        MeshBuilder shadow = this.shadowMesh;
+        shadow.reset();
         shadow.quad(-0.4f, 0.0f, -0.4f, 0f, 0f, 0.4f, 0.0f, -0.4f, 1f, 0f,
                 -0.4f, 0.0f, 0.4f, 0f, 1f, 0.4f, 0.0f, 0.4f, 1f, 1f,
                 assets.glassTexture, 0.35f);
@@ -496,8 +507,14 @@ final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sin
         // Two quads swap when the camera crosses the plane between them, so a movement smaller than half
         // the smallest gap cannot have changed the order. A block is the gap in a voxel world.
         if (this.translucentSort.needsSort(view.x, view.y, view.z, 1.0)) {
-            long[] keys = new long[this.translucentCount];
-            int[] payload = new int[this.translucentCount];
+            if (this.blendKeys.length < this.translucentCount) {
+                int capacity = Math.max(this.translucentCount, this.blendKeys.length * 2);
+                this.blendKeys = new long[capacity];
+                this.blendPayload = new int[capacity];
+                this.blendSorted = new int[capacity];
+            }
+            long[] keys = this.blendKeys;
+            int[] payload = this.blendPayload;
             for (int i = 0; i < this.translucentCount; i++) {
                 SectionMeshes section = scene.sections[this.translucentOrder[i]];
                 float cx = (section.minX + section.maxX) * 0.5f - view.x;
@@ -509,7 +526,7 @@ final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sin
                 payload[i] = i;
             }
             this.sorter.sort(keys, payload, this.translucentCount);
-            int[] sorted = new int[this.translucentCount];
+            int[] sorted = this.blendSorted;
             for (int i = 0; i < this.translucentCount; i++) {
                 sorted[i] = this.translucentOrder[payload[i]];
             }
@@ -629,7 +646,8 @@ final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sin
         float usx = view.upX * size;
         float usy = view.upY * size;
         float usz = view.upZ * size;
-        MeshBuilder batch = new MeshBuilder();
+        MeshBuilder batch = this.particleMesh;
+        batch.reset();
         boolean any = false;
         for (int i = 0; i < scene.particleCount; i++) {
             float jitter = FastRandom.nextSymmetricFloat(FastRandom.Usage.PARTICLES, 0.4f);
@@ -695,7 +713,8 @@ final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sin
         // objects are one draw call each -- so without something to put them back together, dropping 492
         // of 600 drops would trade 492 quads for 108 draw calls, and on a driver that is the worse trade.
         // ParticleDrawBatcher is that something: same texture, order preserved, one submission.
-        MeshBuilder batch = new MeshBuilder();
+        MeshBuilder batch = this.rainMesh;
+        batch.reset();
         float[] drop = this.rainDrop.verts;
         int[] dropTexture = this.rainDrop.triTex;
         float[] dropShade = this.rainDrop.triShade;

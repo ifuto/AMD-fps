@@ -112,7 +112,7 @@ final class GlBenchmarkMain {
         GlRaster renderer = new GlRaster(WIDTH, HEIGHT, assets);
         renderer.buildTerrain(scene.sections);
 
-        double baseFps = measure(new BaselinePipeline(), scene, assets, renderer, aspect, view);
+        double baseFps = measureBest(new BaselinePipeline(), scene, assets, renderer, aspect, view);
         renderer.readBack(baseImage);
         long baseDraws = renderer.glDraws;
         long baseMulti = renderer.glMultiDraws;
@@ -120,7 +120,7 @@ final class GlBenchmarkMain {
         long baseTriangles = renderer.glTriangles;
         renderer.resetGlCounters();
 
-        double fastFps = measure(new AmdFasterPipeline(), scene, assets, renderer, aspect, view);
+        double fastFps = measureBest(new AmdFasterPipeline(), scene, assets, renderer, aspect, view);
         // Read here and not at the bottom of this method. Everything after this point -- the two
         // clipped runs and the seven diagnostic frames -- draws through the same renderer and adds to
         // the same counters, and a report that reads them last reports the sum of all of it as one
@@ -138,7 +138,7 @@ final class GlBenchmarkMain {
         // assumed, and the ratio between them is what a client sees when its GPU does the fill for free.
         renderer.debugScissorTo1x1 = true;
         renderer.resetGlCounters();
-        double baseNoFill = measure(new BaselinePipeline(), scene, assets, renderer, aspect, view);
+        double baseNoFill = measureBest(new BaselinePipeline(), scene, assets, renderer, aspect, view);
         long baseNoFillDraws = renderer.glDraws;
         long baseNoFillRanges = renderer.glRanges;
         renderer.resetGlCounters();
@@ -147,7 +147,7 @@ final class GlBenchmarkMain {
         // same number; here they are not, and the difference is the part a GPU would take off the frame.
         AmdFasterPipeline clippedFast = new AmdFasterPipeline();
         clippedFast.prepare(scene, assets);
-        double fastNoFill = measure(clippedFast, scene, assets, renderer, aspect, view);
+        double fastNoFill = measureBest(clippedFast, scene, assets, renderer, aspect, view);
         long fastNoFillDraws = renderer.glDraws;
         long fastNoFillRanges = renderer.glRanges;
         renderer.debugScissorTo1x1 = false;
@@ -238,6 +238,22 @@ final class GlBenchmarkMain {
 
     /** Frames the last {@link #measure} timed, so a pipeline's accumulated stage times can be per frame. */
     private static long lastFrames;
+
+    /**
+     * Timings to take, keeping the fastest. Contention on a shared runner only ever slows a run
+     * down, so the quickest repeat is the one closest to the machine doing the work. Two rather
+     * than the three the software pass uses because these frames cost an order of magnitude more.
+     */
+    static final int REPEATS = 2;
+
+    private static double measureBest(Pipeline pipeline, Scene scene, Assets assets,
+            GlRaster renderer, float aspect, Scene.View view) {
+        double best = 0.0;
+        for (int attempt = 0; attempt < REPEATS; attempt++) {
+            best = Math.max(best, measure(pipeline, scene, assets, renderer, aspect, view));
+        }
+        return best;
+    }
 
     private static double measure(Pipeline pipeline, Scene scene, Assets assets, GlRaster renderer,
             float aspect, Scene.View view) {

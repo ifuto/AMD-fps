@@ -80,6 +80,24 @@ final class MeshBuilder {
     }
 
     /**
+     * Empties the builder without giving its arrays back.
+     *
+     * <p>Particle, rain and shadow batches are rebuilt from nothing every frame -- the particles move
+     * and the rain falls -- so the frame was allocating three builders, growing each past its initial
+     * sixty-four triangles, and throwing all of it away at the end. The geometry is genuinely new each
+     * time; the storage is not.
+     */
+    void reset() {
+        this.triangles = 0;
+        this.minX = Float.POSITIVE_INFINITY;
+        this.minY = Float.POSITIVE_INFINITY;
+        this.minZ = Float.POSITIVE_INFINITY;
+        this.maxX = Float.NEGATIVE_INFINITY;
+        this.maxY = Float.NEGATIVE_INFINITY;
+        this.maxZ = Float.NEGATIVE_INFINITY;
+    }
+
+    /**
      * Appends a quad as two triangles.
      *
      * @param texture the index into the texture table
