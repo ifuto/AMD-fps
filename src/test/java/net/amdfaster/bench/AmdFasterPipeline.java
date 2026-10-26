@@ -245,6 +245,18 @@ final class AmdFasterPipeline implements Pipeline {
 
     long nsOcclusion;
 
+    /** Inside {@code terrain}: the frustum walk and the sort. */
+    long nsCullSort;
+
+    /** Inside {@code terrain}: projecting every survivor and the progressive occluder test. */
+    long nsOccluder;
+
+    /** Inside {@code terrain}: handing the surviving meshes to the rasteriser. */
+    long nsSubmit;
+
+    /** Inside {@code terrain}: the translucent pass and its sort. */
+    long nsTranslucent;
+
     long nsEntities;
 
     long nsParticles;
@@ -254,6 +266,7 @@ final class AmdFasterPipeline implements Pipeline {
     long nsGui;
 
     private void terrain(Scene scene, SoftRenderer renderer, Scene.View view) {
+        long stageAt = System.nanoTime();
         int cameraMask = MeshletFaceMaskCuller.visibleMask(facing(view), vertical(view));
         this.survivorCount = 0;
         this.faceQueueCount = 0;
@@ -283,6 +296,9 @@ final class AmdFasterPipeline implements Pipeline {
         }
         this.sorter.sort(this.sortKeys, this.sortPayload, this.survivorCount);
 
+        long stageNow = System.nanoTime();
+        this.nsCullSort += stageNow - stageAt;
+        stageAt = stageNow;
         for (int i = 0; i < this.survivorCount; i++) {
             SectionMeshes section = scene.sections[this.sortPayload[i]];
             boolean projected = renderer.projectBox(section.minX, section.minY, section.minZ,
@@ -359,6 +375,9 @@ final class AmdFasterPipeline implements Pipeline {
             this.translucentOrder[this.translucentCount++] = this.sortPayload[i];
         }
 
+        stageNow = System.nanoTime();
+        this.nsOccluder += stageNow - stageAt;
+        stageAt = stageNow;
         renderer.beginTerrain(SoftRenderer.OPAQUE);
         for (int i = 0; i < this.faceQueueCount; i++) {
             int entry = this.faceQueue[i];
@@ -372,8 +391,12 @@ final class AmdFasterPipeline implements Pipeline {
                     SoftRenderer.CUTOUT, this.textures);
         }
         renderer.endTerrain();
+        stageNow = System.nanoTime();
+        this.nsSubmit += stageNow - stageAt;
+        stageAt = stageNow;
 
         translucent(scene, renderer, view);
+        this.nsTranslucent += System.nanoTime() - stageAt;
     }
 
     /**

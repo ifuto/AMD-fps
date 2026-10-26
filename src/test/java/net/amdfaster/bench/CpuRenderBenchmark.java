@@ -198,7 +198,9 @@ class CpuRenderBenchmark {
                         + " | gui batches %d | rain rebuilds %d->%d, drops %d->%d | texture uploads %d->%d"
                         + " | world %d blocks, %d textures, %d texels%n"
                         + "AMD-Faster microseconds per frame by stage: terrain %.0f occlusion %.0f"
-                        + " entities %.0f particles %.0f clouds %.0f gui %.0f",
+                        + " entities %.0f particles %.0f clouds %.0f gui %.0f%n"
+                        + "  of which terrain is cull+sort %.0f, occluder %.0f, submit %.0f,"
+                        + " translucent %.0f",
                 scene.name, WIDTH, HEIGHT,
                 base.fps, fast.fps, fillRatio, baseCpu.fps, fastCpu.fps, cpuRatio, retention * 100.0,
                 base.trianglesPerFrame, base.pixelsPerFrame, base.drawsPerFrame,
@@ -219,7 +221,11 @@ class CpuRenderBenchmark {
                 timed.nsEntities / 1000.0 / fastCpu.frames,
                 timed.nsParticles / 1000.0 / fastCpu.frames,
                 timed.nsClouds / 1000.0 / fastCpu.frames,
-                timed.nsGui / 1000.0 / fastCpu.frames);
+                timed.nsGui / 1000.0 / fastCpu.frames,
+                timed.nsCullSort / 1000.0 / fastCpu.frames,
+                timed.nsOccluder / 1000.0 / fastCpu.frames,
+                timed.nsSubmit / 1000.0 / fastCpu.frames,
+                timed.nsTranslucent / 1000.0 / fastCpu.frames);
     }
 
     /** One untimed frame per pipeline, for the counters the report quotes. */
