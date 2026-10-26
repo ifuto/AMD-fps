@@ -103,17 +103,50 @@ final class BaselinePipeline implements Pipeline {
         renderer.fillViewMatrix(this.viewMatrix);
         float[] viewMatrix = this.viewMatrix;
 
+        long at = System.nanoTime();
         terrain(scene, renderer, view);
+        long now = System.nanoTime();
+        this.nsTerrain += now - at;
+        at = now;
         entities(scene, assets, renderer, viewMatrix);
+        now = System.nanoTime();
+        this.nsEntities += now - at;
+        at = now;
         blockEntities(scene, renderer, viewMatrix, frame);
         particles(scene, renderer, view, viewMatrix);
+        now = System.nanoTime();
+        this.nsParticles += now - at;
+        at = now;
         clouds(renderer, view);
         if (scene.raining) {
             rain(scene, renderer, view, viewMatrix, frame);
         }
+        now = System.nanoTime();
+        this.nsClouds += now - at;
+        at = now;
         animateTextures(assets, frame);
         gui(renderer, assets);
+        this.nsGui += System.nanoTime() - at;
     }
+
+    /**
+     * Nanoseconds per stage, accumulated over the run, grouped exactly as {@code AmdFasterPipeline}
+     * groups its own.
+     *
+     * <p>Every comparison so far has put AMD-Faster's internals against the baseline's total. That shows
+     * the gap and hides which side of it each stage is on -- the GUI, for instance, is something the
+     * target mod stack does not touch at all, and until both pipelines report it there is no way to say
+     * what it is worth.
+     */
+    long nsTerrain;
+
+    long nsEntities;
+
+    long nsParticles;
+
+    long nsClouds;
+
+    long nsGui;
 
     private void terrain(Scene scene, SoftRenderer renderer, Scene.View view) {
         int visible = 0;

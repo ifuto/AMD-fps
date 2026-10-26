@@ -112,6 +112,7 @@ class CpuRenderBenchmark {
         Result baseFill = measure(BaselinePipeline::new, scene, renderer, aspect, true);
         Result fastFill = measure(AmdFasterPipeline::new, scene, renderer, aspect, true);
         Result baseCpu = measure(BaselinePipeline::new, scene, renderer, aspect, false);
+        lastBaseline = (BaselinePipeline) lastPipeline;
         Result fastCpu = measure(AmdFasterPipeline::new, scene, renderer, aspect, false);
 
         double fillRatio = fastFill.fps / baseFill.fps;
@@ -133,6 +134,9 @@ class CpuRenderBenchmark {
 
     /** The pipeline the last {@link #measure} ran, so its stage timings can be reported. */
     private static Pipeline lastPipeline;
+
+    /** The baseline the cpu-bound {@link #measure} ran, for the same reason. */
+    private static BaselinePipeline lastBaseline;
 
     private static Result measure(java.util.function.Supplier<Pipeline> factory, Scene scene,
             SoftRenderer renderer, float aspect, boolean fill) {
@@ -183,6 +187,7 @@ class CpuRenderBenchmark {
         // The pipeline the last measure() ran, which is the AMD-Faster one, and the reason this method
         // can quote its stage timings without them being threaded through its signature.
         AmdFasterPipeline timed = (AmdFasterPipeline) lastPipeline;
+        BaselinePipeline baseStages = CpuRenderBenchmark.lastBaseline;
         // The counters live on the pipelines, which are gone by the time the report is built, so the
         // per-pass detail is collected in a second untimed pass over the same scene. Cheap, and it keeps
         // the timed loop free of bookkeeping.
@@ -202,7 +207,9 @@ class CpuRenderBenchmark {
                         + "  of which terrain is cull+sort %.0f, occluder %.0f, submit %.0f,"
                         + " translucent %.0f%n"
                         + "  triangles per frame: terrain %.0f clouds %.0f particles %.0f"
-                        + " of %.0f total | frustum tests %d leaves %d",
+                        + " of %.0f total | frustum tests %d leaves %d%n"
+                        + "baseline microseconds per frame by stage: terrain %.0f entities %.0f"
+                        + " particles %.0f clouds %.0f gui %.0f",
                 scene.name, WIDTH, HEIGHT,
                 base.fps, fast.fps, fillRatio, baseCpu.fps, fastCpu.fps, cpuRatio, retention * 100.0,
                 base.trianglesPerFrame, base.pixelsPerFrame, base.drawsPerFrame,
@@ -231,7 +238,12 @@ class CpuRenderBenchmark {
                 timed.terrainTriangles / (double) fastCpu.frames,
                 timed.cloudTriangles / (double) fastCpu.frames,
                 timed.particleTriangles / (double) fastCpu.frames,
-                fastCpu.trianglesPerFrame, timed.frustumTests, timed.frustumLeaves);
+                fastCpu.trianglesPerFrame, timed.frustumTests, timed.frustumLeaves,
+                baseStages.nsTerrain / 1000.0 / baseCpu.frames,
+                baseStages.nsEntities / 1000.0 / baseCpu.frames,
+                baseStages.nsParticles / 1000.0 / baseCpu.frames,
+                baseStages.nsClouds / 1000.0 / baseCpu.frames,
+                baseStages.nsGui / 1000.0 / baseCpu.frames);
     }
 
     /** One untimed frame per pipeline, for the counters the report quotes. */
