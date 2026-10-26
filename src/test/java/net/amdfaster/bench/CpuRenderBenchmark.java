@@ -202,7 +202,7 @@ class CpuRenderBenchmark {
                         + "  of which terrain is cull+sort %.0f, occluder %.0f, submit %.0f,"
                         + " translucent %.0f%n"
                         + "  triangles per frame: terrain %.0f clouds %.0f particles %.0f"
-                        + " of %.0f total",
+                        + " of %.0f total | frustum tests %d leaves %d",
                 scene.name, WIDTH, HEIGHT,
                 base.fps, fast.fps, fillRatio, baseCpu.fps, fastCpu.fps, cpuRatio, retention * 100.0,
                 base.trianglesPerFrame, base.pixelsPerFrame, base.drawsPerFrame,
@@ -231,7 +231,7 @@ class CpuRenderBenchmark {
                 timed.terrainTriangles / (double) fastCpu.frames,
                 timed.cloudTriangles / (double) fastCpu.frames,
                 timed.particleTriangles / (double) fastCpu.frames,
-                fastCpu.trianglesPerFrame);
+                fastCpu.trianglesPerFrame, timed.frustumTests, timed.frustumLeaves);
     }
 
     /** One untimed frame per pipeline, for the counters the report quotes. */

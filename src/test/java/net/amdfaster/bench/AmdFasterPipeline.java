@@ -43,7 +43,7 @@ import net.amdfaster.rng.FastRandom;
  * time. That is stated rather than papered over, because on AMD hardware that count is a large part of
  * the real win.
  */
-final class AmdFasterPipeline implements Pipeline {
+final class AmdFasterPipeline implements Pipeline, HierarchicalFrustumCuller.Sink {
 
     /** How close a lid has to move before it is worth animating. */
     private static final double LID_EPSILON = 1e-9;
@@ -112,6 +112,9 @@ final class AmdFasterPipeline implements Pipeline {
     private Mesh rainDrop;
     private float[] rainOffsets = new float[0];
     private Mesh[] particleQuads = new Mesh[0];
+
+    /** The scene the frustum walk is filling {@link #survivors} for; the walk calls back into accept. */
+    private Scene cullScene;
 
     private int[] survivors = new int[0];
     private int survivorCount;
@@ -294,11 +297,21 @@ final class AmdFasterPipeline implements Pipeline {
      * of the frame those triangles belong to decides what is worth cutting, and so far that has been
      * guessed at from the element counts.
      */
+    /** Frustum tests the hierarchical walk made, and the leaves it reached, so pruning can be checked. */
+    long frustumTests;
+
+    long frustumLeaves;
+
     long terrainTriangles;
 
     long cloudTriangles;
 
     long particleTriangles;
+
+    @Override
+    public void accept(int sectionX, int sectionY, int sectionZ) {
+        this.survivors[this.survivorCount++] = this.cullScene.sectionIndex(sectionX, sectionY, sectionZ);
+    }
 
     private static int inwardLo(float pixel) {
         return Math.max(0, (int) Math.ceil(pixel / OCCLUSION_SCALE));
@@ -334,12 +347,15 @@ final class AmdFasterPipeline implements Pipeline {
             this.faceQueue = new int[scene.sections.length * 6];
             this.cutoutQueue = new int[scene.sections.length];
         }
+        // The pipeline itself is the sink rather than a lambda written here. A lambda that captures
+        // scene and this is a new object on every frame, and it is handed to a walk that calls it once
+        // per surviving section through an interface -- so the frame pays an allocation and an
+        // indirection for something that could be a method it already has.
+        this.cullScene = scene;
         this.hierarchical.cull(this.frustum, 0, 0, 0,
-                scene.sectionsX, scene.sectionsY, scene.sectionsZ,
-                (sectionX, sectionY, sectionZ) -> {
-                    int index = scene.sectionIndex(sectionX, sectionY, sectionZ);
-                    this.survivors[this.survivorCount++] = index;
-                });
+                scene.sectionsX, scene.sectionsY, scene.sectionsZ, this);
+        this.frustumTests = this.hierarchical.tests();
+        this.frustumLeaves = this.hierarchical.leavesReached();
         this.sectionsSubmitted += this.survivorCount;
 
         // Front to back under reversed Z, which is what SortKey encodes so the caller cannot invert it.
