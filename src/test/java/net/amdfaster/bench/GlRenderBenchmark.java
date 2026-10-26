@@ -63,6 +63,7 @@ class GlRenderBenchmark {
         double[] noFillRatio = new double[3];
         double[] fillShare = new double[3];
         String[] clippedDraws = new String[3];
+        String[] stage = new String[3];
 
         for (String line : output.split("\n")) {
             String flat = line.trim();
@@ -88,6 +89,11 @@ class GlRenderBenchmark {
             }
             if (flat.startsWith("GLBENCHPAINT ")) {
                 report2.append(" || ").append(shorten(flat, 340));
+                continue;
+            }
+            if (flat.startsWith("GLBENCHSTAGE ")) {
+                int scene = (int) number(flat, "scene=");
+                stage[scene] = flat.substring(flat.indexOf("terrain="));
                 continue;
             }
             if (flat.startsWith("GLBENCHFILL ")) {
@@ -135,10 +141,11 @@ class GlRenderBenchmark {
         report.append(String.format(Locale.ROOT,
                 "GL driver+cpu worst %.2fx (A %.2f B %.2f C %.2f) target %.1fx"
                         + " | same at 720p with the pixels included %.2fx (A %.2f B %.2f C %.2f)"
-                        + " | fill is %.0f%% of the baseline frame | clipped A %s B %s C %s",
+                        + " | fill is %.0f%% of the baseline frame | clipped A %s B %s C %s"
+                        + " | AMD-Faster us/frame on the driver path A: %s",
                 worstNoFill, noFillRatio[0], noFillRatio[1], noFillRatio[2], TARGET,
                 worst, fullRatio[0], fullRatio[1], fullRatio[2], fillShare[0],
-                clippedDraws[0], clippedDraws[1], clippedDraws[2]));
+                clippedDraws[0], clippedDraws[1], clippedDraws[2], stage[0]));
         report.append(" | ").append(shorten(renderer, 90));
         for (int scene = 0; scene < 3; scene++) {
             report.append(String.format(Locale.ROOT,
