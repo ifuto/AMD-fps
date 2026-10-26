@@ -131,6 +131,19 @@ final class GlBenchmarkMain {
         long fastRanges = renderer.glRanges;
         long fastTriangles = renderer.glTriangles;
         renderer.readBack(fastImage);
+        // The same frame again with back-face culling off. buildTerrain repairs the winding of the
+        // opaque layer against each face's outward normal and passes null for cutout and blend, so
+        // those two layers reach GL_CULL_FACE with whatever order the mesher happened to emit. If the
+        // count below jumps to meet the software rasteriser's, the pixels are being culled rather than
+        // never submitted, and that -- not the culling, the batching or the atlas -- is what has been
+        // making the GL numbers read higher than the picture.
+        ByteBuffer noCullImage = MemoryUtil.memAlloc(WIDTH * HEIGHT * 4);
+        renderer.debugNoCull = true;
+        measure(new AmdFasterPipeline(), scene, assets, renderer, aspect, view);
+        renderer.readBack(noCullImage);
+        renderer.debugNoCull = false;
+        int fastNoCull = GlRaster.painted(noCullImage, WIDTH, HEIGHT, 0xFF78A7FF & 0xFFFFFF);
+        MemoryUtil.memFree(noCullImage);
 
         // The same two pipelines again with rasterisation clipped to one pixel. Every draw call, every
         // vertex and every state change still happens; only the touching of pixels is gone. The gap
@@ -195,11 +208,12 @@ final class GlBenchmarkMain {
         MemoryUtil.memFree(diagImage);
 
         System.out.println(String.format(Locale.ROOT,
-                "GLBENCHPAINT scene=%d glBase=%d glFast=%d softBase=%d softFast=%d diffPercent=%.1f"
+                "GLBENCHPAINT scene=%d glBase=%d glFast=%d glFastNoCull=%d softBase=%d softFast=%d"
+                        + " diffPercent=%.1f"
                         + " diag=%d mvpLoc=%d err=0x%x tv0=%d batch=%d range0=%d,%d"
                         + " d(all)=%d d(noDepth)=%d d(bare)=%d d(ALWAYS)=%d d(NEVER)=%d"
                         + " d(LEQUAL)=%d d(GEQUAL)=%d %s",
-                kind, basePainted, fastPainted, softBase, softFast, diff,
+                kind, basePainted, fastPainted, fastNoCull, softBase, softFast, diff,
                 lastDiag, renderer.mvpLocation(), GL11.glGetError(),
                 renderer.terrainVertices(0), renderer.lastBatchSize,
                 renderer.lastRangeFirst, renderer.lastRangeCount,
