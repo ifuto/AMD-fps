@@ -79,6 +79,26 @@ final class AmdFasterPipeline implements Pipeline {
     private Scene scene;
     private Assets assets;
     private TileDepthBuffer depthTiles;
+
+    /**
+     * How many framebuffer pixels one pixel of the occlusion buffer stands for.
+     *
+     * <p>The buffer was being built at framebuffer resolution, and rasterising occluder boxes into it at
+     * that size cost 298 to 364 microseconds a frame -- more than drawing everything that survived it,
+     * and close to half of a frame whose baseline costs 815 in total. A hierarchical depth buffer exists
+     * to be coarse; this is the mip level, not a compromise on it. At an eighth per axis there are
+     * sixty-four times fewer sub-tiles to rasterise.
+     *
+     * <p>Coarser is safe in one direction only, so both roundings are biased: an occluder's rectangle
+     * rounds inward, because claiming coverage for a pixel that is not covered is how something visible
+     * stops being drawn, and a candidate's rounds outward, because asking about less than its whole
+     * footprint is the same mistake from the other side.
+     */
+    static final int OCCLUSION_SCALE = 8;
+
+    private int occlusionWidth;
+
+    private int occlusionHeight;
     private SoftwareRasterizer occlusion;
     private Mesh[] entityFull = new Mesh[0];
     private Mesh[] entityCoarse = new Mesh[0];
@@ -142,7 +162,9 @@ final class AmdFasterPipeline implements Pipeline {
         this.textures = assets.textures;
         this.scene = scene;
         this.assets = assets;
-        this.depthTiles = new TileDepthBuffer(1280, 720);
+        this.occlusionWidth = 1280 / OCCLUSION_SCALE;
+        this.occlusionHeight = 720 / OCCLUSION_SCALE;
+        this.depthTiles = new TileDepthBuffer(this.occlusionWidth, this.occlusionHeight);
         this.occlusion = new SoftwareRasterizer(this.depthTiles);
         this.entityFull = new Mesh[] {
             EntityMeshes.build(assets.creeper, assets.creeper.cubes.length),
@@ -197,8 +219,12 @@ final class AmdFasterPipeline implements Pipeline {
         this.frustum.update(view.viewProjection);
         renderer.fillViewMatrix(this.viewMatrix);
         // The tile buffer is sized to the framebuffer it stands in for, so it has to follow it.
-        if (this.depthTiles.width() != renderer.width || this.depthTiles.height() != renderer.height) {
-            this.depthTiles = new TileDepthBuffer(renderer.width, renderer.height);
+        int wantedWidth = Math.max(1, renderer.width / OCCLUSION_SCALE);
+        int wantedHeight = Math.max(1, renderer.height / OCCLUSION_SCALE);
+        if (this.depthTiles.width() != wantedWidth || this.depthTiles.height() != wantedHeight) {
+            this.occlusionWidth = wantedWidth;
+            this.occlusionHeight = wantedHeight;
+            this.depthTiles = new TileDepthBuffer(wantedWidth, wantedHeight);
             this.occlusion = new SoftwareRasterizer(this.depthTiles);
         }
         this.occlusion.beginFrame();
@@ -257,6 +283,22 @@ final class AmdFasterPipeline implements Pipeline {
     /** Inside {@code terrain}: the translucent pass and its sort. */
     long nsTranslucent;
 
+    private static int inwardLo(float pixel) {
+        return Math.max(0, (int) Math.ceil(pixel / OCCLUSION_SCALE));
+    }
+
+    private static int inwardHi(float pixel, int max) {
+        return Math.min(max, (int) Math.floor(pixel / OCCLUSION_SCALE));
+    }
+
+    private static int outwardLo(float pixel) {
+        return Math.max(0, (int) Math.floor(pixel / OCCLUSION_SCALE));
+    }
+
+    private static int outwardHi(float pixel, int max) {
+        return Math.min(max, (int) Math.ceil(pixel / OCCLUSION_SCALE));
+    }
+
     long nsEntities;
 
     long nsParticles;
@@ -306,24 +348,30 @@ final class AmdFasterPipeline implements Pipeline {
             if (!projected) {
                 continue;
             }
-            int x0 = Math.max(0, (int) Math.floor(this.box[0]));
-            int y0 = Math.max(0, (int) Math.floor(this.box[1]));
-            int x1 = Math.min(renderer.width - 1, (int) Math.ceil(this.box[2]));
-            int y1 = Math.min(renderer.height - 1, (int) Math.ceil(this.box[3]));
+            int maxX = this.occlusionWidth - 1;
+            int maxY = this.occlusionHeight - 1;
+            int ox0 = inwardLo(this.box[0]);
+            int oy0 = inwardLo(this.box[1]);
+            int ox1 = inwardHi(this.box[2], maxX);
+            int oy1 = inwardHi(this.box[3], maxY);
+            int tx0 = outwardLo(this.box[0]);
+            int ty0 = outwardLo(this.box[1]);
+            int tx1 = outwardHi(this.box[2], maxX);
+            int ty1 = outwardHi(this.box[3], maxY);
             float nearDepth = this.box[4];
 
             if (section.solidBox) {
                 // Nothing to draw -- a full section has no exposed faces -- but it is the best occluder
                 // in the world, and its bounding box is exactly its shape.
-                if (x0 <= x1 && y0 <= y1) {
-                    this.occlusion.addOccluder(x0, y0, x1, y1, nearDepth);
+                if (ox0 <= ox1 && oy0 <= oy1) {
+                    this.occlusion.addOccluder(ox0, oy0, ox1, oy1, nearDepth);
                 }
                 continue;
             }
             if (section.isEmpty()) {
                 continue;
             }
-            if (x0 <= x1 && y0 <= y1 && this.occlusion.test(x0, y0, x1, y1, nearDepth)) {
+            if (tx0 <= tx1 && ty0 <= ty1 && this.occlusion.test(tx0, ty0, tx1, ty1, nearDepth)) {
                 this.sectionsOccluded++;
                 continue;
             }
@@ -369,8 +417,8 @@ final class AmdFasterPipeline implements Pipeline {
             }
             this.cutoutQueue[this.cutoutQueueCount++] = this.sortPayload[i];
 
-            if (x0 <= x1 && y0 <= y1) {
-                this.occlusion.addOccluder(x0, y0, x1, y1, nearDepth);
+            if (ox0 <= ox1 && oy0 <= oy1) {
+                this.occlusion.addOccluder(ox0, oy0, ox1, oy1, nearDepth);
             }
             this.translucentOrder[this.translucentCount++] = this.sortPayload[i];
         }
@@ -460,10 +508,10 @@ final class AmdFasterPipeline implements Pipeline {
             if (!projected) {
                 continue;
             }
-            int x0 = Math.max(0, (int) Math.floor(this.box[0]));
-            int y0 = Math.max(0, (int) Math.floor(this.box[1]));
-            int x1 = Math.min(renderer.width - 1, (int) Math.ceil(this.box[2]));
-            int y1 = Math.min(renderer.height - 1, (int) Math.ceil(this.box[3]));
+            int x0 = outwardLo(this.box[0]);
+            int y0 = outwardLo(this.box[1]);
+            int x1 = outwardHi(this.box[2], this.occlusionWidth - 1);
+            int y1 = outwardHi(this.box[3], this.occlusionHeight - 1);
             boolean occluded = x0 <= x1 && y0 <= y1
                     && this.occlusion.test(x0, y0, x1, y1, this.box[4]);
             if (occluded) {
