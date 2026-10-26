@@ -6,6 +6,7 @@ import java.nio.IntBuffer;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.lwjgl.PointerBuffer;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL13;
@@ -13,6 +14,7 @@ import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
+import org.lwjgl.opengl.GL32;
 import org.lwjgl.opengl.GL45;
 import org.lwjgl.system.MemoryUtil;
 
@@ -132,6 +134,8 @@ class GlRaster extends SoftRenderer {
     private final int[] terrainVao = new int[3];
     private final int[] terrainVbo = new int[3];
     private final int[] terrainVertexCount = new int[3];
+    /** Unique vertices in each indexed layer, so the multi-draw cannot read past the end. */
+    private final int[] indexedVertexCount = new int[3];
 
     private final LinkedHashMap<Mesh, int[]> meshCache = new LinkedHashMap<>(256, 0.75f, false) {
         @Override
@@ -152,6 +156,25 @@ class GlRaster extends SoftRenderer {
     private final IdentityHashMap<Mesh, int[]> terrainRange = new IdentityHashMap<>();
     /** The six face meshes of a section to the one merged range they occupy. */
     private final IdentityHashMap<Mesh[], int[]> faceRange = new IdentityHashMap<>();
+
+    /**
+     * Baked mesh to its range in the indexed copy of a terrain layer: layer, first index, index count,
+     * base vertex.
+     *
+     * <p>The same terrain is baked twice, once as a quad array and once indexed, and the two submission
+     * routes each draw the copy that matches what they are. This is not a handicap applied to one side
+     * of the comparison: Sodium's chunk mesh is a non-indexed quad array drawn with
+     * {@code glMultiDrawArrays}, with no index buffer anywhere in it, while a meshlet renderer submits
+     * indexed geometry. Which of the two a renderer has decides how many vertices the driver has to
+     * shade, and that is the difference being measured -- {@code drawFaceMeshes} draws the quad array,
+     * {@code drawMesh} draws the indexed copy.
+     */
+    private final IdentityHashMap<Mesh, int[]> terrainIndexedRange = new IdentityHashMap<>();
+    private final int[] terrainIbo = new int[3];
+    private final IntBuffer indexedCountBuffer = MemoryUtil.memAllocInt(8192);
+    /** Byte offsets into the element buffer, which is what the multi-draw wants, not index numbers. */
+    private final PointerBuffer indexedOffsetBuffer = MemoryUtil.memAllocPointer(8192);
+    private int indexedBatchSize;
 
     private final IntBuffer firstBuffer = MemoryUtil.memAllocInt(8192);
     private final IntBuffer countBuffer = MemoryUtil.memAllocInt(8192);
@@ -707,6 +730,154 @@ class GlRaster extends SoftRenderer {
      * third corners are swapped when they disagree. Back faces are then rejected by the driver, which is
      * free, instead of by the caller, which is what a merged section mesh has no way to do.
      */
+    /**
+     * Bakes one terrain layer a second time as indexed geometry, and uploads its element buffer.
+     *
+     * <p>A greedy run is one quad submitted as two triangles, so its four corners arrive as six
+     * vertices and the two they share are transformed again every frame to produce exactly the value
+     * they had the first time. On llvmpipe that is essentially the entire submit stage -- 435
+     * microseconds a frame, of which 9 was per-frame state -- because the driver shades what it is
+     * handed, and it is handed three vertices a triangle.
+     *
+     * <p>Two corners are the same vertex only when all six baked floats agree: position, the atlas
+     * coordinates the tile lookup produced, and the shade. Position alone is not enough, because two
+     * faces meeting at a cube corner share a position and nothing else.
+     */
+    private void buildIndexedLayer(int layer, SectionMeshes[] sections, int triangles) {
+        if (triangles == 0) {
+            this.terrainIbo[layer] = 0;
+            return;
+        }
+        float[] positions = new float[triangles * 3 * FLOATS_PER_VERTEX];
+        int[] indices = new int[triangles * 3];
+        int capacity = 1;
+        while (capacity < triangles * 6) {
+            capacity <<= 1;
+        }
+        // Open addressed, one slot per vertex, holding the vertex index plus one so zero means empty.
+        int[] slots = new int[capacity];
+        long[] hashes = new long[capacity];
+        int vertexCount = 0;
+        int indexAt = 0;
+        int faces = layer == 0 ? 6 : 1;
+        for (SectionMeshes section : sections) {
+            for (int f = 0; f < faces; f++) {
+                Mesh mesh;
+                float[] normal;
+                if (layer == 0) {
+                    mesh = section.opaque[f];
+                    normal = FACE_NORMALS[f];
+                } else {
+                    mesh = layer == 1 ? section.cutout : section.blend;
+                    normal = null;
+                }
+                int first = indexAt;
+                float[] verts = mesh.verts;
+                int[] triTex = mesh.triTex;
+                float[] triShade = mesh.triShade;
+                for (int triangle = 0; triangle < mesh.triangleCount; triangle++) {
+                    int base = triangle * 15;
+                    int texture = triTex[triangle];
+                    float shade = triShade[triangle];
+                    float tileU = this.tileU[texture];
+                    float tileV = this.tileV[texture];
+                    float spanU = this.tileSpanU[texture];
+                    float spanV = this.tileSpanV[texture];
+                    // The same winding repair the quad array gets, so the two copies agree corner for
+                    // corner and the coverage check compares like with like.
+                    int order = 0;
+                    if (normal != null) {
+                        float ax = verts[base + 5] - verts[base];
+                        float ay = verts[base + 6] - verts[base + 1];
+                        float az = verts[base + 7] - verts[base + 2];
+                        float bx = verts[base + 10] - verts[base];
+                        float by = verts[base + 11] - verts[base + 1];
+                        float bz = verts[base + 12] - verts[base + 2];
+                        float crossX = ay * bz - az * by;
+                        float crossY = az * bx - ax * bz;
+                        float crossZ = ax * by - ay * bx;
+                        if (crossX * normal[0] + crossY * normal[1] + crossZ * normal[2] < 0.0f) {
+                            order = 1;
+                        }
+                    }
+                    for (int corner = 0; corner < 3; corner++) {
+                        int source = corner == 1 && order == 1 ? 2
+                                : (corner == 2 && order == 1 ? 1 : corner);
+                        int v = base + source * 5;
+                        float x = verts[v];
+                        float y = verts[v + 1];
+                        float z = verts[v + 2];
+                        float u = tileU + verts[v + 3] * spanU;
+                        float w = tileV + verts[v + 4] * spanV;
+                        long hash = hashVertex(x, y, z, u, w, shade);
+                        int at = ((int) (hash >>> 32)) & (capacity - 1);
+                        int found = -1;
+                        while (slots[at] != 0) {
+                            if (hashes[at] == hash) {
+                                int o = (slots[at] - 1) * FLOATS_PER_VERTEX;
+                                if (positions[o] == x && positions[o + 1] == y && positions[o + 2] == z
+                                        && positions[o + 3] == u && positions[o + 4] == w
+                                        && positions[o + 5] == shade) {
+                                    found = slots[at] - 1;
+                                    break;
+                                }
+                            }
+                            at = (at + 1) & (capacity - 1);
+                        }
+                        if (found < 0) {
+                            found = vertexCount++;
+                            int o = found * FLOATS_PER_VERTEX;
+                            positions[o] = x;
+                            positions[o + 1] = y;
+                            positions[o + 2] = z;
+                            positions[o + 3] = u;
+                            positions[o + 4] = w;
+                            positions[o + 5] = shade;
+                            slots[at] = found + 1;
+                            hashes[at] = hash;
+                        }
+                        indices[indexAt++] = found;
+                    }
+                }
+                this.terrainIndexedRange.put(mesh, new int[] {layer, first, indexAt - first});
+            }
+        }
+        this.indexedVertexCount[layer] = vertexCount;
+        IntBuffer indexBuffer = MemoryUtil.memAllocInt(indexAt);
+        indexBuffer.put(indices, 0, indexAt);
+        indexBuffer.flip();
+        // Bound while the layer's vertex array is bound, so the element buffer is part of that array's
+        // state and the multi-draw below does not have to rebind it per frame.
+        GL30.glBindVertexArray(this.terrainVao[layer]);
+        this.terrainIbo[layer] = GL15.glGenBuffers();
+        GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, this.terrainIbo[layer]);
+        GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER, indexBuffer, GL15.GL_STATIC_DRAW);
+        MemoryUtil.memFree(indexBuffer);
+        GL30.glBindVertexArray(0);
+    }
+
+    /**
+     * Vertices the indexed copy of the opaque layer holds, against the quad array's.
+     *
+     * <p>Printed so the deduplication can be seen to have happened rather than assumed. If the two
+     * numbers came back equal the bake would have found no shared corners at all, the element buffer
+     * would be pure overhead, and the ratio would say so for the wrong reason.
+     */
+    int indexedVertexCount() {
+        return this.indexedVertexCount[0];
+    }
+
+    /** Every baked float has to match for two corners to be one vertex, so all six go into the hash. */
+    private static long hashVertex(float x, float y, float z, float u, float v, float shade) {
+        long h = Float.floatToIntBits(x) & 0xFFFFFFFFL;
+        h = h * 0x9E3779B97F4A7C15L + (Float.floatToIntBits(y) & 0xFFFFFFFFL);
+        h = h * 0x9E3779B97F4A7C15L + (Float.floatToIntBits(z) & 0xFFFFFFFFL);
+        h = h * 0x9E3779B97F4A7C15L + (Float.floatToIntBits(u) & 0xFFFFFFFFL);
+        h = h * 0x9E3779B97F4A7C15L + (Float.floatToIntBits(v) & 0xFFFFFFFFL);
+        h = h * 0x9E3779B97F4A7C15L + (Float.floatToIntBits(shade) & 0xFFFFFFFFL);
+        return h ^ (h >>> 29);
+    }
+
     void buildTerrain(SectionMeshes[] sections) {
         for (int layer = 0; layer < 3; layer++) {
             int triangles = 0;
@@ -764,6 +935,9 @@ class GlRaster extends SoftRenderer {
             bindAttributes(this.program);
             MemoryUtil.memFree(buffer);
             this.glUploads++;
+            // After the vertex array exists, because the element buffer is bound into it and becomes
+            // part of its state.
+            buildIndexedLayer(layer, sections, triangles);
         }
         GL30.glBindVertexArray(0);
     }
@@ -822,15 +996,18 @@ class GlRaster extends SoftRenderer {
         this.batchLayer = mode;
         this.batchState = mode;
         this.batchSize = 0;
+        this.indexedBatchSize = 0;
         this.firstBuffer.clear();
         this.countBuffer.clear();
+        this.indexedCountBuffer.clear();
+        this.indexedOffsetBuffer.clear();
     }
 
     @Override
     void endTerrain() {
         int layer = this.batchLayer;
         this.batchLayer = -1;
-        if (layer < 0 || this.batchSize == 0) {
+        if (layer < 0 || (this.batchSize == 0 && this.indexedBatchSize == 0)) {
             return;
         }
         long setupAt = System.nanoTime();
@@ -871,7 +1048,7 @@ class GlRaster extends SoftRenderer {
         }
         this.nsTerrainSetup += System.nanoTime() - setupAt;
         long drawAt = System.nanoTime();
-        if (this.debugNoMultiDraw) {
+        if (this.debugNoMultiDraw && this.indexedBatchSize == 0) {
             for (int i = 0; i < this.batchSize; i++) {
                 GL11.glDrawArrays(GL11.GL_TRIANGLES, this.firstBuffer.get(i), this.countBuffer.get(i));
             }
@@ -879,11 +1056,32 @@ class GlRaster extends SoftRenderer {
             this.nsTerrainDraw += System.nanoTime() - drawAt;
             return;
         }
-        this.firstBuffer.limit(this.batchSize);
-        this.countBuffer.limit(this.batchSize);
-        GL14.glMultiDrawArrays(GL11.GL_TRIANGLES, this.firstBuffer, this.countBuffer);
-        this.glMultiDraws++;
-        this.glDraws++;
+        if (this.debugNoMultiDraw) {
+            for (int i = 0; i < this.indexedBatchSize; i++) {
+                GL32.glDrawElementsBaseVertex(GL11.GL_TRIANGLES, this.indexedCountBuffer.get(i),
+                        GL11.GL_UNSIGNED_INT, this.indexedOffsetBuffer.get(i), 0);
+            }
+            this.glDraws += this.indexedBatchSize;
+            this.nsTerrainDraw += System.nanoTime() - drawAt;
+            return;
+        }
+        if (this.indexedBatchSize > 0) {
+            // The element buffer is part of this vertex array's state -- it was bound while the array
+            // was, in buildIndexedLayer -- so it comes with the bind above and is not touched per frame.
+            this.indexedCountBuffer.limit(this.indexedBatchSize);
+            this.indexedOffsetBuffer.limit(this.indexedBatchSize);
+            GL14.glMultiDrawElements(GL11.GL_TRIANGLES, this.indexedCountBuffer,
+                    GL11.GL_UNSIGNED_INT, this.indexedOffsetBuffer);
+            this.glMultiDraws++;
+            this.glDraws++;
+        }
+        if (this.batchSize > 0) {
+            this.firstBuffer.limit(this.batchSize);
+            this.countBuffer.limit(this.batchSize);
+            GL14.glMultiDrawArrays(GL11.GL_TRIANGLES, this.firstBuffer, this.countBuffer);
+            this.glMultiDraws++;
+            this.glDraws++;
+        }
         this.nsTerrainDraw += System.nanoTime() - drawAt;
     }
 
@@ -893,16 +1091,31 @@ class GlRaster extends SoftRenderer {
             return;
         }
         if (this.batchLayer >= 0 && !this.debugNoSharedBuffer) {
-            int[] range = this.terrainRange.get(mesh);
+            int[] range = this.terrainIndexedRange.get(mesh);
             if (range != null && range[0] == this.batchLayer) {
+                if (this.indexedBatchSize == this.indexedCountBuffer.capacity()) {
+                    throw new IllegalStateException("indexed terrain batch overflow");
+                }
+                this.indexedCountBuffer.put(this.indexedBatchSize, range[2]);
+                this.indexedOffsetBuffer.put(this.indexedBatchSize, (long) range[1] * 4L);
+                this.indexedBatchSize++;
+                this.glRanges++;
+                this.glTriangles += range[2] / 3;
+                return;
+            }
+            // A mesh the indexed bake never saw still draws, from the quad array. Both copies are built
+            // from the same pass over the same sections so this should not happen, but a mesh arriving
+            // here would otherwise fall all the way through to a per-mesh buffer upload every frame.
+            int[] plain = this.terrainRange.get(mesh);
+            if (plain != null && plain[0] == this.batchLayer) {
                 if (this.batchSize == this.firstBuffer.capacity()) {
                     throw new IllegalStateException("terrain batch overflow");
                 }
-                this.firstBuffer.put(this.batchSize, range[1]);
-                this.countBuffer.put(this.batchSize, range[2]);
+                this.firstBuffer.put(this.batchSize, plain[1]);
+                this.countBuffer.put(this.batchSize, plain[2]);
                 this.batchSize++;
                 this.glRanges++;
-                this.glTriangles += range[2] / 3;
+                this.glTriangles += plain[2] / 3;
                 return;
             }
         }
