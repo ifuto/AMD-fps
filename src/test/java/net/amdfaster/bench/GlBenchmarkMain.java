@@ -142,7 +142,12 @@ final class GlBenchmarkMain {
         long baseNoFillDraws = renderer.glDraws;
         long baseNoFillRanges = renderer.glRanges;
         renderer.resetGlCounters();
-        double fastNoFill = measure(new AmdFasterPipeline(), scene, assets, renderer, aspect, view);
+        // Held on to rather than thrown away inside measure(), so what its CPU side costs on the driver
+        // path can be reported next to what the driver costs. On the software rasteriser the two are the
+        // same number; here they are not, and the difference is the part a GPU would take off the frame.
+        AmdFasterPipeline clippedFast = new AmdFasterPipeline();
+        clippedFast.prepare(scene, assets);
+        double fastNoFill = measure(clippedFast, scene, assets, renderer, aspect, view);
         long fastNoFillDraws = renderer.glDraws;
         long fastNoFillRanges = renderer.glRanges;
         renderer.debugScissorTo1x1 = false;
@@ -206,6 +211,23 @@ final class GlBenchmarkMain {
                 baseNoFill, fastNoFill, fastNoFill / Math.max(1e-9, baseNoFill),
                 100.0 * (baseNoFill - baseFps) / Math.max(1e-9, baseNoFill),
                 baseNoFillDraws, fastNoFillDraws, baseNoFillRanges, fastNoFillRanges));
+        // The stage timers run through the warmup frames as well, so they are divided by every frame
+        // this pipeline rendered and not only the timed ones.
+        long stageFrames = lastFrames + WARMUP_FRAMES;
+        System.out.println(String.format(Locale.ROOT,
+                "GLBENCHSTAGE scene=%d frames=%d terrain=%.0f of which cull+sort=%.0f"
+                        + " occluder=%.0f submit=%.0f translucent=%.0f | entities=%.0f particles=%.0f"
+                        + " clouds=%.0f gui=%.0f",
+                kind, lastFrames,
+                clippedFast.nsTerrain / 1000.0 / stageFrames,
+                clippedFast.nsCullSort / 1000.0 / stageFrames,
+                clippedFast.nsOccluder / 1000.0 / stageFrames,
+                clippedFast.nsSubmit / 1000.0 / stageFrames,
+                clippedFast.nsTranslucent / 1000.0 / stageFrames,
+                clippedFast.nsEntities / 1000.0 / stageFrames,
+                clippedFast.nsParticles / 1000.0 / stageFrames,
+                clippedFast.nsClouds / 1000.0 / stageFrames,
+                clippedFast.nsGui / 1000.0 / stageFrames));
         float[] probe = renderer.probeVertex();
         System.out.println("GLBENCHMATRIX scene=" + kind
                 + " vertex=" + probe[0] + "," + probe[1] + "," + probe[2]
@@ -213,6 +235,9 @@ final class GlBenchmarkMain {
                 + " " + renderer.debugClip(probe[0], probe[1], probe[2]));
         renderer.close();
     }
+
+    /** Frames the last {@link #measure} timed, so a pipeline's accumulated stage times can be per frame. */
+    private static long lastFrames;
 
     private static double measure(Pipeline pipeline, Scene scene, Assets assets, GlRaster renderer,
             float aspect, Scene.View view) {
@@ -245,6 +270,7 @@ final class GlBenchmarkMain {
             frames++;
         } while (System.nanoTime() - start < BUDGET_NANOS && frames < MAX_FRAMES);
         long elapsed = System.nanoTime() - start;
+        lastFrames = frames;
         return frames * 1_000_000_000.0 / elapsed;
     }
 
