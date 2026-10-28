@@ -171,6 +171,18 @@ class GlRaster extends SoftRenderer {
      */
     private final IdentityHashMap<Mesh, int[]> terrainIndexedRange = new IdentityHashMap<>();
     private final int[] terrainIbo = new int[3];
+    /**
+     * The deduplicated vertices and their own vertex array, per layer.
+     *
+     * <p>Separate from {@code terrainVbo} because the two hold different vertices in a different
+     * order. The quad array is 106,368 vertices laid out three per triangle; the indexed copy is
+     * 70,904 with each corner once. An index is a position in the second, so pointing the element
+     * buffer at the first draws whatever happens to sit at that offset -- which is how the indexed
+     * path came to lose 83 percent of a scene's pixels while every counter, including the
+     * deduplication ratio, read exactly right.
+     */
+    private final int[] terrainIndexedVbo = new int[3];
+    private final int[] terrainIndexedVao = new int[3];
     private final IntBuffer indexedCountBuffer = MemoryUtil.memAllocInt(8192);
     /** Byte offsets into the element buffer, which is what the multi-draw wants, not index numbers. */
     private final PointerBuffer indexedOffsetBuffer = MemoryUtil.memAllocPointer(8192);
@@ -843,15 +855,29 @@ class GlRaster extends SoftRenderer {
             }
         }
         this.indexedVertexCount[layer] = vertexCount;
+        // positions is sized to the upper bound of three vertices per triangle; only the first
+        // vertexCount of them were ever written, and uploading the rest would put unwritten zeros
+        // where the indices can reach them.
+        int usedFloats = vertexCount * FLOATS_PER_VERTEX;
+        FloatBuffer vertexBuffer = MemoryUtil.memAllocFloat(usedFloats);
+        vertexBuffer.put(positions, 0, usedFloats);
+        vertexBuffer.flip();
         IntBuffer indexBuffer = MemoryUtil.memAllocInt(indexAt);
         indexBuffer.put(indices, 0, indexAt);
         indexBuffer.flip();
-        // Bound while the layer's vertex array is bound, so the element buffer is part of that array's
-        // state and the multi-draw below does not have to rebind it per frame.
-        GL30.glBindVertexArray(this.terrainVao[layer]);
+
+        this.terrainIndexedVbo[layer] = GL15.glGenBuffers();
+        this.terrainIndexedVao[layer] = GL30.glGenVertexArrays();
+        GL30.glBindVertexArray(this.terrainIndexedVao[layer]);
+        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.terrainIndexedVbo[layer]);
+        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, vertexBuffer, GL15.GL_STATIC_DRAW);
+        bindAttributes(this.program);
+        // Bound while this vertex array is bound, so the element buffer is part of its state and the
+        // multi-draw below does not have to rebind it per frame.
         this.terrainIbo[layer] = GL15.glGenBuffers();
         GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, this.terrainIbo[layer]);
         GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER, indexBuffer, GL15.GL_STATIC_DRAW);
+        MemoryUtil.memFree(vertexBuffer);
         MemoryUtil.memFree(indexBuffer);
         GL30.glBindVertexArray(0);
     }
@@ -1057,6 +1083,9 @@ class GlRaster extends SoftRenderer {
             return;
         }
         if (this.debugNoMultiDraw) {
+            GL30.glBindVertexArray(this.terrainIndexedVao[layer]);
+            GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.terrainIndexedVbo[layer]);
+            bindAttributes(this.program);
             for (int i = 0; i < this.indexedBatchSize; i++) {
                 GL32.glDrawElementsBaseVertex(GL11.GL_TRIANGLES, this.indexedCountBuffer.get(i),
                         GL11.GL_UNSIGNED_INT, this.indexedOffsetBuffer.get(i), 0);
@@ -1066,8 +1095,12 @@ class GlRaster extends SoftRenderer {
             return;
         }
         if (this.indexedBatchSize > 0) {
-            // The element buffer is part of this vertex array's state -- it was bound while the array
-            // was, in buildIndexedLayer -- so it comes with the bind above and is not touched per frame.
+            // Rebound here rather than inherited from the bind above, which is the quad array's. The
+            // indices are positions in the deduplicated vertex buffer, so the draw has to be against
+            // that buffer and its array -- the array that also carries the element buffer in its state.
+            GL30.glBindVertexArray(this.terrainIndexedVao[layer]);
+            GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.terrainIndexedVbo[layer]);
+            bindAttributes(this.program);
             this.indexedCountBuffer.limit(this.indexedBatchSize);
             this.indexedOffsetBuffer.limit(this.indexedBatchSize);
             GL14.glMultiDrawElements(GL11.GL_TRIANGLES, this.indexedCountBuffer,
