@@ -71,6 +71,8 @@ public final class TileDepthBuffer {
     private final float[] subDepth;
     /** Eight coverage bits per tile, one per sub-tile. */
     private final int[] tileCovered;
+    /** Shallowest surface in each tile, so a query can reject a whole tile without walking its sub-tiles. */
+    private final float[] tileMinDepth;
 
     private int rasterisedSubtiles;
     private int occlusionTests;
@@ -93,6 +95,7 @@ public final class TileDepthBuffer {
         int tiles = this.tilesX * this.tilesY;
         this.subDepth = new float[tiles * SUBTILES_PER_TILE];
         this.tileCovered = new int[tiles];
+        this.tileMinDepth = new float[tiles];
         clear();
     }
 
@@ -100,6 +103,7 @@ public final class TileDepthBuffer {
     public void clear() {
         Arrays.fill(this.subDepth, EMPTY);
         Arrays.fill(this.tileCovered, 0);
+        Arrays.fill(this.tileMinDepth, EMPTY);
         this.rasterisedSubtiles = 0;
     }
 
@@ -145,6 +149,9 @@ public final class TileDepthBuffer {
                 if (depth < this.subDepth[index]) {
                     this.subDepth[index] = depth;
                 }
+                if (depth < this.tileMinDepth[tile]) {
+                    this.tileMinDepth[tile] = depth;
+                }
                 this.tileCovered[tile] |= 1 << sub;
                 this.rasterisedSubtiles++;
             }
@@ -187,6 +194,15 @@ public final class TileDepthBuffer {
         for (int ty = tyFrom; ty <= tyTo; ty++) {
             for (int tx = txFrom; tx <= txTo; tx++) {
                 int tile = ty * this.tilesX + tx;
+                // Whole-tile rejection. Hiding the box needs every sub-tile it touches to be covered
+                // and nearer than it, so one sub-tile that is not settles the question. The shallowest
+                // surface anywhere in the tile is a bound on all of them: if even that one is not
+                // behind the box, neither is the rest, and the thirty-two sub-tiles do not have to be
+                // visited to find out. Uncovered sub-tiles hold EMPTY, so a tile with a gap in it
+                // trips this the same way and the answer is still the correct one.
+                if (this.tileMinDepth[tile] >= nearDepth) {
+                    return false;
+                }
                 int covered = this.tileCovered[tile];
 
                 int sxFrom = subIndexWithin(px0, tx, SUB_W, TILE_W, SUBS_X);
